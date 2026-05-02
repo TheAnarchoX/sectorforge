@@ -313,7 +313,7 @@
 
 .session-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.85fr) auto auto;
   gap: 10px;
   align-items: center;
   min-height: 62px;
@@ -321,6 +321,11 @@
   border: 1px solid #27313b;
   border-radius: 8px;
   background: #151b22;
+}
+
+.session-row-active {
+  border-color: #5c6470;
+  box-shadow: inset 0 0 0 1px rgba(247, 201, 72, 0.24);
 }
 
 .session-main {
@@ -337,6 +342,33 @@
 
 .mono {
   font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+}
+
+.session-action {
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid #3b444e;
+  border-radius: 7px;
+  color: #f6f8fb;
+  background: #1b2430;
+  cursor: pointer;
+}
+
+.session-action:hover:not(:disabled),
+.session-action:focus-visible {
+  border-color: #68e1fd;
+  outline: none;
+}
+
+.session-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.session-action.active {
+  border-color: #7a6327;
+  color: #fff0c2;
+  background: #2d2411;
 }
 
 .error-banner {

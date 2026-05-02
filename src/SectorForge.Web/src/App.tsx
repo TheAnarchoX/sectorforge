@@ -22,6 +22,8 @@ type TelemetrySourceStatus =
   | "Running"
   | "NotImplemented";
 
+type TelemetryRunMode = "Idle" | "Live" | "Replay";
+
 type TelemetrySource = {
   adapterId: string;
   game: string;
@@ -110,6 +112,7 @@ type TelemetrySample = {
 
 type CollectorStatus = {
   isRunning: boolean;
+  runMode: TelemetryRunMode;
   activeAdapterId?: string | null;
   source?: TelemetrySource | null;
   startedAt?: string | null;
@@ -263,7 +266,11 @@ function App() {
     setIsBusy(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/collector/stop`, {
+      const endpoint =
+        collectorStatus?.runMode === "Replay"
+          ? "/api/replay/stop"
+          : "/api/collector/stop";
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: "POST",
       });
       if (!response.ok) {
@@ -276,6 +283,31 @@ function App() {
         stopError instanceof Error
           ? stopError.message
           : "Collector stop failed",
+      );
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const startReplay = async (sessionId: string) => {
+    setIsBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/replay/start/${sessionId}`,
+        {
+          method: "POST",
+        },
+      );
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      setCollectorStatus(await response.json());
+    } catch (replayError) {
+      setError(
+        replayError instanceof Error
+          ? replayError.message
+          : "Replay start failed",
       );
     } finally {
       setIsBusy(false);
@@ -333,7 +365,13 @@ function App() {
   );
 
   const activeSource = collectorStatus?.source ?? sample?.source ?? null;
+  const runMode = collectorStatus?.runMode ?? "Idle";
   const isCollectorRunning = collectorStatus?.isRunning ?? false;
+  const isLiveRunning = isCollectorRunning && runMode === "Live";
+  const isReplayRunning = isCollectorRunning && runMode === "Replay";
+  const activeReplaySessionId = isReplayRunning
+    ? sample?.session.id ?? collectorStatus?.latestSample?.sessionId ?? null
+    : null;
 
   return (
     <main className="app-shell">
@@ -353,22 +391,23 @@ function App() {
             label="Collector"
             state={isCollectorRunning ? "connected" : "disconnected"}
           />
+          <ModePill mode={runMode} isRunning={isCollectorRunning} />
           <button
             className="icon-button primary"
             type="button"
             onClick={() => void startCollector()}
-            disabled={isBusy || isCollectorRunning}
+            disabled={isBusy || isLiveRunning}
             title="Start fake telemetry"
           >
             <Play size={17} />
-            Start
+            Start fake
           </button>
           <button
             className="icon-button danger"
             type="button"
             onClick={() => void stopCollector()}
             disabled={isBusy || !isCollectorRunning}
-            title="Stop collector"
+            title={isReplayRunning ? "Stop replay" : "Stop collector"}
           >
             <Pause size={17} />
             Stop
@@ -394,7 +433,9 @@ function App() {
           <div className="panel">
             <div className="panel-header">
               <div>
-                <div className="panel-kicker">Live dashboard</div>
+                <div className="panel-kicker">
+                  {runMode === "Replay" ? "Replay dashboard" : "Live dashboard"}
+                </div>
                 <h2 className="panel-title">
                   {activeSource?.displayName ?? "No active source"}
                 </h2>
@@ -578,25 +619,43 @@ function App() {
               {sessions.length === 0 && (
                 <div className="empty-chart">No saved sessions</div>
               )}
-              {sessions.slice(0, 5).map((session) => (
-                <div className="session-row" key={session.id}>
-                  <div>
-                    <div className="session-main">
-                      {session.trackName ?? "Unknown track"}
+              {sessions.slice(0, 5).map((session) => {
+                const isActiveReplay = activeReplaySessionId === session.id;
+
+                return (
+                  <div
+                    className={`session-row ${isActiveReplay ? "session-row-active" : ""}`}
+                    key={session.id}
+                  >
+                    <div>
+                      <div className="session-main">
+                        {session.trackName ?? "Unknown track"}
+                      </div>
+                      <div className="muted">
+                        {session.carName ?? session.sourceName ?? session.game}
+                      </div>
                     </div>
-                    <div className="muted">
-                      {session.carName ?? session.sourceName ?? session.game}
+                    <div>
+                      <div className="session-cell-label">Best</div>
+                      <div className="mono">
+                        {formatTime(session.bestLapTime)}
+                      </div>
                     </div>
+                    <div>
+                      <div className="session-cell-label">Samples</div>
+                      <div className="mono">{session.sampleCount}</div>
+                    </div>
+                    <button
+                      className={`session-action ${isActiveReplay ? "active" : ""}`}
+                      type="button"
+                      onClick={() => void startReplay(session.id)}
+                      disabled={isBusy || isActiveReplay}
+                    >
+                      {isActiveReplay ? "Replaying" : "Replay"}
+                    </button>
                   </div>
-                  <div>
-                    <div className="session-cell-label">Best</div>
-                    <div className="mono">
-                      {formatTime(session.bestLapTime)}
-                    </div>
-                  </div>
-                  <div className="mono">{session.sampleCount}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </aside>
@@ -622,6 +681,23 @@ function StatusPill({
     <div className="status-pill">
       <span className={`status-dot ${dotClass}`} />
       {label}: {state}
+    </div>
+  );
+}
+
+function ModePill({
+  mode,
+  isRunning,
+}: {
+  mode: TelemetryRunMode;
+  isRunning: boolean;
+}) {
+  const dotClass = !isRunning ? "stop" : mode === "Replay" ? "warn" : "live";
+
+  return (
+    <div className="status-pill">
+      <span className={`status-dot ${dotClass}`} />
+      Mode: {isRunning ? mode : "Idle"}
     </div>
   );
 }

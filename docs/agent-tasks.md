@@ -157,15 +157,29 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-023: Add Replay Service From Stored Sessions
 
-- Status: `ready`
+- Status: `done`
 - Type: feature
 - Goal: Allow stored session samples to be replayed through the same live stream path.
 - Suggested files: `SectorForge.Core`, `SectorForge.Infrastructure`, `SectorForge.Api`, `SectorForge.Web`
+- Notes: Added stored-session replay start and stop endpoints on 2026-05-02. Replay streams saved samples through the existing SignalR telemetry path, exposes replay mode through runtime status, and adds dashboard replay controls for recent sessions.
 - Acceptance criteria:
   - API exposes a replay start/stop endpoint for a stored session.
   - Replay publishes normalized `TelemetrySample` messages to `/hubs/telemetry`.
   - UI can distinguish live fake telemetry from replay mode.
   - Tests cover missing session and successful replay start.
+
+### SF-024: Testing Coverager Baseline
+
+- Status: `ready`
+- Type: testing
+- Goal: Add a code coverage baseline and ensure new tests are adding coverage. Goal of 90%+ overall code coverage with attention to untested files. This will help ensure the codebase remains maintainable and that new features are well-tested.
+- Suggested files: `tests/coverage/*`, CI workflow updates, docs
+- Acceptance criteria:
+  - Code coverage reports are generated in CI and uploaded as artifacts.
+  - Baseline coverage is established and documented.
+  - New tests are adding to coverage, especially for untested files.
+  - Coverage thresholds can be set in CI to prevent regressions.
+  - Coverage target of 90%+ is met overall, with attention to critical and previously untested files.
 
 ## Priority 3: Frontend Product Slice
 

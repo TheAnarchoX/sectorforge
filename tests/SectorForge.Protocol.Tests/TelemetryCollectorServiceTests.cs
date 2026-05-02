@@ -57,6 +57,34 @@ public sealed class TelemetryCollectorServiceTests
         Assert.Contains(publisher.StatusUpdates, update => update.LastError == failureMessage);
     }
 
+    [Fact]
+    public async Task ReplayPublishesStoredSessionSamplesThroughLivePublisher()
+    {
+        var adapter = new FakeTelemetryAdapter();
+        var sessionId = Guid.NewGuid();
+        var storedSamples = new[]
+        {
+            adapter.CreateSample(TimeSpan.FromSeconds(1), 1, sessionId),
+            adapter.CreateSample(TimeSpan.FromSeconds(2), 2, sessionId),
+            adapter.CreateSample(TimeSpan.FromSeconds(3), 3, sessionId)
+        };
+        var publisher = new RecordingTelemetryPublisher();
+
+        await using var collector = CreateCollector(
+            adapter,
+            publisher,
+            new ReplayTelemetrySessionStore(storedSamples));
+
+        await collector.StartReplayAsync(sessionId);
+        await WaitForConditionAsync(() => !collector.GetStatus().IsRunning, TimeSpan.FromSeconds(5));
+
+        var status = collector.GetStatus();
+        Assert.Equal(TelemetryRunMode.Idle, status.RunMode);
+        Assert.Equal(3, status.SamplesPublished);
+        Assert.Equal([1L, 2L, 3L], publisher.PublishedSamples.Select(sample => sample.Sequence).ToArray());
+        Assert.Contains(publisher.StatusUpdates, update => update.IsRunning && update.RunMode == TelemetryRunMode.Replay);
+    }
+
     private static TelemetryCollectorService CreateCollector(
         ITelemetryAdapter adapter,
         ILiveTelemetryPublisher publisher,
@@ -133,6 +161,12 @@ public sealed class TelemetryCollectorServiceTests
             }
         }
 
+        public async IAsyncEnumerable<TelemetrySample> StreamSessionSamplesAsync(Guid sessionId, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.CompletedTask;
+            yield break;
+        }
+
         public Task<IReadOnlyList<TelemetrySessionSummary>> ListSessionsAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<TelemetrySessionSummary>>([]);
@@ -141,6 +175,58 @@ public sealed class TelemetryCollectorServiceTests
         public Task<TelemetrySessionDetails?> GetSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             return Task.FromResult<TelemetrySessionDetails?>(null);
+        }
+    }
+
+    private sealed class ReplayTelemetrySessionStore(IReadOnlyList<TelemetrySample> samples) : ITelemetrySessionStore
+    {
+        public Task UpsertSessionAsync(TelemetrySample sample, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task SaveSampleAsync(TelemetrySample sample, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public async IAsyncEnumerable<TelemetrySample> StreamSessionSamplesAsync(Guid sessionId, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            foreach (var sample in samples.Where(sample => sample.SessionId == sessionId))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                yield return sample;
+            }
+
+            await Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<TelemetrySessionSummary>> ListSessionsAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<TelemetrySessionSummary>>([]);
+        }
+
+        public Task<TelemetrySessionDetails?> GetSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        {
+            var sessionSamples = samples.Where(sample => sample.SessionId == sessionId).ToArray();
+            if (sessionSamples.Length == 0)
+            {
+                return Task.FromResult<TelemetrySessionDetails?>(null);
+            }
+
+            var lastSample = sessionSamples[^1];
+            var summary = new TelemetrySessionSummary(
+                Id: sessionId,
+                Game: lastSample.Source.Game,
+                SourceName: lastSample.Source.DisplayName,
+                TrackName: lastSample.Track.TrackName,
+                CarName: lastSample.Vehicle.CarName,
+                StartedAt: sessionSamples[0].Session.StartedAt,
+                LastSeenAt: lastSample.Timestamp,
+                BestLapTime: lastSample.Lap.BestLapTime,
+                SampleCount: sessionSamples.Length);
+
+            return Task.FromResult<TelemetrySessionDetails?>(new TelemetrySessionDetails(summary, [], sessionSamples));
         }
     }
 
@@ -153,6 +239,24 @@ public sealed class TelemetryCollectorServiceTests
 
         public Task PublishStatusAsync(TelemetryReceiverStatus status, CancellationToken cancellationToken = default)
         {
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingTelemetryPublisher : ILiveTelemetryPublisher
+    {
+        public ConcurrentQueue<TelemetrySample> PublishedSamples { get; } = new();
+        public ConcurrentQueue<TelemetryReceiverStatus> StatusUpdates { get; } = new();
+
+        public Task PublishAsync(TelemetrySample sample, CancellationToken cancellationToken = default)
+        {
+            PublishedSamples.Enqueue(sample);
+            return Task.CompletedTask;
+        }
+
+        public Task PublishStatusAsync(TelemetryReceiverStatus status, CancellationToken cancellationToken = default)
+        {
+            StatusUpdates.Enqueue(status);
             return Task.CompletedTask;
         }
     }

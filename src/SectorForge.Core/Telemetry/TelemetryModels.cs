@@ -18,6 +18,13 @@ public enum TelemetrySourceStatus
     NotImplemented
 }
 
+public enum TelemetryRunMode
+{
+    Idle,
+    Live,
+    Replay
+}
+
 public sealed record TelemetrySource(
     string AdapterId,
     GameId Game,
@@ -112,6 +119,7 @@ public sealed record TimingState(
 
 public sealed record TelemetryReceiverStatus(
     bool IsRunning,
+    TelemetryRunMode RunMode,
     string? ActiveAdapterId,
     TelemetrySource? Source,
     DateTimeOffset? StartedAt,

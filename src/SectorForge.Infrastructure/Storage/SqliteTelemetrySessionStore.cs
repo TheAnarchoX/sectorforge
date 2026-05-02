@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -65,6 +66,34 @@ public sealed class SqliteTelemetrySessionStore : ITelemetrySessionStore
         await PruneSampleBlobsAsync(connection, transaction, sample.SessionId, _retainedSampleBlobLimit, cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async IAsyncEnumerable<TelemetrySample> StreamSessionSamplesAsync(
+        Guid sessionId,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await EnsureDatabaseAsync(cancellationToken);
+
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT payload_json
+            FROM telemetry_sample_blobs
+            WHERE session_id = $sessionId
+            ORDER BY sequence ASC, id ASC;
+            """;
+        Add(command, "$sessionId", sessionId.ToString());
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var sample = JsonSerializer.Deserialize<TelemetrySample>(reader.GetString(0), JsonOptions);
+            if (sample is not null)
+            {
+                yield return sample;
+            }
+        }
     }
 
     public async Task<IReadOnlyList<TelemetrySessionSummary>> ListSessionsAsync(CancellationToken cancellationToken = default)

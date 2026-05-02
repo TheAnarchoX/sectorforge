@@ -20,6 +20,7 @@ cd C:\Users\jimdv\repositories\sectorforge
 ```
 
 Open `http://localhost:5173`. The API runs on `http://localhost:5221` and starts the fake telemetry adapter automatically.
+The Recent captures panel can replay a saved session back through the same live dashboard stream.
 
 If the default ports are already in use, pass alternate ports before launching:
 
@@ -91,6 +92,7 @@ The backend is the source of truth. The web UI renders live state, controls the 
 | SignalR hub | Streams normalized telemetry samples |
 | React dashboard | Live metrics, input bars, temperatures, speed chart |
 | SQLite storage | Sessions, lap summaries, raw sample blobs |
+| Stored session replay | Replays saved telemetry samples through the live SignalR stream |
 | F1 25 UDP | Placeholder adapter |
 | ACC shared memory | Placeholder adapter |
 | AMS2 telemetry | Placeholder adapter |
@@ -141,4 +143,6 @@ tools/
 - `POST /api/collector/start`
 - `POST /api/collector/stop`
 - `GET /api/collector/status`
+- `POST /api/replay/start/{sessionId}`
+- `POST /api/replay/stop`
 - SignalR hub: `/hubs/telemetry`

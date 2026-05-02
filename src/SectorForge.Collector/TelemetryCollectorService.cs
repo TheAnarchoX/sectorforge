@@ -6,6 +6,9 @@ namespace SectorForge.Collector;
 public sealed class TelemetryCollectorService : ITelemetryReceiver, IAsyncDisposable
 {
     private const int PendingSampleBufferCapacity = 120;
+    private const string ReplayAdapterId = "replay";
+    private static readonly TimeSpan MinimumReplayDelay = TimeSpan.FromMilliseconds(1);
+    private static readonly TimeSpan MaximumReplayDelay = TimeSpan.FromMilliseconds(25);
     private readonly IReadOnlyDictionary<string, ITelemetryAdapter> _adapters;
     private readonly ILiveTelemetryPublisher _publisher;
     private readonly ITelemetrySessionStore _sessionStore;
@@ -14,12 +17,15 @@ public sealed class TelemetryCollectorService : ITelemetryReceiver, IAsyncDispos
     private CancellationTokenSource? _runCancellation;
     private Task? _runTask;
     private ITelemetryAdapter? _activeAdapter;
+    private TelemetrySource? _activeSource;
+    private TelemetryRunMode _activeMode = TelemetryRunMode.Idle;
     private DateTimeOffset? _startedAt;
     private DateTimeOffset? _lastSampleAt;
     private TelemetrySample? _latestSample;
     private long _samplesPublished;
     private long _samplesDropped;
     private string? _lastError;
+    private bool _isRunning;
 
     public TelemetryCollectorService(
         IEnumerable<ITelemetryAdapter> adapters,
@@ -58,17 +64,55 @@ public sealed class TelemetryCollectorService : ITelemetryReceiver, IAsyncDispos
             await StopLockedAsync(cancellationToken);
 
             _activeAdapter = adapter;
+            _activeSource = adapter.Source;
+            _activeMode = TelemetryRunMode.Live;
             _startedAt = DateTimeOffset.UtcNow;
             _lastError = null;
             _samplesPublished = 0;
             _samplesDropped = 0;
             _latestSample = null;
             _lastSampleAt = null;
+            _isRunning = true;
             _runCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             _runTask = Task.Run(() => RunAdapterAsync(adapter, _runCancellation.Token), CancellationToken.None);
 
             await _publisher.PublishStatusAsync(GetStatus(), cancellationToken);
             _logger.LogInformation("Started telemetry adapter {AdapterId}", adapterId);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task StartReplayAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        var session = await _sessionStore.GetSessionAsync(sessionId, cancellationToken);
+        if (session is null)
+        {
+            throw new KeyNotFoundException($"Telemetry session '{sessionId}' was not found.");
+        }
+
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await StopLockedAsync(cancellationToken);
+
+            _activeAdapter = null;
+            _activeSource = CreateReplaySource(session);
+            _activeMode = TelemetryRunMode.Replay;
+            _startedAt = DateTimeOffset.UtcNow;
+            _lastError = null;
+            _samplesPublished = 0;
+            _samplesDropped = 0;
+            _latestSample = null;
+            _lastSampleAt = null;
+            _isRunning = true;
+            _runCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _runTask = Task.Run(() => RunReplayAsync(sessionId, _runCancellation.Token), CancellationToken.None);
+
+            await _publisher.PublishStatusAsync(GetStatus(), cancellationToken);
+            _logger.LogInformation("Started telemetry replay for session {SessionId}", sessionId);
         }
         finally
         {
@@ -92,13 +136,14 @@ public sealed class TelemetryCollectorService : ITelemetryReceiver, IAsyncDispos
 
     public TelemetryReceiverStatus GetStatus()
     {
-        var isRunning = _runTask is { IsCompleted: false };
-        var source = _activeAdapter?.Source;
+        var isRunning = _isRunning;
+        var source = _activeSource;
 
         return new TelemetryReceiverStatus(
             IsRunning: isRunning,
-            ActiveAdapterId: _activeAdapter?.Source.AdapterId,
-            Source: source is null ? null : source with { Status = isRunning ? TelemetrySourceStatus.Running : source.Status },
+            RunMode: isRunning ? _activeMode : TelemetryRunMode.Idle,
+            ActiveAdapterId: GetActiveRuntimeId(),
+            Source: source is null ? null : source with { Status = isRunning ? TelemetrySourceStatus.Running : GetInactiveStatus(source.Status) },
             StartedAt: _startedAt,
             LastSampleAt: _lastSampleAt,
             SamplesPublished: Interlocked.Read(ref _samplesPublished),
@@ -138,6 +183,7 @@ public sealed class TelemetryCollectorService : ITelemetryReceiver, IAsyncDispos
         {
             await foreach (var sample in adapter.RunAsync(processingToken))
             {
+                _activeSource = sample.Source;
                 _latestSample = sample;
                 _lastSampleAt = sample.Timestamp;
                 QueueSample(sampleBuffer, sample);
@@ -169,12 +215,60 @@ public sealed class TelemetryCollectorService : ITelemetryReceiver, IAsyncDispos
             await cancelOnDeliveryFaultTask;
         }
 
+        _isRunning = false;
+
         if (runException is not null)
         {
             _lastError = runException.Message;
             _logger.LogError(runException, "Telemetry adapter {AdapterId} stopped unexpectedly", adapter.Source.AdapterId);
-            await _publisher.PublishStatusAsync(GetStatus(), CancellationToken.None);
         }
+
+        await PublishStatusSafelyAsync();
+    }
+
+    private async Task RunReplayAsync(Guid sessionId, CancellationToken cancellationToken)
+    {
+        Exception? runException = null;
+        TelemetrySample? previousSample = null;
+
+        try
+        {
+            await foreach (var sample in _sessionStore.StreamSessionSamplesAsync(sessionId, cancellationToken))
+            {
+                if (previousSample is not null)
+                {
+                    var replayDelay = GetReplayDelay(previousSample.Timestamp, sample.Timestamp);
+                    if (replayDelay > TimeSpan.Zero)
+                    {
+                        await Task.Delay(replayDelay, cancellationToken);
+                    }
+                }
+
+                _activeSource = sample.Source;
+                _latestSample = sample;
+                _lastSampleAt = sample.Timestamp;
+                await _publisher.PublishAsync(sample, cancellationToken);
+                Interlocked.Increment(ref _samplesPublished);
+                previousSample = sample;
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            runException = ex;
+        }
+
+        _isRunning = false;
+
+        if (runException is not null)
+        {
+            _lastError = runException.Message;
+            _logger.LogError(runException, "Telemetry replay for session {SessionId} stopped unexpectedly", sessionId);
+        }
+
+        await PublishStatusSafelyAsync();
     }
 
     private async Task ProcessBufferedSamplesAsync(ChannelReader<TelemetrySample> sampleReader, CancellationToken cancellationToken)
@@ -196,6 +290,68 @@ public sealed class TelemetryCollectorService : ITelemetryReceiver, IAsyncDispos
             SingleReader = true,
             SingleWriter = true
         });
+    }
+
+    private static TelemetrySourceStatus GetInactiveStatus(TelemetrySourceStatus status)
+    {
+        return status == TelemetrySourceStatus.Running ? TelemetrySourceStatus.Available : status;
+    }
+
+    private static TimeSpan GetReplayDelay(DateTimeOffset previousTimestamp, DateTimeOffset currentTimestamp)
+    {
+        var sourceDelay = currentTimestamp - previousTimestamp;
+        if (sourceDelay <= TimeSpan.Zero)
+        {
+            return TimeSpan.Zero;
+        }
+
+        var acceleratedDelay = TimeSpan.FromTicks(sourceDelay.Ticks / 4);
+        if (acceleratedDelay <= TimeSpan.Zero)
+        {
+            return MinimumReplayDelay;
+        }
+
+        return acceleratedDelay < MinimumReplayDelay
+            ? MinimumReplayDelay
+            : acceleratedDelay > MaximumReplayDelay
+                ? MaximumReplayDelay
+                : acceleratedDelay;
+    }
+
+    private string? GetActiveRuntimeId()
+    {
+        return _activeMode == TelemetryRunMode.Replay
+            ? ReplayAdapterId
+            : _activeAdapter?.Source.AdapterId;
+    }
+
+    private async Task PublishStatusSafelyAsync()
+    {
+        try
+        {
+            await _publisher.PublishStatusAsync(GetStatus(), CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to publish telemetry status update.");
+        }
+    }
+
+    private static TelemetrySource CreateReplaySource(TelemetrySessionDetails session)
+    {
+        if (session.Samples.LastOrDefault() is { } sample)
+        {
+            return sample.Source with { Status = GetInactiveStatus(sample.Source.Status) };
+        }
+
+        return new TelemetrySource(
+            AdapterId: ReplayAdapterId,
+            Game: session.Session.Game,
+            DisplayName: session.Session.SourceName ?? "Stored session replay",
+            InputKind: "Replay",
+            IsSimulated: true,
+            Status: TelemetrySourceStatus.Available,
+            Notes: "Stored session replay.");
     }
 
     private void QueueSample(Channel<TelemetrySample> sampleBuffer, TelemetrySample sample)
@@ -243,6 +399,7 @@ public sealed class TelemetryCollectorService : ITelemetryReceiver, IAsyncDispos
         }
         finally
         {
+            _isRunning = false;
             _runCancellation.Dispose();
             _runCancellation = null;
             _runTask = null;

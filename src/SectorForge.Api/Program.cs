@@ -103,6 +103,25 @@ app.MapPost("/api/collector/stop", async (TelemetryCollectorService collector, C
     return Results.Ok(collector.GetStatus());
 });
 
+app.MapPost("/api/replay/start/{sessionId:guid}", async (Guid sessionId, TelemetryCollectorService collector, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        await collector.StartReplayAsync(sessionId, cancellationToken);
+        return Results.Ok(collector.GetStatus());
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return Results.NotFound(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/replay/stop", async (TelemetryCollectorService collector, CancellationToken cancellationToken) =>
+{
+    await collector.StopAsync(cancellationToken);
+    return Results.Ok(collector.GetStatus());
+});
+
 app.MapGet("/api/collector/status", (TelemetryCollectorService collector) => Results.Ok(collector.GetStatus()));
 
 app.MapHub<TelemetryHub>("/hubs/telemetry");

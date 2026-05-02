@@ -27,6 +27,8 @@ public interface ITelemetrySessionStore
 
     Task SaveSampleAsync(TelemetrySample sample, CancellationToken cancellationToken = default);
 
+    IAsyncEnumerable<TelemetrySample> StreamSessionSamplesAsync(Guid sessionId, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<TelemetrySessionSummary>> ListSessionsAsync(CancellationToken cancellationToken = default);
 
     Task<TelemetrySessionDetails?> GetSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
