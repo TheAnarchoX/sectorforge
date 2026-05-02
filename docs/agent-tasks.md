@@ -133,10 +133,11 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-021: Add Bounded Sample Persistence
 
-- Status: `ready`
+- Status: `done`
 - Type: storage
 - Goal: Avoid unbounded high-frequency sample growth during long fake telemetry runs.
 - Suggested files: `src/SectorForge.Infrastructure/Storage/*`, `src/SectorForge.Api/appsettings*.json`, docs
+- Notes: Added per-session raw sample blob pruning on 2026-05-02 with a configurable `Storage:RetainedSampleBlobLimit` default of 1,800. Session summaries and lap summaries remain intact when older raw blobs are trimmed.
 - Acceptance criteria:
   - Storage has configurable retention or batch pruning for raw sample blobs.
   - Defaults are safe for local development.

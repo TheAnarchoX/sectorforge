@@ -8,6 +8,8 @@ using SectorForge.Core.Telemetry;
 using SectorForge.Infrastructure.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
+var retainedSampleBlobLimit = builder.Configuration.GetValue<int?>("Storage:RetainedSampleBlobLimit")
+    ?? SqliteTelemetrySessionStore.DefaultRetainedSampleBlobLimit;
 
 builder.Services.ConfigureHttpJsonOptions(options => ConfigureJson(options.SerializerOptions));
 builder.Services.AddSignalR().AddJsonProtocol(options => ConfigureJson(options.PayloadSerializerOptions));
@@ -26,7 +28,8 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddSingleton<ITelemetrySessionStore>(_ => new SqliteTelemetrySessionStore(
-    builder.Configuration.GetConnectionString("SectorForge") ?? SqliteTelemetrySessionStore.CreateDefaultConnectionString()));
+    builder.Configuration.GetConnectionString("SectorForge") ?? SqliteTelemetrySessionStore.CreateDefaultConnectionString(),
+    retainedSampleBlobLimit));
 builder.Services.AddSingleton<ILiveTelemetryPublisher, SignalRTelemetryPublisher>();
 builder.Services.AddSingleton<ITelemetryAdapter, FakeTelemetryAdapter>();
 builder.Services.AddSingleton<ITelemetryAdapter, F125UdpTelemetryAdapter>();

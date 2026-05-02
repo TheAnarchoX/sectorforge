@@ -41,6 +41,8 @@ dotnet test .\src\SectorForge.slnx
 
 `tools\verify.ps1` runs the full local quality gate: backend tests, .NET format verification, frontend lint, and frontend build.
 
+SQLite raw sample storage keeps the newest 1,800 sample blobs per session by default so long fake telemetry runs do not grow without bound. Adjust `Storage:RetainedSampleBlobLimit` in `src/SectorForge.Api/appsettings.json` if you want a shorter or longer local trace.
+
 ## Continuous Integration
 
 Pull requests and pushes to `main` run the baseline checks on Windows through GitHub Actions: .NET tests, .NET format verification, frontend lint, and frontend build. The workflow also caches NuGet and pnpm dependencies to keep repeat runs quick.

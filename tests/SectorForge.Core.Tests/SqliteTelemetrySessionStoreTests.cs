@@ -27,4 +27,53 @@ public sealed class SqliteTelemetrySessionStoreTests
         Assert.Single(details.Samples);
         Assert.Equal("Silverstone GP", details.Session.TrackName);
     }
+
+    [Fact]
+    public async Task SaveSamplePrunesOlderRawBlobsButKeepsSessionSummaryAndLaps()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), "SectorForge.Tests", $"{Guid.NewGuid():N}.db");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath }.ToString();
+        var store = new SqliteTelemetrySessionStore(connectionString, retainedSampleBlobLimit: 3);
+        var adapter = new FakeTelemetryAdapter();
+        var sessionId = Guid.NewGuid();
+        var otherSessionId = Guid.NewGuid();
+
+        for (var sequence = 1L; sequence <= 5; sequence++)
+        {
+            var sample = adapter.CreateSample(TimeSpan.FromSeconds(sequence * 95), sequence, sessionId);
+            await store.SaveSampleAsync(sample);
+        }
+
+        for (var sequence = 1L; sequence <= 2; sequence++)
+        {
+            var sample = adapter.CreateSample(TimeSpan.FromSeconds(sequence * 45), sequence, otherSessionId);
+            await store.SaveSampleAsync(sample);
+        }
+
+        var details = await store.GetSessionAsync(sessionId);
+        var otherDetails = await store.GetSessionAsync(otherSessionId);
+
+        Assert.NotNull(details);
+        Assert.Equal(5, details.Session.SampleCount);
+        Assert.Equal([3L, 4L, 5L], details.Samples.Select(sample => sample.Sequence).ToArray());
+        Assert.Equal(5, details.Laps.Count);
+        Assert.Equal(3, await CountRawSampleBlobsAsync(connectionString, sessionId));
+
+        Assert.NotNull(otherDetails);
+        Assert.Equal(2, otherDetails.Session.SampleCount);
+        Assert.Equal([1L, 2L], otherDetails.Samples.Select(sample => sample.Sequence).ToArray());
+        Assert.Equal(2, await CountRawSampleBlobsAsync(connectionString, otherSessionId));
+    }
+
+    private static async Task<int> CountRawSampleBlobsAsync(string connectionString, Guid sessionId)
+    {
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM telemetry_sample_blobs WHERE session_id = $sessionId;";
+        command.Parameters.AddWithValue("$sessionId", sessionId.ToString());
+
+        var result = await command.ExecuteScalarAsync();
+        return result is long count ? (int)count : 0;
+    }
 }

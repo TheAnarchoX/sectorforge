@@ -8,16 +8,22 @@ namespace SectorForge.Infrastructure.Storage;
 
 public sealed class SqliteTelemetrySessionStore : ITelemetrySessionStore
 {
+    public const int DefaultRetainedSampleBlobLimit = 1800;
+
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
     private readonly string _connectionString;
+    private readonly int _retainedSampleBlobLimit;
     private readonly SemaphoreSlim _schemaGate = new(1, 1);
     private bool _schemaReady;
 
-    public SqliteTelemetrySessionStore(string connectionString)
+    public SqliteTelemetrySessionStore(string connectionString, int retainedSampleBlobLimit = DefaultRetainedSampleBlobLimit)
     {
         _connectionString = string.IsNullOrWhiteSpace(connectionString)
             ? throw new ArgumentException("A SQLite connection string is required.", nameof(connectionString))
             : connectionString;
+        _retainedSampleBlobLimit = retainedSampleBlobLimit >= 0
+            ? retainedSampleBlobLimit
+            : throw new ArgumentOutOfRangeException(nameof(retainedSampleBlobLimit), retainedSampleBlobLimit, "The retained sample blob limit must be zero or greater.");
     }
 
     public static string CreateDefaultConnectionString()
@@ -56,6 +62,7 @@ public sealed class SqliteTelemetrySessionStore : ITelemetrySessionStore
         await UpsertSessionAsync(connection, transaction, sample, incrementSampleCount: true, cancellationToken);
         await UpsertLapAsync(connection, transaction, sample, cancellationToken);
         await InsertSampleAsync(connection, transaction, sample, cancellationToken);
+        await PruneSampleBlobsAsync(connection, transaction, sample.SessionId, _retainedSampleBlobLimit, cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
     }
@@ -267,6 +274,33 @@ public sealed class SqliteTelemetrySessionStore : ITelemetrySessionStore
         Add(command, "$sequence", sample.Sequence);
         Add(command, "$timestamp", sample.Timestamp.ToString("O", CultureInfo.InvariantCulture));
         Add(command, "$payloadJson", JsonSerializer.Serialize(sample, JsonOptions));
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task PruneSampleBlobsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        Guid sessionId,
+        int retainedSampleBlobLimit,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            DELETE FROM telemetry_sample_blobs
+            WHERE session_id = $sessionId
+              AND id IN (
+                  SELECT id
+                  FROM telemetry_sample_blobs
+                  WHERE session_id = $sessionId
+                  ORDER BY sequence DESC, id DESC
+                  LIMIT -1 OFFSET $retainedSampleBlobLimit
+              );
+            """;
+
+        Add(command, "$sessionId", sessionId.ToString());
+        Add(command, "$retainedSampleBlobLimit", retainedSampleBlobLimit);
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
