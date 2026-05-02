@@ -126,7 +126,7 @@ app.MapGet("/api/collector/status", (TelemetryCollectorService collector) => Res
 
 app.MapHub<TelemetryHub>("/hubs/telemetry");
 
-app.Run();
+![1777763444404](image/Program/1777763444404.png)![1777763452715](image/Program/1777763452715.png)app.Run();
 
 static void ConfigureJson(JsonSerializerOptions options)
 {

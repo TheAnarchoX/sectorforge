@@ -186,10 +186,11 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-030: Split Dashboard Into Components
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend maintainability
 - Goal: Break the first dashboard into smaller component and API modules.
 - Suggested files: `src/SectorForge.Web/src/components/*`, `src/SectorForge.Web/src/api/*`, `src/SectorForge.Web/src/types/*`
+- Notes: Split the dashboard into dedicated layout/components, extracted shared telemetry types plus a `useTelemetryDashboard` hook and API module, and refreshed the UI into a denser pitwall-style console without changing the live telemetry flow.
 - Acceptance criteria:
   - `App.tsx` mainly composes layout and top-level state.
   - API calls and SignalR setup are isolated in dedicated modules/hooks.
@@ -220,7 +221,56 @@ This backlog is written for coding agents and human contributors. Each task is i
   - Empty and loading states are clear.
   - Frontend lint and build pass.
 
-### SF-033: Frontend Testing Baseline with Coverage Reporting, CI Integration, and 90%+ Coverage Target
+### SF-034: Add Lap Telemetry Chart
+
+- Status: `ready`
+- Type: frontend feature
+- Goal: Add a simple time-series chart of lap speed or another telemetry value.
+- Suggested files: `src/SectorForge.Web/src/*`, `src/SectorForge.Api /Program.cs` if API shape needs small additions
+- Acceptance criteria:
+  - Chart shows a time-series of a telemetry value for the current lap.
+  - Chart updates in real-time with new samples.
+  - Chart has axes labels and a legend if needed.
+  - Empty and loading states are handled gracefully.
+
+### SF-035: Add Replay Mode UI Controls
+
+- Status: `ready`
+- Type: frontend feature
+- Goal: Add UI controls to start and stop replaying a stored session through the dashboard. Also add controls for scrolling through the replay timeline and an indicator for when replay mode is active. This will allow users to review past sessions and analyze their telemetry in a familiar interface.
+- Suggested files: `src/SectorForge.Web/src/*`, `src/SectorForge.Api/Program.cs` if API shape needs small additions
+- Acceptance criteria:
+  - UI has a way to select a stored session and start replay mode.
+  - When replay mode is active, the dashboard indicates this clearly.
+  - Controls allow the user to pause, resume, and scroll through the replay timeline.
+  - Telemetry charts and values update according to the replayed data.
+  - Frontend lint and build pass without errors.
+
+### SF-036: Add Session Overview
+
+- Status: `ready`
+- Type: frontend feature
+- Goal: Add a session overview panel that shows key metadata and lap summaries for the user and the other participants in the session. This will provide context for the telemetry data and allow users to quickly understand the session details at a glance. Give insight into the drivers, cars, teams, track, and lap performance without needing to dive into the raw telemetry.
+- Suggested files: `src/SectorForge.Web/src/*`, `src/SectorForge.Api/Program.cs` if API shape needs small additions
+- Acceptance criteria:
+  - Overview panel shows session metadata like game, track, car, and participants.
+  - Lap summaries show key performance metrics for each lap and driver.
+  - UI is clear and organized, allowing users to quickly grasp session details.
+  - Frontend lint and build pass without errors.
+
+### SF-037: Add Simplified View Mode for while Driving
+
+- Status: `ready`
+- Type: frontend feature
+- Goal: Add a simplified view mode that shows only essential telemetry values in a large, easy-to-read format. This mode can be toggled on while driving to reduce distraction and allow the driver to focus on key information like speed, lap time, and position. This is intended to be used on a secondary monitor or in a WebView overlay while playing, providing at-a-glance telemetry without needing to navigate the full dashboard.
+- Suggested files: `src/SectorForge.Web/src/*`
+- Acceptance criteria:
+  - UI has a toggle to switch between the full dashboard and the simplified view mode.
+  - Simplified view shows only essential telemetry values in a large, clear format.
+  - Layout is optimized for quick glances while driving, with high contrast and large fonts.
+  - Frontend lint and build pass without errors.
+
+### SF-038: Frontend Testing Baseline with Coverage Reporting, CI Integration, and 90%+ Coverage Target
 
 - Status: `ready`
 - Type: testing
@@ -245,6 +295,7 @@ This backlog is written for coding agents and human contributors. Each task is i
   - Tests use small synthetic byte arrays or generated fixtures, not copied spec tables.
   - Adapter remains disabled unless explicitly selected.
   - Docs link to the public official spec rather than embedding it.
+  - Tasks added to `docs/agent-tasks.md` for subsequent implementation steps. including parsing, publishing, and UI integration. Tasks should be added under Priority 4 and can be as granular as needed to keep implementation focused.
 
 ### SF-041: Add UDP Listener Abstraction
 

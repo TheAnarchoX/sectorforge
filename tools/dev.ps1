@@ -29,26 +29,28 @@ function Test-LoopbackPortInUse {
     }
 
     foreach ($hostAddress in $hosts) {
-        $client = [System.Net.Sockets.TcpClient]::new($hostAddress.AddressFamily)
+        $listener = $null
 
         try {
-            $connectTask = $client.ConnectAsync($hostAddress, $Port)
+            $listener = [System.Net.Sockets.TcpListener]::new($hostAddress, $Port)
 
-            if ($connectTask.Wait(200) -and $client.Connected) {
+            if ($hostAddress.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
+                $listener.Server.DualMode = $false
+            }
+
+            $listener.Start()
+        }
+        catch [System.Management.Automation.MethodInvocationException] {
+            if ($_.Exception.InnerException -is [System.Net.Sockets.SocketException]) {
                 return $true
             }
-        }
-        catch [System.ArgumentException] {
-            continue
-        }
-        catch [System.AggregateException] {
-            continue
-        }
-        catch [System.Net.Sockets.SocketException] {
-            continue
+
+            throw
         }
         finally {
-            $client.Dispose()
+            if ($null -ne $listener) {
+                $listener.Stop()
+            }
         }
     }
 

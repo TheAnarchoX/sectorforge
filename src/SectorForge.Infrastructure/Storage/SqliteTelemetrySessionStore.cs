@@ -101,7 +101,7 @@ public sealed class SqliteTelemetrySessionStore : ITelemetrySessionStore
         await EnsureDatabaseAsync(cancellationToken);
 
         await using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
+        
         await using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT id, game, source_name, track_name, car_name, started_at, last_seen_at, best_lap_ticks, sample_count
