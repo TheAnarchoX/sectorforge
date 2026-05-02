@@ -30,6 +30,10 @@ dotnet test .\src\SectorForge.slnx
 .\tools\clean.ps1 -Full
 ```
 
+## Continuous Integration
+
+Pull requests and pushes to `main` run the baseline checks on Windows through GitHub Actions: .NET tests, .NET format verification, frontend lint, and frontend build. The workflow also caches NuGet and pnpm dependencies to keep repeat runs quick.
+
 ## VS Code
 
 The repository includes `.vscode` settings for a smoother local loop:

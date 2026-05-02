@@ -54,10 +54,11 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-003: Add CI Baseline
 
-- Status: `ready`
+- Status: `done`
 - Type: automation
 - Goal: Add GitHub Actions that run the same checks contributors run locally.
 - Suggested files: `.github/workflows/ci.yml`, `README.md`
+- Notes: Added a Windows GitHub Actions CI baseline on 2026-05-02 with NuGet and pnpm caching.
 - Acceptance criteria:
   - CI runs on pull requests and pushes to the default branch.
   - CI uses Windows runners for the primary path.

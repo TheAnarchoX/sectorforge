@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_NOLOGO: true
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  verify:
+    name: Windows Baseline
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('global.json', 'src/SectorForge.slnx',
+            'src/**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.x"
+          cache: pnpm
+          cache-dependency-path: src/SectorForge.Web/pnpm-lock.yaml
+
+      - name: Restore .NET
+        run: dotnet restore .\src\SectorForge.slnx
+
+      - name: Test .NET
+        run: dotnet test .\src\SectorForge.slnx --no-restore --verbosity normal
+
+      - name: Verify .NET formatting
+        run: dotnet format .\src\SectorForge.slnx --verify-no-changes --no-restore
+
+      - name: Install frontend dependencies
+        run: pnpm --dir .\src\SectorForge.Web install --frozen-lockfile
+
+      - name: Lint frontend
+        run: pnpm --dir .\src\SectorForge.Web lint
+
+      - name: Build frontend
+        run: pnpm --dir .\src\SectorForge.Web build
