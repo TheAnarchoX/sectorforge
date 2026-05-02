@@ -120,10 +120,11 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-020: Add Collector Start Stop Integration Tests
 
-- Status: `ready`
+- Status: `done`
 - Type: backend test
 - Goal: Cover the collector control endpoints beyond health checks.
 - Suggested files: `tests/SectorForge.Api.Tests/*`, `src/SectorForge.Api/Program.cs`
+- Notes: Added a deterministic API integration test on 2026-05-02 that exercises fake collector start, status, and stop with isolated SQLite state and no sleeps.
 - Acceptance criteria:
   - Test can start the fake collector through `POST /api/collector/start`.
   - Test confirms `GET /api/collector/status` reports running.
