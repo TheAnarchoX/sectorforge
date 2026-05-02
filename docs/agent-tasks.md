@@ -82,10 +82,11 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-010: Add A Single Verify Script
 
-- Status: `ready`
+- Status: `done`
 - Type: DevEx
 - Goal: Provide one PowerShell command that runs the full local quality gate.
 - Suggested files: `tools/verify.ps1`, `README.md`, `CONTRIBUTING.md`, `.vscode/tasks.json`
+- Notes: Added `tools/verify.ps1`, VS Code task wiring, and contributor/agent docs on 2026-05-02.
 - Acceptance criteria:
   - `tools/verify.ps1` runs backend tests, format verification, frontend lint, and frontend build.
   - Script fails fast and exits non-zero on failure.

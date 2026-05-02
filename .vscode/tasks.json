@@ -5,10 +5,7 @@
       "label": "dotnet: restore",
       "type": "process",
       "command": "dotnet",
-      "args": [
-        "restore",
-        "${workspaceFolder}/src/SectorForge.slnx"
-      ],
+      "args": ["restore", "${workspaceFolder}/src/SectorForge.slnx"],
       "problemMatcher": "$msCompile"
     },
     {
@@ -53,10 +50,7 @@
       "label": "dotnet: test",
       "type": "process",
       "command": "dotnet",
-      "args": [
-        "test",
-        "${workspaceFolder}/src/SectorForge.slnx"
-      ],
+      "args": ["test", "${workspaceFolder}/src/SectorForge.slnx"],
       "group": "test",
       "problemMatcher": "$msCompile"
     },
@@ -118,6 +112,13 @@
       "type": "shell",
       "command": "powershell -ExecutionPolicy Bypass -File \"${workspaceFolder}/tools/clean.ps1\"",
       "problemMatcher": []
+    },
+    {
+      "label": "sectorforge: verify",
+      "type": "shell",
+      "command": "powershell -ExecutionPolicy Bypass -File \"${workspaceFolder}/tools/verify.ps1\"",
+      "group": "test",
+      "problemMatcher": ["$msCompile", "$tsc"]
     }
   ]
 }

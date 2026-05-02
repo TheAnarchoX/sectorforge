@@ -2,6 +2,14 @@
 
 Use the smallest meaningful check set for the task.
 
+## Full Baseline
+
+```powershell
+.\tools\verify.ps1
+```
+
+The verify script runs backend tests, .NET format verification, frontend lint, and frontend build.
+
 ## Backend
 
 ```powershell

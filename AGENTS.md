@@ -31,11 +31,10 @@ This repository is intended to be friendly to coding agents and human contributo
 Run the smallest useful checks for your change. For broad changes, run the full baseline:
 
 ```powershell
-dotnet test .\src\SectorForge.slnx
-dotnet format .\src\SectorForge.slnx --verify-no-changes
-npx --yes pnpm@latest --dir .\src\SectorForge.Web lint
-npx --yes pnpm@latest --dir .\src\SectorForge.Web build
+.\tools\verify.ps1
 ```
+
+The verify script runs backend tests, .NET format verification, frontend lint, and frontend build.
 
 For UI/runtime changes, also run:
 

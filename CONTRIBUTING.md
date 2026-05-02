@@ -16,11 +16,10 @@ Open `http://localhost:5173`. The fake telemetry adapter starts automatically so
 Run these before opening a pull request:
 
 ```powershell
-dotnet test .\src\SectorForge.slnx
-dotnet format .\src\SectorForge.slnx --verify-no-changes
-npx --yes pnpm@latest --dir .\src\SectorForge.Web lint
-npx --yes pnpm@latest --dir .\src\SectorForge.Web build
+.\tools\verify.ps1
 ```
+
+The verify script fails fast and runs backend tests, .NET format verification, frontend lint, and frontend build.
 
 ## Agent Task Backlog
 

@@ -24,11 +24,14 @@ Open `http://localhost:5173`. The API runs on `http://localhost:5221` and starts
 Useful commands:
 
 ```powershell
+.\tools\verify.ps1
 dotnet test .\src\SectorForge.slnx
 .\tools\format.ps1
 .\tools\clean.ps1
 .\tools\clean.ps1 -Full
 ```
+
+`tools\verify.ps1` runs the full local quality gate: backend tests, .NET format verification, frontend lint, and frontend build.
 
 ## Continuous Integration
 
@@ -41,7 +44,7 @@ The repository includes `.vscode` settings for a smoother local loop:
 - `SectorForge: API + Web` compound debug launch starts the API with fake telemetry and opens the Vite app in Chrome.
 - `API: Debug fake telemetry` debugs only the ASP.NET Core backend.
 - `Collector: Debug worker` runs the standalone fake collector worker.
-- Tasks are available for restore, build, test, web install, web dev server, web build, lint, clean, and the full dev script.
+- Tasks are available for restore, build, test, verify, web install, web dev server, web build, lint, clean, and the full dev script.
 
 Install the recommended extensions when VS Code prompts. They are standard .NET, PowerShell, ESLint, Tailwind, EditorConfig, and Copilot extensions.
 
