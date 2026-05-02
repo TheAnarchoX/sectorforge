@@ -220,6 +220,18 @@ This backlog is written for coding agents and human contributors. Each task is i
   - Empty and loading states are clear.
   - Frontend lint and build pass.
 
+### SF-033: Frontend Testing Baseline with Coverage Reporting, CI Integration, and 90%+ Coverage Target
+
+- Status: `ready`
+- Type: testing
+- Goal: Add a frontend testing baseline with code coverage reporting and a target of 90%+ coverage. This will help ensure the frontend remains maintainable and that new features are well-tested.
+- Suggested files: `src/SectorForge.Web/src/*`, CI workflow updates, docs
+- Acceptance criteria:
+  - Frontend tests are added using a suitable testing framework (e.g., Jest, React Testing Library).
+  - Code coverage reports are generated for the frontend and can be viewed locally.
+  - CI workflow is updated to run frontend tests and fail if coverage falls below the target.
+  - A baseline coverage percentage is established and documented.
+
 ## Priority 4: Real Game Adapter Path
 
 ### SF-040: Scaffold F1 25 UDP Adapter Project Area
