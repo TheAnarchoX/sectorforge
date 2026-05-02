@@ -95,10 +95,11 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-011: Harden Dev Script Port Handling
 
-- Status: `ready`
+- Status: `done`
 - Type: DevEx
 - Goal: Make `tools/dev.ps1` handle occupied ports gracefully.
 - Suggested files: `tools/dev.ps1`, `README.md`
+- Notes: Hardened `tools/dev.ps1` port checks and README alternate port guidance on 2026-05-02.
 - Acceptance criteria:
   - Script checks API and web ports before launching.
   - Error output names the occupied port and suggests `-ApiPort` or `-WebPort`.

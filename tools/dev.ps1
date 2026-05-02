@@ -8,14 +8,6 @@ $ErrorActionPreference = "Stop"
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 $webProject = Join-Path $root "src\SectorForge.Web"
 
-function Require-Command {
-    param([string]$Name)
-
-    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
-        throw "Required command '$Name' was not found on PATH."
-    }
-}
-
 function Invoke-Pnpm {
     param([string[]]$Arguments)
 
@@ -27,9 +19,63 @@ function Invoke-Pnpm {
     & npx --yes pnpm@latest @Arguments
 }
 
-Require-Command dotnet
-Require-Command node
-Require-Command npx
+function Test-LoopbackPortInUse {
+    param([int]$Port)
+
+    $hosts = @("127.0.0.1")
+
+    if ([System.Net.Sockets.Socket]::OSSupportsIPv6) {
+        $hosts += "::1"
+    }
+
+    foreach ($hostAddress in $hosts) {
+        $client = [System.Net.Sockets.TcpClient]::new()
+
+        try {
+            $connectTask = $client.ConnectAsync($hostAddress, $Port)
+
+            if ($connectTask.Wait(200) -and $client.Connected) {
+                return $true
+            }
+        }
+        catch [System.AggregateException] {
+            continue
+        }
+        catch [System.Net.Sockets.SocketException] {
+            continue
+        }
+        finally {
+            $client.Dispose()
+        }
+    }
+
+    return $false
+}
+
+function Assert-PortAvailable {
+    param(
+        [string]$Name,
+        [int]$Port,
+        [string]$SwitchName
+    )
+
+    if (Test-LoopbackPortInUse -Port $Port) {
+        throw "$Name port $Port is already in use. Stop the process using it or rerun with -$SwitchName <port>."
+    }
+}
+
+if ($ApiPort -eq $WebPort) {
+    throw "API and web ports are both set to $ApiPort. Choose distinct ports with -ApiPort <port> or -WebPort <port>."
+}
+
+Assert-PortAvailable -Name "API" -Port $ApiPort -SwitchName "ApiPort"
+Assert-PortAvailable -Name "Web" -Port $WebPort -SwitchName "WebPort"
+
+foreach ($requiredCommand in @("dotnet", "node", "npx")) {
+    if (-not (Get-Command $requiredCommand -ErrorAction SilentlyContinue)) {
+        throw "Required command '$requiredCommand' was not found on PATH."
+    }
+}
 
 if (-not $NoInstall -and -not (Test-Path (Join-Path $webProject "node_modules"))) {
     Write-Host "Installing frontend dependencies with pnpm..." -ForegroundColor Cyan

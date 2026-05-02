@@ -21,6 +21,14 @@ cd C:\Users\jimdv\repositories\sectorforge
 
 Open `http://localhost:5173`. The API runs on `http://localhost:5221` and starts the fake telemetry adapter automatically.
 
+If the default ports are already in use, pass alternate ports before launching:
+
+```powershell
+.\tools\dev.ps1 -ApiPort 5222 -WebPort 5174
+```
+
+The dev script checks both ports up front and reports whether to use `-ApiPort` or `-WebPort`.
+
 Useful commands:
 
 ```powershell
