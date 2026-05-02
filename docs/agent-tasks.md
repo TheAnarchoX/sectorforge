@@ -107,7 +107,7 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-012: Add VS Code Problem Matchers For Vite
 
-- Status: `ready`
+- Status: `done`
 - Type: VS Code
 - Goal: Improve background task readiness detection and TypeScript/Vite diagnostics.
 - Suggested files: `.vscode/tasks.json`

@@ -72,18 +72,13 @@
       "isBackground": true,
       "problemMatcher": {
         "owner": "vite",
-        "pattern": [
-          {
-            "regexp": ".",
-            "file": 1,
-            "location": 2,
-            "message": 3
-          }
-        ],
+        "pattern": {
+          "regexp": "."
+        },
         "background": {
           "activeOnStart": true,
-          "beginsPattern": "VITE",
-          "endsPattern": "Local:.*http://localhost:5173"
+          "beginsPattern": "^\\s*>\\s+vite(?:\\s|$)",
+          "endsPattern": "^\\s*(?:➜\\s+)?Local:\\s+http://localhost:5173/?\\s*$"
         }
       }
     },
@@ -92,7 +87,24 @@
       "type": "shell",
       "command": "npx --yes pnpm@latest --dir \"${workspaceFolder}/src/SectorForge.Web\" build",
       "group": "build",
-      "problemMatcher": "$tsc"
+      "problemMatcher": [
+        {
+          "base": "$tsc",
+          "fileLocation": ["relative", "${workspaceFolder}/src/SectorForge.Web"]
+        },
+        {
+          "owner": "vite",
+          "fileLocation": "absolute",
+          "pattern": {
+            "regexp": "^(.+):(\\d+):(\\d+):\\s+(ERROR|error|WARNING|warning):\\s+(.*)$",
+            "file": 1,
+            "line": 2,
+            "column": 3,
+            "severity": 4,
+            "message": 5
+          }
+        }
+      ]
     },
     {
       "label": "web: lint",

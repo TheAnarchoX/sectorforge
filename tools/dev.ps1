@@ -22,14 +22,14 @@ function Invoke-Pnpm {
 function Test-LoopbackPortInUse {
     param([int]$Port)
 
-    $hosts = @("127.0.0.1")
+    $hosts = @([System.Net.IPAddress]::Loopback)
 
     if ([System.Net.Sockets.Socket]::OSSupportsIPv6) {
-        $hosts += "::1"
+        $hosts += [System.Net.IPAddress]::IPv6Loopback
     }
 
     foreach ($hostAddress in $hosts) {
-        $client = [System.Net.Sockets.TcpClient]::new()
+        $client = [System.Net.Sockets.TcpClient]::new($hostAddress.AddressFamily)
 
         try {
             $connectTask = $client.ConnectAsync($hostAddress, $Port)
@@ -37,6 +37,9 @@ function Test-LoopbackPortInUse {
             if ($connectTask.Wait(200) -and $client.Connected) {
                 return $true
             }
+        }
+        catch [System.ArgumentException] {
+            continue
         }
         catch [System.AggregateException] {
             continue
