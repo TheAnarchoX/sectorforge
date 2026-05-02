@@ -184,17 +184,17 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ## Priority 3: Frontend Product Slice
 
-### SF-030: Add Session Detail View
+### SF-030: Split Dashboard Into Components
 
 - Status: `ready`
-- Type: frontend feature
-- Goal: Let users inspect a stored session from the recent captures list.
-- Suggested files: `src/SectorForge.Web/src/*`, `src/SectorForge.Api/Program.cs` if API shape needs small additions
+- Type: frontend maintainability
+- Goal: Break the first dashboard into smaller component and API modules.
+- Suggested files: `src/SectorForge.Web/src/components/*`, `src/SectorForge.Web/src/api/*`, `src/SectorForge.Web/src/types/*`
 - Acceptance criteria:
-  - Clicking a recent session opens a detail view or panel.
-  - Detail view shows session metadata, lap summaries, and a recent speed trace.
-  - Empty and loading states are clear.
-  - Frontend lint and build pass.
+  - `App.tsx` mainly composes layout and top-level state.
+  - API calls and SignalR setup are isolated in dedicated modules/hooks.
+  - Type definitions are shared without circular imports.
+  - No visual or behavioral regression.
 
 ### SF-031: Improve Dashboard Empty And Error States
 
@@ -208,17 +208,17 @@ This backlog is written for coding agents and human contributors. Each task is i
   - Error banner text is actionable without exposing stack traces.
   - Layout remains responsive below 720px width.
 
-### SF-032: Split Dashboard Into Components
+### SF-032: Add Session Detail View
 
 - Status: `ready`
-- Type: frontend maintainability
-- Goal: Break the first dashboard into smaller component and API modules.
-- Suggested files: `src/SectorForge.Web/src/components/*`, `src/SectorForge.Web/src/api/*`, `src/SectorForge.Web/src/types/*`
+- Type: frontend feature
+- Goal: Let users inspect a stored session from the recent captures list.
+- Suggested files: `src/SectorForge.Web/src/*`, `src/SectorForge.Api/Program.cs` if API shape needs small additions
 - Acceptance criteria:
-  - `App.tsx` mainly composes layout and top-level state.
-  - API calls and SignalR setup are isolated in dedicated modules/hooks.
-  - Type definitions are shared without circular imports.
-  - No visual or behavioral regression.
+  - Clicking a recent session opens a detail view or panel.
+  - Detail view shows session metadata, lap summaries, and a recent speed trace.
+  - Empty and loading states are clear.
+  - Frontend lint and build pass.
 
 ## Priority 4: Real Game Adapter Path
 
