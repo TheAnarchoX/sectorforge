@@ -1,9 +1,11 @@
+using System.Threading.Channels;
 using SectorForge.Core.Telemetry;
 
 namespace SectorForge.Collector;
 
 public sealed class TelemetryCollectorService : ITelemetryReceiver, IAsyncDisposable
 {
+    private const int PendingSampleBufferCapacity = 120;
     private readonly IReadOnlyDictionary<string, ITelemetryAdapter> _adapters;
     private readonly ILiveTelemetryPublisher _publisher;
     private readonly ITelemetrySessionStore _sessionStore;
@@ -16,6 +18,7 @@ public sealed class TelemetryCollectorService : ITelemetryReceiver, IAsyncDispos
     private DateTimeOffset? _lastSampleAt;
     private TelemetrySample? _latestSample;
     private long _samplesPublished;
+    private long _samplesDropped;
     private string? _lastError;
 
     public TelemetryCollectorService(
@@ -58,6 +61,7 @@ public sealed class TelemetryCollectorService : ITelemetryReceiver, IAsyncDispos
             _startedAt = DateTimeOffset.UtcNow;
             _lastError = null;
             _samplesPublished = 0;
+            _samplesDropped = 0;
             _latestSample = null;
             _lastSampleAt = null;
             _runCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -98,6 +102,7 @@ public sealed class TelemetryCollectorService : ITelemetryReceiver, IAsyncDispos
             StartedAt: _startedAt,
             LastSampleAt: _lastSampleAt,
             SamplesPublished: Interlocked.Read(ref _samplesPublished),
+            SamplesDropped: Interlocked.Read(ref _samplesDropped),
             LastError: _lastError,
             LatestSample: _latestSample);
     }
@@ -111,26 +116,107 @@ public sealed class TelemetryCollectorService : ITelemetryReceiver, IAsyncDispos
 
     private async Task RunAdapterAsync(ITelemetryAdapter adapter, CancellationToken cancellationToken)
     {
+        using var processingCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var processingToken = processingCancellation.Token;
+        var sampleBuffer = CreateSampleBuffer();
+        var deliveryTask = ProcessBufferedSamplesAsync(sampleBuffer.Reader, processingToken);
+        var cancelOnDeliveryFaultTask = deliveryTask.ContinueWith(
+            static (task, state) =>
+            {
+                if (task.IsFaulted)
+                {
+                    ((CancellationTokenSource)state!).Cancel();
+                }
+            },
+            processingCancellation,
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+        Exception? runException = null;
+
         try
         {
-            await foreach (var sample in adapter.RunAsync(cancellationToken))
+            await foreach (var sample in adapter.RunAsync(processingToken))
             {
                 _latestSample = sample;
                 _lastSampleAt = sample.Timestamp;
-                Interlocked.Increment(ref _samplesPublished);
-
-                await _sessionStore.SaveSampleAsync(sample, cancellationToken);
-                await _publisher.PublishAsync(sample, cancellationToken);
+                QueueSample(sampleBuffer, sample);
             }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (processingToken.IsCancellationRequested)
         {
         }
         catch (Exception ex)
         {
-            _lastError = ex.Message;
-            _logger.LogError(ex, "Telemetry adapter {AdapterId} stopped unexpectedly", adapter.Source.AdapterId);
+            runException = ex;
+        }
+        finally
+        {
+            sampleBuffer.Writer.TryComplete();
+
+            try
+            {
+                await deliveryTask;
+            }
+            catch (OperationCanceledException) when (processingToken.IsCancellationRequested && cancellationToken.IsCancellationRequested)
+            {
+            }
+            catch (Exception ex) when (runException is null)
+            {
+                runException = ex;
+            }
+
+            await cancelOnDeliveryFaultTask;
+        }
+
+        if (runException is not null)
+        {
+            _lastError = runException.Message;
+            _logger.LogError(runException, "Telemetry adapter {AdapterId} stopped unexpectedly", adapter.Source.AdapterId);
             await _publisher.PublishStatusAsync(GetStatus(), CancellationToken.None);
+        }
+    }
+
+    private async Task ProcessBufferedSamplesAsync(ChannelReader<TelemetrySample> sampleReader, CancellationToken cancellationToken)
+    {
+        await foreach (var sample in sampleReader.ReadAllAsync(cancellationToken))
+        {
+            await _sessionStore.SaveSampleAsync(sample, cancellationToken);
+            await _publisher.PublishAsync(sample, cancellationToken);
+            Interlocked.Increment(ref _samplesPublished);
+        }
+    }
+
+    private static Channel<TelemetrySample> CreateSampleBuffer()
+    {
+        return Channel.CreateBounded<TelemetrySample>(new BoundedChannelOptions(PendingSampleBufferCapacity)
+        {
+            AllowSynchronousContinuations = false,
+            FullMode = BoundedChannelFullMode.Wait,
+            SingleReader = true,
+            SingleWriter = true
+        });
+    }
+
+    private void QueueSample(Channel<TelemetrySample> sampleBuffer, TelemetrySample sample)
+    {
+        while (true)
+        {
+            if (sampleBuffer.Writer.TryWrite(sample))
+            {
+                return;
+            }
+
+            if (sampleBuffer.Reader.TryRead(out _))
+            {
+                Interlocked.Increment(ref _samplesDropped);
+                continue;
+            }
+
+            if (sampleBuffer.Reader.Completion.IsCompleted)
+            {
+                return;
+            }
         }
     }
 

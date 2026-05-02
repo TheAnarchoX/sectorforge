@@ -117,6 +117,7 @@ public sealed record TelemetryReceiverStatus(
     DateTimeOffset? StartedAt,
     DateTimeOffset? LastSampleAt,
     long SamplesPublished,
+    long SamplesDropped,
     string? LastError,
     TelemetrySample? LatestSample);
 
