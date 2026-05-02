@@ -1,0 +1,49 @@
+name: Feature request
+description: Suggest an improvement or new capability for SectorForge.
+title: "Feature: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping shape SectorForge. Please avoid posting proprietary protocol text, telemetry captures, secrets, or private game paths.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: What user need, workflow, or limitation should this address?
+      placeholder: When reviewing a session, I want to...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the smallest useful version of the change.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - API or collector
+        - Web dashboard
+        - SQLite storage
+        - Game adapter
+        - Dev tooling
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional. What other approaches did you consider?
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Link related issues, tasks, public docs, or screenshots when helpful.

@@ -41,10 +41,11 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-002: Add GitHub Community Health Files
 
-- Status: `ready`
+- Status: `done`
 - Type: open-source setup
 - Goal: Add basic public repo hygiene for contributors and issue triage.
 - Suggested files: `.github/ISSUE_TEMPLATE/*`, `.github/pull_request_template.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`
+- Notes: Added issue forms, a pull request template, a security policy, and a project-specific code of conduct on 2026-05-02.
 - Acceptance criteria:
   - Bug report and feature request issue templates exist.
   - PR template asks for summary, checks run, screenshots for UI changes, and linked tasks/issues.
