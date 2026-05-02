@@ -370,7 +370,7 @@ function App() {
   const isLiveRunning = isCollectorRunning && runMode === "Live";
   const isReplayRunning = isCollectorRunning && runMode === "Replay";
   const activeReplaySessionId = isReplayRunning
-    ? sample?.session.id ?? collectorStatus?.latestSample?.sessionId ?? null
+    ? (sample?.session.id ?? collectorStatus?.latestSample?.sessionId ?? null)
     : null;
 
   return (
