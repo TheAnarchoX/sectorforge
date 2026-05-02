@@ -47,6 +47,8 @@ Type `/` in chat and choose the matching workspace prompt:
 | `Plan SectorForge Task` | You want an implementation plan for a task without editing files. |
 | `Take SectorForge Task` | You want an agent to implement one `docs/agent-tasks.md` task end to end. |
 | `Review SectorForge Task` | You want a code-review pass over completed task work or changed files. |
+| `Scaffold SectorForge Priority` | You want to add a new priority section with multiple backlog tasks. |
+| `Scaffold SectorForge Task` | You want to add one or more tasks to an existing priority section. |
 | `Scaffold SectorForge Adapter` | You want a safe research or scaffold plan for a game telemetry adapter. |
 
 Example prompt inputs:
@@ -55,6 +57,8 @@ Example prompt inputs:
 /Plan SectorForge Task SF-010
 /Take SectorForge Task SF-020
 /Review SectorForge Task SF-020
+/Scaffold SectorForge Priority Priority 5: Export and Sharing
+/Scaffold SectorForge Task Priority 1: add VS Code verify task
 /Scaffold SectorForge Adapter F1 25 UDP
 ```
 
@@ -65,10 +69,12 @@ Skills load when the request matches their description. When writing a prompt or
 | Skill | Use when |
 | --- | --- |
 | `sectorforge-task` | Selecting, planning, implementing, validating, or reporting work from `docs/agent-tasks.md`. |
+| `sectorforge-priority-scaffold` | Adding a new `docs/agent-tasks.md` priority section with SF task IDs and acceptance criteria. |
+| `sectorforge-task-scaffold` | Adding new task entries to an existing `docs/agent-tasks.md` priority section. |
 | `sectorforge-adapter` | Researching, scaffolding, parsing, normalizing, or testing game telemetry adapters such as F1 25, ACC, AMS2, LMU, UDP, shared memory, or plugin streams. |
 | `agent-customization` | Creating or updating `.github/instructions`, `.github/prompts`, `.github/agents`, `.github/skills`, `AGENTS.md`, or similar agent customization files. |
 
-Good manual requests name both the task and the workflow, for example: `Use the sectorforge-task skill to take SF-010` or `Use the sectorforge-adapter skill to plan the F1 25 UDP adapter`.
+Good manual requests name both the task and the workflow, for example: `Use the sectorforge-task skill to take SF-010`, `Use the sectorforge-task-scaffold skill to add a Priority 2 storage task`, or `Use the sectorforge-adapter skill to plan the F1 25 UDP adapter`.
 
 ## Adapter Contributions
 

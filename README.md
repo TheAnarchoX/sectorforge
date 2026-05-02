@@ -52,9 +52,9 @@ SectorForge includes repo-native files for coding agents:
 - `AGENTS.md` for repo-level operating rules.
 - `docs/agent-tasks.md` for scoped backlog tasks with acceptance criteria.
 - `.github/instructions/` for targeted backend, frontend, protocol, and docs guidance.
-- `.github/prompts/` for reusable task planning, implementation, review, and adapter scaffolding prompts.
+- `.github/prompts/` for reusable task planning, implementation, review, backlog scaffolding, and adapter scaffolding prompts.
 - `.github/agents/` for specialized workspace agents.
-- `.github/skills/` for repeatable SectorForge task and adapter workflows.
+- `.github/skills/` for repeatable SectorForge task, backlog scaffolding, and adapter workflows.
 
 ## Architecture
 

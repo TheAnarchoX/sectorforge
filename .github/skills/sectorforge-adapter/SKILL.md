@@ -7,6 +7,8 @@ argument-hint: "Game or adapter ID"
 
 Use this skill for game telemetry adapter work.
 
+Use it alongside the `sectorforge-task` workflow when adapter work comes from `docs/agent-tasks.md`.
+
 ## Procedure
 
 1. Read `docs/game-adapters.md` and `docs/protocol-notes.md`.

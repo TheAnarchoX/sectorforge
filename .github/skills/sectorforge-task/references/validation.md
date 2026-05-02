@@ -22,4 +22,4 @@ npx --yes pnpm@latest --dir .\src\SectorForge.Web build
 .\tools\dev.ps1
 ```
 
-Then open `http://localhost:5173` and confirm the API at `http://localhost:5221/api/health` returns `ok`.
+Then open `http://localhost:5173` and confirm the API at `http://localhost:5221/api/health` returns JSON with `status` set to `ok`.

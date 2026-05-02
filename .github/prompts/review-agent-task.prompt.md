@@ -1,5 +1,5 @@
 ---
-description: "Review a completed SectorForge task for correctness, scope control, tests, and docs."
+description: "Review a completed SectorForge docs/agent-tasks.md task or changed files for bugs, regressions, tests, docs, and scope control."
 name: "Review SectorForge Task"
 argument-hint: "Task ID or changed files"
 agent: "agent"
@@ -18,5 +18,6 @@ Prioritize:
 - Windows-first setup regressions
 - docs or task backlog drift
 - accidental copied protocol/vendor content
+- agentic workflow drift beyond one task
 
 Return findings first, ordered by severity, with file references and concise remediation guidance.

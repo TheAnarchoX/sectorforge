@@ -19,10 +19,11 @@ This repository is intended to be friendly to coding agents and human contributo
 
 ## Agentic Workspace Files
 
+- `AGENTS.md` is the canonical always-on repo guide. Do not add a duplicate `.github/copilot-instructions.md` alongside it unless maintainers intentionally replace this file.
 - `.github/instructions/`: focused instructions for backend, frontend, protocol adapter, and docs work.
-- `.github/prompts/`: reusable slash prompts for planning, taking, reviewing, and scaffolding tasks.
+- `.github/prompts/`: reusable slash prompts for planning, taking, reviewing, and scaffolding backlog tasks, priorities, and adapters.
 - `.github/agents/`: specialized agents for task implementation, backend, frontend, and protocol research.
-- `.github/skills/`: reusable workflows for SectorForge task execution and adapter work.
+- `.github/skills/`: reusable workflows for SectorForge task execution, backlog scaffolding, and adapter work.
 - `docs/agent-tasks.md`: the task backlog agents should work from.
 
 ## Validation Expectations

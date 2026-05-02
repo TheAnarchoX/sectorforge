@@ -1,5 +1,5 @@
 ---
-description: "Plan or scaffold a SectorForge game telemetry adapter while preserving protocol boundaries."
+description: "Research, plan, or scaffold a SectorForge game telemetry adapter such as F1 25 UDP, ACC shared memory, AMS2, or LMU without copying specs."
 name: "Scaffold SectorForge Adapter"
 argument-hint: "Game or adapter ID"
 agent: "SectorForge Protocol Researcher"
@@ -17,5 +17,6 @@ Requirements:
 - Prefer public links and original summaries in docs.
 - Define parser and normalizer test strategy.
 - Keep the adapter opt-in until tests and error handling are ready.
+- Keep backlog work scoped to the requested task ID.
 
 Return either a research plan or a minimal scaffold plan, depending on whether enough public information is already available.

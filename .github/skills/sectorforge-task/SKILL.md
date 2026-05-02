@@ -9,7 +9,7 @@ Use this skill when working from the SectorForge agent backlog.
 
 ## Procedure
 
-1. Read `AGENTS.md`, `CONTRIBUTING.md`, and `docs/agent-tasks.md`.
+1. Read `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, and `docs/agent-tasks.md`.
 2. Locate the requested task ID and copy its acceptance criteria into your working notes.
 3. Inspect current files before editing, especially files named in the task.
 4. Keep implementation scoped to the task.
@@ -18,6 +18,9 @@ Use this skill when working from the SectorForge agent backlog.
 
 ## Scope Rules
 
+- Work on one task ID at a time, and keep prompts, agents, skills, docs, and code changes inside that scope.
+- For adding new backlog priorities or task entries, use `sectorforge-priority-scaffold` or `sectorforge-task-scaffold` instead of implementation workflow steps.
 - If the task is blocked, update the task with the blocker instead of inventing requirements.
 - If the task needs research, produce a research note or plan before code changes.
 - If implementation reveals a separate task, add a follow-up to `docs/agent-tasks.md`.
+- If commands, ports, paths, APIs, storage behavior, or adapter boundaries change, update the affected docs and agentic files before completion.

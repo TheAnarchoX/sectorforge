@@ -14,9 +14,9 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 - `AGENTS.md`: repo-level instructions loaded by coding agents.
 - `.github/instructions/*.instructions.md`: targeted guidance for backend, frontend, protocol adapter, and docs changes.
-- `.github/prompts/*.prompt.md`: reusable chat prompts for planning, implementing, reviewing, and adapter scaffolding.
+- `.github/prompts/*.prompt.md`: reusable chat prompts for planning, implementing, reviewing, backlog scaffolding, and adapter scaffolding.
 - `.github/agents/*.agent.md`: specialized workspace agents for implementation, backend, frontend, and protocol research.
-- `.github/skills/*/SKILL.md`: reusable workflows for backlog tasks and game adapter work.
+- `.github/skills/*/SKILL.md`: reusable workflows for backlog tasks, backlog scaffolding, and game adapter work.
 
 ## Status Labels
 
@@ -67,9 +67,10 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-004: Maintain Agentic Workspace Files
 
-- Status: `ready`
+- Status: `done`
 - Type: agentic workflow
 - Goal: Keep repo instructions, prompts, agents, and skills aligned with the codebase as architecture changes.
+- Notes: Refreshed agent, prompt, skill, and instruction guidance on 2026-05-02. Added backlog priority and task scaffolding prompts and skills. `AGENTS.md` remains the canonical always-on repo guide.
 - Suggested files: `AGENTS.md`, `.github/instructions/*`, `.github/prompts/*`, `.github/agents/*`, `.github/skills/*`, `docs/agent-tasks.md`
 - Acceptance criteria:
   - Customization files reference current commands, paths, and architecture.
@@ -88,6 +89,7 @@ This backlog is written for coding agents and human contributors. Each task is i
 - Acceptance criteria:
   - `tools/verify.ps1` runs backend tests, format verification, frontend lint, and frontend build.
   - Script fails fast and exits non-zero on failure.
+  - Agentic workflows made aware of changes.
   - README and VS Code tasks mention the script.
 
 ### SF-011: Harden Dev Script Port Handling
