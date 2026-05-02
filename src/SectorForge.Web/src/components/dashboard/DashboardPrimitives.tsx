@@ -3,8 +3,42 @@ import type { ConnectionState, TelemetryRunMode } from "../../types/telemetry";
 
 type StripCellTone = "neutral" | "accent" | "warning" | "success" | "danger";
 
-export function ErrorBanner({ message }: { message: string }) {
-  return <div className="error-banner">{message}</div>;
+export function ErrorBanner({
+  title,
+  message,
+  tone = "error",
+}: {
+  title: string;
+  message: string;
+  tone?: "error" | "warning";
+}) {
+  return (
+    <div className={`error-banner error-banner-${tone}`} role="alert">
+      <div className="error-banner-title">{title}</div>
+      <p className="error-banner-message">{message}</p>
+    </div>
+  );
+}
+
+export function StateNotice({
+  title,
+  message,
+  tone = "neutral",
+}: {
+  title: string;
+  message: string;
+  tone?: "neutral" | "warning" | "danger";
+}) {
+  return (
+    <section
+      className={`state-notice state-notice-${tone}`}
+      role="status"
+      aria-live="polite"
+    >
+      <div className="state-notice-title">{title}</div>
+      <p className="state-notice-message">{message}</p>
+    </section>
+  );
 }
 
 export function StatusPill({

@@ -16,6 +16,7 @@ type TimingBoardProps = {
   sample: TelemetrySample | null;
   activeSource: TelemetrySource | null;
   sessions: TelemetrySessionSummary[];
+  isApiOffline: boolean;
   isBusy: boolean;
   activeReplaySessionId: string | null;
   onStartReplay: (sessionId: string) => void;
@@ -26,6 +27,7 @@ export function TimingBoard({
   sample,
   activeSource,
   sessions,
+  isApiOffline,
   isBusy,
   activeReplaySessionId,
   onStartReplay,
@@ -60,10 +62,14 @@ export function TimingBoard({
           <tbody>
             <tr className="table-row-live">
               <td>
-                <span className="table-badge table-badge-live">
-                  {collectorStatus?.isRunning
-                    ? collectorStatus.runMode
-                    : "Idle"}
+                <span
+                  className={`table-badge ${isApiOffline ? "table-badge-offline" : "table-badge-live"}`}
+                >
+                  {isApiOffline
+                    ? "Offline"
+                    : collectorStatus?.isRunning
+                      ? collectorStatus.runMode
+                      : "Idle"}
                 </span>
               </td>
               <td>{sample?.track.trackName ?? "-"}</td>
@@ -75,9 +81,11 @@ export function TimingBoard({
                       "-"}
                   </span>
                   <span className="table-subvalue muted">
-                    {activeSource?.inputKind ??
-                      sample?.source.game ??
-                      "No source"}
+                    {isApiOffline
+                      ? "API unavailable"
+                      : (activeSource?.inputKind ??
+                        sample?.source.game ??
+                        "No source")}
                   </span>
                 </div>
               </td>
@@ -95,9 +103,28 @@ export function TimingBoard({
               </td>
               <td className="mono">{collectorStatus?.samplesPublished ?? 0}</td>
               <td>
-                <span className="table-badge table-badge-live">Stream</span>
+                <span
+                  className={`table-badge ${isApiOffline ? "table-badge-offline" : "table-badge-live"}`}
+                >
+                  {isApiOffline ? "Unavailable" : "Stream"}
+                </span>
               </td>
             </tr>
+
+            {!isApiOffline && sessions.length === 0 && (
+              <tr className="table-row-empty">
+                <td colSpan={8}>
+                  <div className="table-empty-state">
+                    <span>No recent captures yet</span>
+                    <span className="table-subvalue muted">
+                      {collectorStatus?.isRunning
+                        ? "This board fills in after the current run saves its first telemetry samples."
+                        : "Start fake telemetry and let it run for a few moments to create the first capture."}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            )}
 
             {sessions.slice(0, 10).map((session) => {
               const isActiveReplay = activeReplaySessionId === session.id;

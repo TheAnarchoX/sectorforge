@@ -98,12 +98,17 @@ export function DashboardHeader({
           </div>
         </div>
 
-        <div className="button-row">
+        <div
+          className="button-row"
+          role="group"
+          aria-label="Collector controls"
+        >
           <button
             className="icon-button primary"
             type="button"
             onClick={onStartCollector}
             disabled={isBusy || isLiveRunning}
+            aria-label="Start fake telemetry"
             title="Start fake telemetry"
           >
             <Play size={17} />
@@ -115,6 +120,7 @@ export function DashboardHeader({
             type="button"
             onClick={onStopCollector}
             disabled={isBusy || !isCollectorRunning}
+            aria-label={isReplayRunning ? "Stop replay" : "Stop collector"}
             title={isReplayRunning ? "Stop replay" : "Stop collector"}
           >
             <Pause size={17} />
@@ -125,6 +131,7 @@ export function DashboardHeader({
             className="icon-button"
             type="button"
             onClick={onRefresh}
+            aria-label="Refresh dashboard state"
             title="Refresh API state"
           >
             <RefreshCw size={17} />

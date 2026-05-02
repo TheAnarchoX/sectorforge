@@ -27,6 +27,22 @@ type DashboardSnapshot = {
   sessions: TelemetrySessionSummary[];
 };
 
+type ApiAvailability = "checking" | "online" | "offline";
+
+type DashboardAlert = {
+  title: string;
+  message: string;
+  tone: "error" | "warning";
+};
+
+type DashboardErrorContext =
+  | "snapshot"
+  | "signalr"
+  | "startCollector"
+  | "stopCollector"
+  | "startReplay"
+  | "collectorRuntime";
+
 async function loadDashboardSnapshot(): Promise<DashboardSnapshot> {
   const [collectorStatus, games, sessions] = await Promise.all([
     getCollectorStatus(),
@@ -45,6 +61,101 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
+function isLikelyOfflineError(message: string) {
+  return [
+    /failed to fetch/i,
+    /fetch failed/i,
+    /networkerror/i,
+    /load failed/i,
+    /connection refused/i,
+    /econnrefused/i,
+    /err_connection_refused/i,
+  ].some((pattern) => pattern.test(message));
+}
+
+function createDashboardAlert(
+  context: DashboardErrorContext,
+  error: unknown,
+): { alert: DashboardAlert; apiAvailability: Exclude<ApiAvailability, "checking"> } {
+  const rawMessage = getErrorMessage(error, "Request failed");
+
+  if (isLikelyOfflineError(rawMessage)) {
+    return {
+      apiAvailability: "offline",
+      alert: {
+        tone: "error",
+        title: "API offline",
+        message:
+          "The local SectorForge API could not be reached. Start the local service, then press Refresh to sync the dashboard.",
+      },
+    };
+  }
+
+  switch (context) {
+    case "signalr":
+      return {
+        apiAvailability: "online",
+        alert: {
+          tone: "warning",
+          title: "Live feed interrupted",
+          message:
+            "Live updates dropped out. Wait for the connection to recover or press Refresh after the local API is available again.",
+        },
+      };
+    case "startCollector":
+      return {
+        apiAvailability: "online",
+        alert: {
+          tone: "error",
+          title: "Could not start telemetry",
+          message:
+            "The collector did not start. Press Refresh, then try Start fake again.",
+        },
+      };
+    case "stopCollector":
+      return {
+        apiAvailability: "online",
+        alert: {
+          tone: "error",
+          title: "Could not stop telemetry",
+          message:
+            "The active run did not stop cleanly. Try Stop again or press Refresh before retrying.",
+        },
+      };
+    case "startReplay":
+      return {
+        apiAvailability: "online",
+        alert: {
+          tone: "error",
+          title: "Could not start replay",
+          message:
+            "The selected capture could not start replay. Refresh the captures list and try again.",
+        },
+      };
+    case "collectorRuntime":
+      return {
+        apiAvailability: "online",
+        alert: {
+          tone: "warning",
+          title: "Collector needs attention",
+          message:
+            "The collector reported a runtime problem. Stop the current run, start it again, and check the local API logs if the issue repeats.",
+        },
+      };
+    case "snapshot":
+    default:
+      return {
+        apiAvailability: "online",
+        alert: {
+          tone: "error",
+          title: "Dashboard refresh failed",
+          message:
+            "Current telemetry state could not be refreshed. Confirm the local API is available, then press Refresh.",
+        },
+      };
+  }
+}
+
 function appendTraceValue(history: number[], nextValue: number) {
   const nextHistory = [...history, nextValue];
   return nextHistory.slice(Math.max(0, nextHistory.length - TRACE_HISTORY_LIMIT));
@@ -53,6 +164,8 @@ function appendTraceValue(history: number[], nextValue: number) {
 export function useTelemetryDashboard() {
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("connecting");
+  const [apiAvailability, setApiAvailability] =
+    useState<ApiAvailability>("checking");
   const [collectorStatus, setCollectorStatus] =
     useState<CollectorStatus | null>(null);
   const [sample, setSample] = useState<TelemetrySample | null>(null);
@@ -66,12 +179,25 @@ export function useTelemetryDashboard() {
     steering: [],
   });
   const [isBusy, setIsBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<DashboardAlert | null>(null);
 
   const applyDashboardSnapshot = (snapshot: DashboardSnapshot) => {
     setCollectorStatus(snapshot.collectorStatus);
     setGames(snapshot.games);
     setSessions(snapshot.sessions);
+    setApiAvailability("online");
+
+    if (snapshot.collectorStatus.lastError) {
+      setError(
+        createDashboardAlert(
+          "collectorRuntime",
+          snapshot.collectorStatus.lastError,
+        ).alert,
+      );
+      return;
+    }
+
+    setError(null);
   };
 
   const syncDashboardEffect = useEffectEvent(
@@ -79,14 +205,18 @@ export function useTelemetryDashboard() {
       try {
         if (options?.sessionsOnly) {
           setSessions(await loadSessionSnapshot());
+          setApiAvailability("online");
           return true;
         }
 
         applyDashboardSnapshot(await loadDashboardSnapshot());
         return true;
       } catch (requestError) {
+        const nextAlert = createDashboardAlert("snapshot", requestError);
+        setApiAvailability(nextAlert.apiAvailability);
+
         if (!options?.silent) {
-          setError(getErrorMessage(requestError, "API request failed"));
+          setError(nextAlert.alert);
         }
 
         return false;
@@ -96,14 +226,19 @@ export function useTelemetryDashboard() {
 
   const handleCollectorStatus = useEffectEvent((status: CollectorStatus) => {
     setCollectorStatus(status);
+    setApiAvailability("online");
 
     if (status.lastError) {
-      setError(status.lastError);
+      setError(createDashboardAlert("collectorRuntime", status.lastError).alert);
+      return;
     }
+
+    setError(null);
   });
 
   const handleTelemetrySample = useEffectEvent((nextSample: TelemetrySample) => {
     setSample(nextSample);
+    setApiAvailability("online");
     setError(null);
     setTraceSeries((current) => ({
       speed: appendTraceValue(current.speed, nextSample.vehicle.speedKph ?? 0),
@@ -148,6 +283,7 @@ export function useTelemetryDashboard() {
     connection.onreconnecting(() => setConnectionState("reconnecting"));
     connection.onreconnected(() => {
       setConnectionState("connected");
+      setApiAvailability("online");
       void syncDashboardEffect({ silent: true });
     });
     connection.onclose(() => setConnectionState("disconnected"));
@@ -156,8 +292,10 @@ export function useTelemetryDashboard() {
       .start()
       .then(() => setConnectionState("connected"))
       .catch((startError: unknown) => {
+        const nextAlert = createDashboardAlert("signalr", startError);
         setConnectionState("disconnected");
-        setError(getErrorMessage(startError, "SignalR connection failed"));
+        setApiAvailability(nextAlert.apiAvailability);
+        setError(nextAlert.alert);
       });
 
     return () => {
@@ -173,7 +311,9 @@ export function useTelemetryDashboard() {
     try {
       applyDashboardSnapshot(await loadDashboardSnapshot());
     } catch (requestError) {
-      setError(getErrorMessage(requestError, "API request failed"));
+      const nextAlert = createDashboardAlert("snapshot", requestError);
+      setApiAvailability(nextAlert.apiAvailability);
+      setError(nextAlert.alert);
     }
   };
 
@@ -188,8 +328,11 @@ export function useTelemetryDashboard() {
       ]);
       setCollectorStatus(nextStatus);
       setGames(nextGames);
+      setApiAvailability("online");
     } catch (startError) {
-      setError(getErrorMessage(startError, "Collector start failed"));
+      const nextAlert = createDashboardAlert("startCollector", startError);
+      setApiAvailability(nextAlert.apiAvailability);
+      setError(nextAlert.alert);
     } finally {
       setIsBusy(false);
     }
@@ -209,8 +352,11 @@ export function useTelemetryDashboard() {
       setCollectorStatus(nextStatus);
       setGames(nextGames);
       setSessions(nextSessions);
+      setApiAvailability("online");
     } catch (stopError) {
-      setError(getErrorMessage(stopError, "Collector stop failed"));
+      const nextAlert = createDashboardAlert("stopCollector", stopError);
+      setApiAvailability(nextAlert.apiAvailability);
+      setError(nextAlert.alert);
     } finally {
       setIsBusy(false);
     }
@@ -222,8 +368,11 @@ export function useTelemetryDashboard() {
 
     try {
       setCollectorStatus(await startReplayRequest(sessionId));
+      setApiAvailability("online");
     } catch (replayError) {
-      setError(getErrorMessage(replayError, "Replay start failed"));
+      const nextAlert = createDashboardAlert("startReplay", replayError);
+      setApiAvailability(nextAlert.apiAvailability);
+      setError(nextAlert.alert);
     } finally {
       setIsBusy(false);
     }
@@ -231,6 +380,7 @@ export function useTelemetryDashboard() {
 
   return {
     connectionState,
+    apiAvailability,
     collectorStatus,
     sample,
     games,

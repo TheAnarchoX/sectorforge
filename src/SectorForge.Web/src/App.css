@@ -267,6 +267,14 @@
   margin: 0 auto;
 }
 
+.state-notice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  max-width: 1540px;
+  margin: 0 auto 10px;
+}
+
 .timing-board {
   max-width: 1540px;
   margin: 10px auto 0;
@@ -563,12 +571,30 @@
   border-color: rgba(99, 184, 214, 0.36);
 }
 
+.table-badge-offline {
+  color: var(--accent-red);
+  border-color: rgba(204, 98, 86, 0.36);
+}
+
 .table-row-live td {
   background: rgba(255, 255, 255, 0.01);
 }
 
 .table-row-active td {
   background: rgba(217, 176, 74, 0.04);
+}
+
+.table-row-empty td {
+  white-space: normal;
+}
+
+.table-empty-state {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 78px;
+  justify-content: center;
+  color: var(--ink-strong);
 }
 
 .status-chip {
@@ -635,6 +661,53 @@
   background: #000;
 }
 
+.error-banner-warning {
+  border-color: rgba(217, 176, 74, 0.45);
+  color: #ffe9ba;
+}
+
+.error-banner-title,
+.state-notice-title {
+  font-family: var(--font-label);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.error-banner-title {
+  color: currentColor;
+}
+
+.error-banner-message,
+.state-notice-message {
+  margin: 6px 0 0;
+  line-height: 1.45;
+}
+
+.state-notice {
+  min-height: 88px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 2px;
+  background: #000;
+}
+
+.state-notice-neutral {
+  border-color: rgba(255, 255, 255, 0.14);
+  color: var(--ink-strong);
+}
+
+.state-notice-warning {
+  border-color: rgba(217, 176, 74, 0.4);
+  color: #ffe9ba;
+}
+
+.state-notice-danger {
+  border-color: rgba(204, 98, 86, 0.45);
+  color: #ffd9d4;
+}
+
 .muted {
   color: var(--ink-soft);
 }
@@ -684,6 +757,10 @@
     padding: 8px;
   }
 
+  .state-notice-grid {
+    grid-template-columns: 1fr;
+  }
+
   .panel-header {
     flex-direction: column;
     align-items: flex-start;
@@ -707,6 +784,14 @@
 
   .brand-title {
     font-size: 1.55rem;
+  }
+
+  .button-row {
+    width: 100%;
+  }
+
+  .button-row .icon-button {
+    flex: 1 1 140px;
   }
 
   .status-chip,
