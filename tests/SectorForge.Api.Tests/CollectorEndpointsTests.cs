@@ -1,7 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
@@ -106,6 +105,136 @@ public sealed class CollectorEndpointsTests
             var response = await client.PostAsync($"/api/replay/start/{Guid.NewGuid()}", content: null);
 
             Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+        }
+        finally
+        {
+            client?.Dispose();
+            factory?.Dispose();
+
+            if (Directory.Exists(testDataDirectory))
+            {
+                try
+                {
+                    Directory.Delete(testDataDirectory, recursive: true);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public async Task CollectorStartReturnsNotFoundForUnknownAdapter()
+    {
+        var testDataDirectory = Path.Combine(Path.GetTempPath(), "SectorForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(testDataDirectory);
+        WebApplicationFactory<Program>? factory = null;
+        HttpClient? client = null;
+
+        try
+        {
+            var connectionString = new SqliteConnectionStringBuilder
+            {
+                DataSource = Path.Combine(testDataDirectory, "sectorforge.db"),
+                Mode = SqliteOpenMode.ReadWriteCreate
+            }.ToString();
+
+            factory = CreateFactory(connectionString);
+            client = factory.CreateClient();
+
+            var response = await client.PostAsJsonAsync("/api/collector/start", new { adapterId = "missing" });
+
+            Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+        }
+        finally
+        {
+            client?.Dispose();
+            factory?.Dispose();
+
+            if (Directory.Exists(testDataDirectory))
+            {
+                try
+                {
+                    Directory.Delete(testDataDirectory, recursive: true);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public async Task CollectorStartReturnsBadRequestForUnavailableAdapter()
+    {
+        var testDataDirectory = Path.Combine(Path.GetTempPath(), "SectorForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(testDataDirectory);
+        WebApplicationFactory<Program>? factory = null;
+        HttpClient? client = null;
+
+        try
+        {
+            var connectionString = new SqliteConnectionStringBuilder
+            {
+                DataSource = Path.Combine(testDataDirectory, "sectorforge.db"),
+                Mode = SqliteOpenMode.ReadWriteCreate
+            }.ToString();
+
+            factory = CreateFactory(connectionString);
+            client = factory.CreateClient();
+
+            var response = await client.PostAsJsonAsync("/api/collector/start", new { adapterId = "f1-25-udp" });
+
+            Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
+        }
+        finally
+        {
+            client?.Dispose();
+            factory?.Dispose();
+
+            if (Directory.Exists(testDataDirectory))
+            {
+                try
+                {
+                    Directory.Delete(testDataDirectory, recursive: true);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GamesEndpointListsRegisteredSourcesAndMarksActiveAdapterRunning()
+    {
+        var testDataDirectory = Path.Combine(Path.GetTempPath(), "SectorForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(testDataDirectory);
+        WebApplicationFactory<Program>? factory = null;
+        HttpClient? client = null;
+
+        try
+        {
+            var connectionString = new SqliteConnectionStringBuilder
+            {
+                DataSource = Path.Combine(testDataDirectory, "sectorforge.db"),
+                Mode = SqliteOpenMode.ReadWriteCreate
+            }.ToString();
+
+            factory = CreateFactory(connectionString);
+            client = factory.CreateClient();
+
+            var startResponse = await client.PostAsJsonAsync("/api/collector/start", new { adapterId = "fake" });
+            startResponse.EnsureSuccessStatusCode();
+
+            var response = await client.GetAsync("/api/games");
+            response.EnsureSuccessStatusCode();
+
+            var sources = await response.Content.ReadFromJsonAsync<IReadOnlyList<TelemetrySource>>(JsonOptions);
+            Assert.NotNull(sources);
+            Assert.Contains(sources, source => source.AdapterId == "fake" && source.Status == TelemetrySourceStatus.Running);
+            Assert.Contains(sources, source => source.AdapterId == "f1-25-udp" && source.Status == TelemetrySourceStatus.NotImplemented);
         }
         finally
         {

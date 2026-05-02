@@ -168,12 +168,13 @@ This backlog is written for coding agents and human contributors. Each task is i
   - UI can distinguish live fake telemetry from replay mode.
   - Tests cover missing session and successful replay start.
 
-### SF-024: Testing Coverager Baseline
+### SF-024: Testing Coverage Baseline
 
-- Status: `ready`
+- Status: `done`
 - Type: testing
 - Goal: Add a code coverage baseline and ensure new tests are adding coverage. Goal of 90%+ overall code coverage with attention to untested files. This will help ensure the codebase remains maintainable and that new features are well-tested.
 - Suggested files: `tests/coverage/*`, CI workflow updates, docs
+- Notes: Added `tests/coverage/Invoke-Coverage.ps1`, GitHub Actions coverage artifact upload, and a documented 94.13% line coverage baseline on 2026-05-03. CI now enforces 93% overall line coverage plus per-file thresholds for critical runtime files.
 - Acceptance criteria:
   - Code coverage reports are generated in CI and uploaded as artifacts.
   - Baseline coverage is established and documented.

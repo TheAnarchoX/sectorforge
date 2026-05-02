@@ -21,6 +21,14 @@ Run these before opening a pull request:
 
 The verify script fails fast and runs backend tests, .NET format verification, frontend lint, and frontend build.
 
+When you need the current coverage baseline or are touching low-covered runtime files, also run:
+
+```powershell
+.\tests\coverage\Invoke-Coverage.ps1
+```
+
+The coverage script generates merged Cobertura and HTML reports under `artifacts\coverage\report` and enforces the thresholds in `tests\coverage\coverage-thresholds.json`.
+
 ## Agent Task Backlog
 
 Agents and contributors can pick scoped work from `docs/agent-tasks.md`. Follow `AGENTS.md` for repo-specific operating rules and expected completion notes.

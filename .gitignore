@@ -3,6 +3,8 @@ bin/
 obj/
 TestResults/
 coverage/
+!tests/coverage/
+!tests/coverage/**
 
 # .NET user files
 *.user

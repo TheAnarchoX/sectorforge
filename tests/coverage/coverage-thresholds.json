@@ -1,0 +1,11 @@
+{
+  "overallLineCoverageMinimum": 93,
+  "criticalFiles": {
+    "SectorForge.Api/Program.cs": 90,
+    "SectorForge.Api/Hubs/TelemetryHub.cs": 95,
+    "SectorForge.Api/Services/CollectorAutoStartService.cs": 95,
+    "SectorForge.Collector/TelemetryCollectorService.cs": 90,
+    "SectorForge.Collector/Worker.cs": 90,
+    "SectorForge.Infrastructure/Storage/SqliteTelemetrySessionStore.cs": 90
+  }
+}

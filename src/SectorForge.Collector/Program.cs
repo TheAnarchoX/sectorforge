@@ -1,9 +1,21 @@
-using SectorForge.Collector;
 using SectorForge.Collector.Adapters;
 
-var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddSingleton<FakeTelemetryAdapter>();
-builder.Services.AddHostedService<Worker>();
+namespace SectorForge.Collector;
 
-var host = builder.Build();
-host.Run();
+public static class CollectorProgram
+{
+    public static void Main(string[] args)
+    {
+        using var host = CreateHost(args);
+        host.Run();
+    }
+
+    public static IHost CreateHost(string[] args)
+    {
+        var builder = Host.CreateApplicationBuilder(args);
+        builder.Services.AddSingleton<FakeTelemetryAdapter>();
+        builder.Services.AddHostedService<Worker>();
+
+        return builder.Build();
+    }
+}

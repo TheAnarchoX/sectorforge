@@ -10,6 +10,35 @@ namespace SectorForge.Protocol.Tests;
 public sealed class TelemetryCollectorServiceTests
 {
     [Fact]
+    public async Task StartingSameAdapterTwiceDoesNotRepublishStatus()
+    {
+        var adapter = new BlockingTelemetryAdapter();
+        var publisher = new RecordingTelemetryPublisher();
+
+        await using var collector = CreateCollector(
+            adapter,
+            publisher,
+            new TestTelemetrySessionStore(TimeSpan.Zero));
+
+        try
+        {
+            await collector.StartAsync(adapter.Source.AdapterId);
+            await WaitForConditionAsync(() => collector.GetStatus().IsRunning, TimeSpan.FromSeconds(1));
+
+            var statusUpdateCount = publisher.StatusUpdates.Count;
+
+            await collector.StartAsync(adapter.Source.AdapterId);
+
+            Assert.Equal(statusUpdateCount, publisher.StatusUpdates.Count);
+            Assert.True(collector.GetStatus().IsRunning);
+        }
+        finally
+        {
+            await collector.StopAsync();
+        }
+    }
+
+    [Fact]
     public async Task CollectorKeepsReadingSamplesWhenDownstreamWorkFallsBehind()
     {
         const int sampleCount = 250;
@@ -85,6 +114,122 @@ public sealed class TelemetryCollectorServiceTests
         Assert.Contains(publisher.StatusUpdates, update => update.IsRunning && update.RunMode == TelemetryRunMode.Replay);
     }
 
+    [Fact]
+    public async Task ReplayHandlesNonIncreasingAndSubTickSampleIntervals()
+    {
+        var adapter = new FakeTelemetryAdapter();
+        var sessionId = Guid.NewGuid();
+        var baseTimestamp = DateTimeOffset.UtcNow;
+        var sample1 = adapter.CreateSample(TimeSpan.Zero, 1, sessionId) with { Timestamp = baseTimestamp };
+        var sample2 = adapter.CreateSample(TimeSpan.Zero, 2, sessionId) with { Timestamp = baseTimestamp };
+        var sample3 = adapter.CreateSample(TimeSpan.Zero, 3, sessionId) with { Timestamp = baseTimestamp.AddTicks(1) };
+        var publisher = new RecordingTelemetryPublisher();
+
+        await using var collector = CreateCollector(
+            adapter,
+            publisher,
+            new ReplayTelemetrySessionStore([sample1, sample2, sample3]));
+
+        await collector.StartReplayAsync(sessionId);
+        await WaitForConditionAsync(() => !collector.GetStatus().IsRunning, TimeSpan.FromSeconds(5));
+
+        var status = collector.GetStatus();
+        Assert.Null(status.LastError);
+        Assert.Equal(3, status.SamplesPublished);
+        Assert.Equal([1L, 2L, 3L], publisher.PublishedSamples.Select(sample => sample.Sequence).ToArray());
+    }
+
+    [Fact]
+    public async Task ReplayWithoutStoredSamplesUsesFallbackReplaySource()
+    {
+        var sessionId = Guid.NewGuid();
+        var session = new TelemetrySessionDetails(
+            new TelemetrySessionSummary(
+                Id: sessionId,
+                Game: GameId.Fake,
+                SourceName: null,
+                TrackName: "Silverstone GP",
+                CarName: "SectorForge GT Prototype",
+                StartedAt: DateTimeOffset.UtcNow,
+                LastSeenAt: DateTimeOffset.UtcNow,
+                BestLapTime: null,
+                SampleCount: 0),
+            [],
+            []);
+
+        await using var collector = CreateCollector(
+            new FakeTelemetryAdapter(),
+            new RecordingTelemetryPublisher(),
+            new PreloadedReplayTelemetrySessionStore(session));
+
+        await collector.StartReplayAsync(sessionId);
+        await WaitForConditionAsync(() => !collector.GetStatus().IsRunning, TimeSpan.FromSeconds(5));
+
+        var status = collector.GetStatus();
+        Assert.Equal("replay", status.ActiveAdapterId);
+        Assert.NotNull(status.Source);
+        Assert.Equal("Stored session replay", status.Source.DisplayName);
+        Assert.Equal(TelemetrySourceStatus.Available, status.Source.Status);
+        Assert.Equal(0, status.SamplesPublished);
+    }
+
+    [Fact]
+    public async Task ReplayReportsStoreFailuresInStatus()
+    {
+        const string failureMessage = "Simulated replay store failure";
+        var sessionId = Guid.NewGuid();
+        var adapter = new FakeTelemetryAdapter();
+        var firstSample = adapter.CreateSample(TimeSpan.Zero, 1, sessionId);
+        var session = new TelemetrySessionDetails(
+            new TelemetrySessionSummary(
+                Id: sessionId,
+                Game: firstSample.Source.Game,
+                SourceName: firstSample.Source.DisplayName,
+                TrackName: firstSample.Track.TrackName,
+                CarName: firstSample.Vehicle.CarName,
+                StartedAt: firstSample.Session.StartedAt,
+                LastSeenAt: firstSample.Timestamp,
+                BestLapTime: firstSample.Lap.BestLapTime,
+                SampleCount: 1),
+            [],
+            [firstSample]);
+        var publisher = new RecordingTelemetryPublisher();
+
+        await using var collector = CreateCollector(
+            adapter,
+            publisher,
+            new PreloadedReplayTelemetrySessionStore(
+                session,
+                [firstSample],
+                new InvalidOperationException(failureMessage)));
+
+        await collector.StartReplayAsync(sessionId);
+        await WaitForConditionAsync(() => !collector.GetStatus().IsRunning, TimeSpan.FromSeconds(5));
+
+        var status = collector.GetStatus();
+        Assert.Equal(failureMessage, status.LastError);
+        Assert.Contains(publisher.StatusUpdates, update => update.LastError == failureMessage);
+    }
+
+    [Fact]
+    public async Task CollectorSwallowsStatusPublishFailuresWhenStopping()
+    {
+        var adapter = new BurstTelemetryAdapter(sampleCount: 1);
+        var publisher = new StatusFailsOnSecondUpdateTelemetryPublisher();
+
+        await using var collector = CreateCollector(
+            adapter,
+            publisher,
+            new TestTelemetrySessionStore(TimeSpan.Zero));
+
+        await collector.StartAsync(adapter.Source.AdapterId);
+        await WaitForConditionAsync(() => !collector.GetStatus().IsRunning, TimeSpan.FromSeconds(5));
+
+        var status = collector.GetStatus();
+        Assert.Null(status.LastError);
+        Assert.True(publisher.StatusPublishCount >= 2);
+    }
+
     private static TelemetryCollectorService CreateCollector(
         ITelemetryAdapter adapter,
         ILiveTelemetryPublisher publisher,
@@ -143,6 +288,37 @@ public sealed class TelemetryCollectorServiceTests
             }
 
             await Task.CompletedTask;
+        }
+    }
+
+    private sealed class BlockingTelemetryAdapter : ITelemetryAdapter
+    {
+        private readonly FakeTelemetryAdapter _sampleFactory = new(TimeSpan.FromMilliseconds(1));
+        private readonly Guid _sessionId = Guid.NewGuid();
+
+        public TelemetrySource Source { get; } = new(
+            AdapterId: "blocking",
+            Game: GameId.Fake,
+            DisplayName: "Blocking test adapter",
+            InputKind: "Blocking test stream",
+            IsSimulated: true,
+            Status: TelemetrySourceStatus.Available,
+            Notes: "Emits one sample and waits for cancellation.");
+
+        public async IAsyncEnumerable<TelemetrySample> RunAsync([EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            yield return _sampleFactory.CreateSample(TimeSpan.Zero, 1, _sessionId) with
+            {
+                Source = Source with { Status = TelemetrySourceStatus.Running }
+            };
+
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+            }
         }
     }
 
@@ -230,6 +406,54 @@ public sealed class TelemetryCollectorServiceTests
         }
     }
 
+    private sealed class PreloadedReplayTelemetrySessionStore(
+        TelemetrySessionDetails session,
+        IReadOnlyList<TelemetrySample>? streamedSamples = null,
+        Exception? streamFailure = null) : ITelemetrySessionStore
+    {
+        public Task UpsertSessionAsync(TelemetrySample sample, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task SaveSampleAsync(TelemetrySample sample, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public async IAsyncEnumerable<TelemetrySample> StreamSessionSamplesAsync(Guid sessionId, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            if (session.Session.Id != sessionId)
+            {
+                await Task.CompletedTask;
+                yield break;
+            }
+
+            foreach (var sample in streamedSamples ?? [])
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                yield return sample;
+            }
+
+            if (streamFailure is not null)
+            {
+                throw streamFailure;
+            }
+
+            await Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<TelemetrySessionSummary>> ListSessionsAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<TelemetrySessionSummary>>([session.Session]);
+        }
+
+        public Task<TelemetrySessionDetails?> GetSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<TelemetrySessionDetails?>(session.Session.Id == sessionId ? session : null);
+        }
+    }
+
     private sealed class NoOpTelemetryPublisher : ILiveTelemetryPublisher
     {
         public Task PublishAsync(TelemetrySample sample, CancellationToken cancellationToken = default)
@@ -273,6 +497,28 @@ public sealed class TelemetryCollectorServiceTests
         public Task PublishStatusAsync(TelemetryReceiverStatus status, CancellationToken cancellationToken = default)
         {
             StatusUpdates.Enqueue(status);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class StatusFailsOnSecondUpdateTelemetryPublisher : ILiveTelemetryPublisher
+    {
+        private int _statusPublishCount;
+
+        public int StatusPublishCount => _statusPublishCount;
+
+        public Task PublishAsync(TelemetrySample sample, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task PublishStatusAsync(TelemetryReceiverStatus status, CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Increment(ref _statusPublishCount) == 2)
+            {
+                throw new InvalidOperationException("Simulated status publish failure");
+            }
+
             return Task.CompletedTask;
         }
     }

@@ -56,8 +56,16 @@ jobs:
       - name: Restore .NET
         run: dotnet restore .\src\SectorForge.slnx
 
-      - name: Test .NET
-        run: dotnet test .\src\SectorForge.slnx --no-restore --verbosity normal
+      - name: Generate .NET coverage report
+        run: .\tests\coverage\Invoke-Coverage.ps1 -NoRestore
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: artifacts/coverage/report
+          if-no-files-found: error
 
       - name: Verify .NET formatting
         run: dotnet format .\src\SectorForge.slnx --verify-no-changes --no-restore
