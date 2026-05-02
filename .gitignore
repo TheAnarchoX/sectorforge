@@ -1,0 +1,42 @@
+# Build output
+bin/
+obj/
+TestResults/
+coverage/
+
+# .NET user files
+*.user
+*.rsuser
+*.suo
+*.userosscache
+
+# Frontend dependencies and output
+node_modules/
+dist/
+.vite/
+
+# Local IDE files
+.vs/
+.vscode/.ropeproject/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+secrets.json
+
+# Local telemetry data
+*.db
+*.db-shm
+*.db-wal
+data/
+captures/
+exports/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*

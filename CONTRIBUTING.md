@@ -1,0 +1,84 @@
+# Contributing
+
+Thanks for helping shape SectorForge. The project is Windows-first today, with a local .NET backend and React dashboard.
+
+## Local Setup
+
+```powershell
+cd C:\Users\jimdv\repositories\sectorforge
+.\tools\dev.ps1
+```
+
+Open `http://localhost:5173`. The fake telemetry adapter starts automatically so UI work does not require a running sim.
+
+## Checks
+
+Run these before opening a pull request:
+
+```powershell
+dotnet test .\src\SectorForge.slnx
+dotnet format .\src\SectorForge.slnx --verify-no-changes
+npx --yes pnpm@latest --dir .\src\SectorForge.Web lint
+npx --yes pnpm@latest --dir .\src\SectorForge.Web build
+```
+
+## Agent Task Backlog
+
+Agents and contributors can pick scoped work from `docs/agent-tasks.md`. Follow `AGENTS.md` for repo-specific operating rules and expected completion notes.
+
+Reusable agentic assets live under `.github/instructions/`, `.github/prompts/`, `.github/agents/`, and `.github/skills/`.
+
+### Tasking System
+
+Use `docs/agent-tasks.md` as the source of truth for scoped work.
+
+1. Choose one task ID and read its acceptance criteria before editing.
+2. If the task is `ready`, implement only that scope.
+3. If the task is `needs-research`, collect facts, update docs or the task entry, and avoid broad implementation until the path is clear.
+4. If the task is `blocked`, use `vscode_askQuestions` to collect the maintainer decision. If the maintainer is unavailable, leave the task blocked and document the missing decision.
+5. Finish by reporting the task ID, files changed, checks run, follow-up work, and assumptions.
+
+### Prompts
+
+Type `/` in chat and choose the matching workspace prompt:
+
+| Prompt | Use when |
+| --- | --- |
+| `Plan SectorForge Task` | You want an implementation plan for a task without editing files. |
+| `Take SectorForge Task` | You want an agent to implement one `docs/agent-tasks.md` task end to end. |
+| `Review SectorForge Task` | You want a code-review pass over completed task work or changed files. |
+| `Scaffold SectorForge Adapter` | You want a safe research or scaffold plan for a game telemetry adapter. |
+
+Example prompt inputs:
+
+```text
+/Plan SectorForge Task SF-010
+/Take SectorForge Task SF-020
+/Review SectorForge Task SF-020
+/Scaffold SectorForge Adapter F1 25 UDP
+```
+
+### Skills
+
+Skills load when the request matches their description. When writing a prompt or asking an agent manually, include the task domain plainly so the right skill is discoverable.
+
+| Skill | Use when |
+| --- | --- |
+| `sectorforge-task` | Selecting, planning, implementing, validating, or reporting work from `docs/agent-tasks.md`. |
+| `sectorforge-adapter` | Researching, scaffolding, parsing, normalizing, or testing game telemetry adapters such as F1 25, ACC, AMS2, LMU, UDP, shared memory, or plugin streams. |
+| `agent-customization` | Creating or updating `.github/instructions`, `.github/prompts`, `.github/agents`, `.github/skills`, `AGENTS.md`, or similar agent customization files. |
+
+Good manual requests name both the task and the workflow, for example: `Use the sectorforge-task skill to take SF-010` or `Use the sectorforge-adapter skill to plan the F1 25 UDP adapter`.
+
+## Adapter Contributions
+
+- Keep raw packet/shared-memory parsing isolated from `SectorForge.Core`.
+- Add parser and normalizer tests before enabling a real game adapter by default.
+- Do not copy vendor protocol documents into the repository.
+- Prefer nullable fields when a game does not expose a normalized value.
+
+## Repository Hygiene
+
+- Do not commit captures, exports, local databases, secrets, or game-specific personal paths.
+- Keep setup paths Windows-friendly and avoid requiring WSL, Docker, or admin rights for normal development.
+- Choose small, focused changes over broad refactors.

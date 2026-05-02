@@ -1,0 +1,123 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "dotnet: restore",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "restore",
+        "${workspaceFolder}/src/SectorForge.slnx"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "dotnet: build",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/SectorForge.slnx",
+        "--no-restore"
+      ],
+      "dependsOn": "dotnet: restore",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "dotnet: build api",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/SectorForge.Api/SectorForge.Api.csproj"
+      ],
+      "group": "build",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "dotnet: build collector",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/SectorForge.Collector/SectorForge.Collector.csproj"
+      ],
+      "group": "build",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "dotnet: test",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "test",
+        "${workspaceFolder}/src/SectorForge.slnx"
+      ],
+      "group": "test",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "web: install",
+      "type": "shell",
+      "command": "npx --yes pnpm@latest --dir \"${workspaceFolder}/src/SectorForge.Web\" install",
+      "problemMatcher": []
+    },
+    {
+      "label": "web: dev server",
+      "type": "shell",
+      "command": "npx --yes pnpm@latest --dir \"${workspaceFolder}/src/SectorForge.Web\" dev --host localhost --port 5173",
+      "options": {
+        "env": {
+          "VITE_API_BASE_URL": "http://localhost:5221"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": [
+          {
+            "regexp": ".",
+            "file": 1,
+            "location": 2,
+            "message": 3
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "VITE",
+          "endsPattern": "Local:.*http://localhost:5173"
+        }
+      }
+    },
+    {
+      "label": "web: build",
+      "type": "shell",
+      "command": "npx --yes pnpm@latest --dir \"${workspaceFolder}/src/SectorForge.Web\" build",
+      "group": "build",
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "web: lint",
+      "type": "shell",
+      "command": "npx --yes pnpm@latest --dir \"${workspaceFolder}/src/SectorForge.Web\" lint",
+      "problemMatcher": []
+    },
+    {
+      "label": "sectorforge: dev script",
+      "type": "shell",
+      "command": "powershell -ExecutionPolicy Bypass -File \"${workspaceFolder}/tools/dev.ps1\"",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "sectorforge: clean",
+      "type": "shell",
+      "command": "powershell -ExecutionPolicy Bypass -File \"${workspaceFolder}/tools/clean.ps1\"",
+      "problemMatcher": []
+    }
+  ]
+}

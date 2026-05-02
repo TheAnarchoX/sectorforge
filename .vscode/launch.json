@@ -1,0 +1,58 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "API: Debug fake telemetry",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "dotnet: build api",
+      "program": "${workspaceFolder}/src/SectorForge.Api/bin/Debug/net10.0/SectorForge.Api.dll",
+      "args": [
+        "--Collector:AutoStart=true",
+        "--Collector:AdapterId=fake"
+      ],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:5221"
+      },
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(http://\\S+)"
+      }
+    },
+    {
+      "name": "Collector: Debug worker",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "dotnet: build collector",
+      "program": "${workspaceFolder}/src/SectorForge.Collector/bin/Debug/net10.0/SectorForge.Collector.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "env": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    },
+    {
+      "name": "Web: Chrome against local API",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "preLaunchTask": "web: dev server",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/src/SectorForge.Web",
+      "timeout": 30000
+    }
+  ],
+  "compounds": [
+    {
+      "name": "SectorForge: API + Web",
+      "configurations": [
+        "API: Debug fake telemetry",
+        "Web: Chrome against local API"
+      ],
+      "stopAll": true
+    }
+  ]
+}

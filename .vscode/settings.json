@@ -1,0 +1,25 @@
+{
+  "dotnet.defaultSolution": "src/SectorForge.slnx",
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "files.eol": "\r\n",
+  "files.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/node_modules": true,
+    "**/dist": true
+  },
+  "search.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/TestResults": true
+  },
+  "typescript.tsdk": "src/SectorForge.Web/node_modules/typescript/lib",
+  "tailwindCSS.experimental.configFile": "src/SectorForge.Web/src/index.css",
+  "powershell.cwd": "${workspaceFolder}",
+  "terminal.integrated.defaultProfile.windows": "PowerShell"
+}

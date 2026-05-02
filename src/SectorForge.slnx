@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="../tests/SectorForge.Api.Tests/SectorForge.Api.Tests.csproj" />
+  <Project Path="../tests/SectorForge.Core.Tests/SectorForge.Core.Tests.csproj" />
+  <Project Path="../tests/SectorForge.Protocol.Tests/SectorForge.Protocol.Tests.csproj" />
+  <Project Path="SectorForge.Api/SectorForge.Api.csproj" />
+  <Project Path="SectorForge.Collector/SectorForge.Collector.csproj" />
+  <Project Path="SectorForge.Core/SectorForge.Core.csproj" />
+  <Project Path="SectorForge.Infrastructure/SectorForge.Infrastructure.csproj" />
+</Solution>
