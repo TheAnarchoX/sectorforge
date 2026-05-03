@@ -87,6 +87,30 @@ describe("LiveStatusPanels", () => {
     expect(strip).toHaveTextContent("LightRain");
   });
 
+  it("renders varied weather forecast conditions", () => {
+    const sample = createTelemetrySample({
+      weatherForecast: {
+        samples: [
+          { minutesAhead: 0, weather: "Storm", rainPercent: 90 },
+          { minutesAhead: 5, weather: "HeavyRain", rainPercent: 75 },
+          { minutesAhead: 10, weather: "Overcast", rainPercent: 20 },
+          { minutesAhead: 15, weather: "Clear", rainPercent: 0 },
+          { minutesAhead: null, weather: null, rainPercent: null },
+        ],
+      },
+    });
+
+    render(<LiveStatusPanels sample={sample} />);
+
+    const strip = screen.getByTestId("weather-forecast-strip");
+    expect(strip).toHaveTextContent("5 samples");
+    expect(strip).toHaveTextContent("Storm");
+    expect(strip).toHaveTextContent("HeavyRain");
+    expect(strip).toHaveTextContent("Overcast");
+    expect(strip).toHaveTextContent("Clear");
+    expect(strip).toHaveTextContent("+15m");
+  });
+
   it("renders the damage panel collapsed by default and expands on toggle", async () => {
     const user = userEvent.setup();
     const sample = createTelemetrySample({

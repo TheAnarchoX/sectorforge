@@ -1,6 +1,7 @@
 import type {
   CollectorStatus,
   CurrentLapTelemetrySeries,
+  LapChannelsResponse,
   ParticipantState,
   TelemetrySample,
   TelemetrySessionDetails,
@@ -268,6 +269,50 @@ export function createSessionDetails(
       ],
       samples: createTelemetrySamples(3),
     } satisfies TelemetrySessionDetails,
+    override,
+  );
+}
+
+export function createLapChannelsResponse(
+  override?: DeepPartial<LapChannelsResponse>,
+): LapChannelsResponse {
+  return mergeFixture(
+    {
+      sessionId: "11111111-1111-1111-1111-111111111111",
+      lapNumber: 4,
+      lapTime: "00:01:01.9000000",
+      bestLapTime: "00:01:01.9000000",
+      sector1Time: "00:00:20.1000000",
+      sector2Time: "00:00:20.7000000",
+      sector3Time: "00:00:21.1000000",
+      sampleCount: 3,
+      manifest: [
+        { key: "time", label: "Lap time", valueKind: "Number", unit: "s" },
+        { key: "speedKph", label: "Speed", valueKind: "Number", unit: "kph" },
+        { key: "rpm", label: "RPM", valueKind: "Number", unit: "rpm" },
+        {
+          key: "throttle",
+          label: "Throttle",
+          valueKind: "Number",
+          unit: "ratio",
+        },
+        { key: "brake", label: "Brake", valueKind: "Number", unit: "ratio" },
+        {
+          key: "steering",
+          label: "Steering",
+          valueKind: "Number",
+          unit: "ratio",
+        },
+      ],
+      channels: {
+        time: [1, 2, 3],
+        speedKph: [148, 152, 156],
+        rpm: [6200, 6320, 6450],
+        throttle: [0.55, 0.61, 0.72],
+        brake: [0.03, 0.05, 0.08],
+        steering: [0.12, -0.04, 0.12],
+      },
+    } satisfies LapChannelsResponse,
     override,
   );
 }

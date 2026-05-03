@@ -280,6 +280,49 @@ export type LapSummary = {
   updatedAt: string;
 };
 
+export type LapBasketEntry = {
+  sessionId: string;
+  lapNumber: number;
+  label: string;
+  color: string;
+};
+
+export type LapChannelValueKind = "Number" | "Boolean";
+
+export type LapChannelManifestEntry = {
+  key: string;
+  label: string;
+  valueKind: LapChannelValueKind;
+  unit?: string | null;
+};
+
+export type LapChannelData = {
+  time: Array<number | null>;
+  speedKph: Array<number | null>;
+  rpm: Array<number | null>;
+  throttle: Array<number | null>;
+  brake: Array<number | null>;
+  steering: Array<number | null>;
+  lapDistance?: Array<number | null> | null;
+  lateralG?: Array<number | null> | null;
+  longitudinalG?: Array<number | null> | null;
+  drsActive?: Array<boolean | null> | null;
+  ersStoreJoules?: Array<number | null> | null;
+};
+
+export type LapChannelsResponse = {
+  sessionId: string;
+  lapNumber: number;
+  lapTime?: string | null;
+  bestLapTime?: string | null;
+  sector1Time?: string | null;
+  sector2Time?: string | null;
+  sector3Time?: string | null;
+  sampleCount: number;
+  manifest: LapChannelManifestEntry[];
+  channels: LapChannelData;
+};
+
 export type TelemetrySessionDetails = {
   session: TelemetrySessionSummary;
   laps: LapSummary[];

@@ -1,5 +1,7 @@
 import type {
   CollectorStatus,
+  LapBasketEntry,
+  LapChannelsResponse,
   TelemetrySessionDetails,
   TelemetryRunMode,
   TelemetrySessionSummary,
@@ -9,8 +11,16 @@ import type {
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5221";
 
+const lapChannelCache = new Map<string, Promise<LapChannelsResponse>>();
+
 function toAbsoluteUrl(path: string) {
   return `${API_BASE_URL}${path}`;
+}
+
+function getLapChannelCacheKey(
+  entry: Pick<LapBasketEntry, "sessionId" | "lapNumber">,
+) {
+  return `${entry.sessionId}:${entry.lapNumber}`;
 }
 
 async function readErrorMessage(response: Response, fallback: string) {
@@ -59,6 +69,31 @@ export function getSessionDetails(sessionId: string, init?: RequestInit) {
     "Session detail request failed",
     init,
   );
+}
+
+export function getLapChannelsForBasketEntry(
+  entry: Pick<LapBasketEntry, "sessionId" | "lapNumber">,
+) {
+  const cacheKey = getLapChannelCacheKey(entry);
+  const cached = lapChannelCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const request = requestJson<LapChannelsResponse>(
+    `/api/sessions/${encodeURIComponent(entry.sessionId)}/laps/${entry.lapNumber}/channels`,
+    "Lap channels request failed",
+  ).catch((error: unknown) => {
+    lapChannelCache.delete(cacheKey);
+    throw error;
+  });
+
+  lapChannelCache.set(cacheKey, request);
+  return request;
+}
+
+export function clearLapChannelCache() {
+  lapChannelCache.clear();
 }
 
 export async function deleteSession(sessionId: string) {

@@ -77,6 +77,7 @@ function createDashboardState(
 describe("App", () => {
   beforeEach(() => {
     window.history.replaceState(null, "", "/");
+    window.localStorage.clear();
     dashboardHookMock.current = createDashboardState();
     memoryMonitorMock.current = null;
   });
@@ -99,6 +100,9 @@ describe("App", () => {
     expect(dashboardHookMock.current?.refreshDashboard).toHaveBeenCalledTimes(
       1,
     );
+
+    await user.click(screen.getByRole("button", { name: /live/i }));
+    expect(window.location.pathname).toBe("/");
 
     await user.click(screen.getByRole("button", { name: /driver/i }));
     expect(
@@ -140,6 +144,9 @@ describe("App", () => {
     expect(screen.getByText("Replay paused")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Replay warning");
     expect(screen.getByText("Speed trace")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Stop replay" }));
+    expect(dashboardHookMock.current?.stopCollector).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("button", { name: /driver/i }));
     expect(screen.getByText("SPEED")).toBeInTheDocument();

@@ -230,6 +230,108 @@
   line-height: 1.5;
 }
 
+.compare-workspace {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line-firm);
+  background: var(--canvas-1);
+  min-height: 320px;
+}
+
+.compare-basket-list {
+  display: grid;
+  gap: 1px;
+  background: var(--line-soft);
+}
+
+.compare-basket-row {
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--canvas-1);
+  min-width: 0;
+}
+
+.compare-lap-swatch {
+  width: 6px;
+  height: 36px;
+  background: var(--lap-color, var(--accent-cyan));
+}
+
+.compare-lap-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.compare-lap-label {
+  color: var(--ink-strong);
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compare-lap-meta {
+  color: var(--ink-muted);
+  font-size: 10px;
+}
+
+.compare-channel-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 96px;
+  color: var(--ink-soft);
+  font-family: var(--font-label);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.compare-channel-status.ready {
+  color: var(--accent-green);
+}
+
+.compare-channel-status.error {
+  color: var(--accent-red);
+}
+
+.compare-channel-status.loading svg {
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.compare-row-action {
+  width: 30px;
+  padding: 4px;
+}
+
+@media (max-width: 720px) {
+  .compare-basket-row {
+    grid-template-columns: 6px minmax(0, 1fr) auto;
+  }
+
+  .compare-channel-status {
+    grid-column: 2 / 3;
+    justify-content: flex-start;
+  }
+}
+
 /* Adapters workspace — flat console echo of the engineer console.         */
 .adapters-workspace {
   display: flex;

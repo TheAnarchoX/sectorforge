@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deleteSession,
+  clearLapChannelCache,
   getCollectorStatus,
   getGames,
+  getLapChannelsForBasketEntry,
   getSessionDetails,
   getSessions,
   getTelemetryHubUrl,
@@ -12,12 +14,16 @@ import {
 } from "./telemetryApi";
 import {
   createCollectorStatus,
+  createLapChannelsResponse,
   createSessionDetails,
   createSessionSummary,
   createTelemetrySource,
 } from "../test/telemetryFixtures";
 
-function createResponse(body: unknown, init?: { ok?: boolean; status?: number; text?: string }) {
+function createResponse(
+  body: unknown,
+  init?: { ok?: boolean; status?: number; text?: string },
+) {
   return {
     ok: init?.ok ?? true,
     status: init?.status ?? 200,
@@ -30,6 +36,8 @@ describe("telemetryApi", () => {
   const fetchMock = vi.fn<typeof fetch>();
 
   beforeEach(() => {
+    clearLapChannelCache();
+    fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
   });
 
@@ -133,6 +141,60 @@ describe("telemetryApi", () => {
       "http://localhost:5221/api/sessions/session-1",
       { method: "DELETE" },
     );
+  });
+
+  it("loads lap channels once per basket entry and reuses the in-memory cache", async () => {
+    const channels = createLapChannelsResponse();
+    const entry = {
+      sessionId: "11111111-1111-1111-1111-111111111111",
+      lapNumber: 4,
+      label: "Practice lap 4",
+      color: "#63b8d6",
+    };
+
+    fetchMock.mockResolvedValueOnce(createResponse(channels));
+
+    await expect(getLapChannelsForBasketEntry(entry)).resolves.toEqual(
+      channels,
+    );
+    await expect(getLapChannelsForBasketEntry(entry)).resolves.toEqual(
+      channels,
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:5221/api/sessions/11111111-1111-1111-1111-111111111111/laps/4/channels",
+      undefined,
+    );
+  });
+
+  it("evicts failed lap channel requests so retries can refetch", async () => {
+    const entry = {
+      sessionId: "11111111-1111-1111-1111-111111111111",
+      lapNumber: 4,
+      label: "Practice lap 4",
+      color: "#63b8d6",
+    };
+    const channels = createLapChannelsResponse();
+
+    fetchMock
+      .mockResolvedValueOnce(
+        createResponse(null, {
+          ok: false,
+          status: 410,
+          text: "lap samples pruned",
+        }),
+      )
+      .mockResolvedValueOnce(createResponse(channels));
+
+    await expect(getLapChannelsForBasketEntry(entry)).rejects.toThrow(
+      "lap samples pruned",
+    );
+    await expect(getLapChannelsForBasketEntry(entry)).resolves.toEqual(
+      channels,
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("surfaces error text when API requests fail", async () => {

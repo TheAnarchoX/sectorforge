@@ -18,6 +18,7 @@ import {
   type Workspace,
 } from "./components/dashboard/WorkspaceRail";
 import { useDevelopmentMemoryMonitor } from "./hooks/useDevelopmentMemoryMonitor";
+import { useLapBasket } from "./hooks/useLapBasket";
 import { useTelemetryDashboard } from "./hooks/useTelemetryDashboard";
 import type { DashboardReplayState, TelemetrySource } from "./types/telemetry";
 import "./App.css";
@@ -78,6 +79,7 @@ function App() {
   const [replayState, setReplayState] = useState<DashboardReplayState | null>(
     null,
   );
+  const lapBasket = useLapBasket();
   const memoryNotice = useDevelopmentMemoryMonitor();
   const {
     connectionState,
@@ -279,7 +281,12 @@ function App() {
         )}
 
         {workspace === "compare" && (
-          <CompareWorkspace onOpenSessions={handleOpenSessions} />
+          <CompareWorkspace
+            basketEntries={lapBasket.entries}
+            onRemoveLap={lapBasket.removeLap}
+            onClearBasket={lapBasket.clear}
+            onOpenSessions={handleOpenSessions}
+          />
         )}
 
         {workspace === "adapters" && (

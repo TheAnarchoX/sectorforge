@@ -547,9 +547,10 @@ Execution Phase 1: compare foundations.
 
 ### SF-051: Add Lap Compare Selection State And API Client
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend state
 - Goal: Track a small "lap basket" (reference + up to N comparison laps) in the dashboard so users can pin laps from the Sessions workspace, have them ready in the Compare workspace, and fetch channel data for those laps through SF-050.
+- Notes: Completed on 2026-05-03. Added a persistent `useLapBasket` hook with reference/comparison entries, localStorage hydration, dedupe, limits, colors, and add/remove/clear actions. Added typed SF-050 lap-channel frontend DTOs plus an in-memory cached API client keyed by session+lap, and wired the basket into the Compare workspace so pinned laps render with per-lap channel loading/error/ready states. Frontend coverage was kept above the documented gate, and backend coverage was rechecked unchanged.
 - Suggested files: `src/SectorForge.Web/src/hooks/*`, `src/SectorForge.Web/src/api/*`, `src/SectorForge.Web/src/types/*`, `src/SectorForge.Web/src/App.tsx`
 - Acceptance criteria:
   - A new hook (e.g. `useLapBasket`) exposes pinned laps with `{ sessionId, lapNumber, label, color }` entries and add/remove/clear actions.
