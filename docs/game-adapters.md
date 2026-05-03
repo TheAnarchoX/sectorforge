@@ -34,6 +34,9 @@ The `f1-25-udp` adapter is implemented behind configuration and remains disabled
 
 Current limitations:
 
-- Publishes the player-car slice from motion, lap data, and car telemetry packets.
+- Publishes on car telemetry packets after the current session has motion, lap data, and car telemetry available. Optional packets can arrive at lower rates without blocking the live stream.
+- Caches optional session/weather, participant, car status, car damage, and session-history packets per session UID, then maps available values into nullable `TelemetrySample` fields.
+- Leaves optional channel groups `null` until their source packet arrives. Team and car display names are still placeholders because the normalized model does not yet carry F1-specific team IDs.
 - Skips unsupported packet IDs and reports bind or parse failures through collector status `LastError`.
+- Dashboard surfacing for these newly populated optional channels is tracked under SF-049.
 - Requires the game UDP stream to be configured outside SectorForge; the normal local development path still uses the fake adapter.

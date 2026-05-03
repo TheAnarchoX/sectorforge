@@ -8,18 +8,26 @@ EA Sports publishes an official F1 25 UDP telemetry specification as a public he
 
 Adapter ID: `f1-25-udp` (see `docs/game-adapters.md`).
 
-Planned shape:
+Implemented shape:
 
-- UDP listener with configurable bind address and port (built on the SF-041 listener abstraction). The long-standing series default port can be used as the configuration default but must be re-verified against the current spec rather than assumed.
+- UDP listener with configurable bind address and port (built on the SF-041 listener abstraction). The adapter remains opt-in through `Adapters:f1-25-udp:Enabled`.
 - Packet header validation: format byte, packet format / version, packet ID, session UID, frame identifier, player car index. The header reader rejects wrong format bytes and truncated buffers without throwing across the adapter boundary.
 - Per-packet DTOs and parsers live under `src/SectorForge.Collector/Adapters/F125/`, isolated from `SectorForge.Core`. Parsing uses explicit little-endian reads (`BinaryPrimitives`), not `unsafe` struct overlays, to keep the parser forward-compatible.
 - Player car index is re-read from each header and never cached across packets (driver swap / spectator support).
-- Normalizer maps the supported subset of fields into `TelemetrySample`. Channels not yet mapped stay `null`; nothing is invented.
-- Adapter remains opt-in: disabled by default, selected by configuration once SF-045 lands.
+- Readers currently cover motion, session/weather, lap data, participants, car telemetry, car status, car damage, and session history. Unsupported packet IDs are skipped.
+- The UDP adapter caches packets by session UID so optional data can arrive at different rates. A session UID change clears cached optional data before publishing the next sample.
+- Normalizer maps available values into `TelemetrySample`. Channels whose source packets have not arrived stay `null`; values that do not have a normalized home stay out of the model.
+- Adapter remains opt-in and disabled by default.
 
-Data-model expansion plan:
+Data-model expansion status:
 
-The current `TelemetrySample` shape does not carry several channels F1 25 exposes (g-forces, world position, sector splits, DRS / pit-limiter / ABS / TC flags, ERS, damage, weather forecast, multi-participant sectors). Rather than dropping those channels, `TelemetrySample` is being expanded additively across three slices (SF-046, SF-047, SF-048). All new properties are nullable and default to `null` so other adapters, stored blobs, and existing tests stay valid.
+The `TelemetrySample` model was expanded additively across SF-046, SF-047, and SF-048. The F1 25 normalizer now fills the mapped subset when matching packets are present: g-forces, world position, lap distance and split timing, DRS / pit-limiter / ABS / TC flags, ERS state, tyre compound and age, damage, weather forecast, session timing, safety-car state, and participant timing. Remaining dashboard surfacing is tracked by SF-049.
+
+Current limitations:
+
+- Publishing is still anchored to car telemetry packets; optional packet updates become visible on the next car telemetry sample.
+- Team and car display names remain generic because `TelemetrySample` does not carry game-specific team or car IDs.
+- The reader coverage is validated with synthetic fixtures only. No recorded captures are committed.
 
 Tests use small synthetic byte arrays generated in C# (`BinaryPrimitives.WriteXxxLittleEndian` into a `byte[]`). Recorded captures are not committed unless the maintainer explicitly approves a sanitized fixture.
 

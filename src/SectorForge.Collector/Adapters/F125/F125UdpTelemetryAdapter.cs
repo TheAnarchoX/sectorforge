@@ -53,10 +53,7 @@ public sealed class F125UdpTelemetryAdapter : ITelemetryAdapter
         }
 
         await using var listener = _listenerFactory.Bind(CreateListenerOptions(_options));
-        F125MotionPacket? latestMotion = null;
-        F125LapDataPacket? latestLapData = null;
-        F125CarTelemetryPacket? latestCarTelemetry = null;
-        ulong? currentSessionUid = null;
+        F125PacketAccumulator? accumulator = null;
 
         await foreach (var datagram in listener.ReceiveAsync(cancellationToken))
         {
@@ -74,35 +71,82 @@ public sealed class F125UdpTelemetryAdapter : ITelemetryAdapter
             }
 
             var packet = readResult.Packet!;
-            if (currentSessionUid is not null && packet.Header.SessionUid != currentSessionUid.Value)
+            if (accumulator is null || accumulator.SessionUid != packet.Header.SessionUid)
             {
-                latestMotion = null;
-                latestLapData = null;
-                latestCarTelemetry = null;
+                accumulator = new F125PacketAccumulator(packet.Header.SessionUid);
             }
 
-            currentSessionUid = packet.Header.SessionUid;
+            var packetSet = accumulator.Apply(packet);
+            if (packet is F125CarTelemetryPacket && packetSet is not null)
+            {
+                yield return _normalizer.Normalize(packetSet);
+            }
+        }
+    }
 
+    private sealed class F125PacketAccumulator(ulong sessionUid)
+    {
+        private readonly Dictionary<int, F125SessionHistoryPacket> _sessionHistoryByCarIndex = [];
+
+        public ulong SessionUid { get; } = sessionUid;
+
+        private F125MotionPacket? LatestMotion { get; set; }
+
+        private F125SessionPacket? LatestSession { get; set; }
+
+        private F125LapDataPacket? LatestLapData { get; set; }
+
+        private F125ParticipantsPacket? LatestParticipants { get; set; }
+
+        private F125CarTelemetryPacket? LatestCarTelemetry { get; set; }
+
+        private F125CarStatusPacket? LatestCarStatus { get; set; }
+
+        private F125CarDamagePacket? LatestCarDamage { get; set; }
+
+        public F125TelemetryPacketSet? Apply(F125Packet packet)
+        {
             switch (packet)
             {
                 case F125MotionPacket motion:
-                    latestMotion = motion;
+                    LatestMotion = motion;
+                    break;
+                case F125SessionPacket session:
+                    LatestSession = session;
                     break;
                 case F125LapDataPacket lapData:
-                    latestLapData = lapData;
+                    LatestLapData = lapData;
+                    break;
+                case F125ParticipantsPacket participants:
+                    LatestParticipants = participants;
                     break;
                 case F125CarTelemetryPacket carTelemetry:
-                    latestCarTelemetry = carTelemetry;
+                    LatestCarTelemetry = carTelemetry;
+                    break;
+                case F125CarStatusPacket carStatus:
+                    LatestCarStatus = carStatus;
+                    break;
+                case F125CarDamagePacket carDamage:
+                    LatestCarDamage = carDamage;
+                    break;
+                case F125SessionHistoryPacket sessionHistory:
+                    _sessionHistoryByCarIndex[sessionHistory.History.CarIndex] = sessionHistory;
                     break;
             }
 
-            if (packet is F125CarTelemetryPacket
-                && latestMotion is not null
-                && latestLapData is not null
-                && latestCarTelemetry is not null)
-            {
-                yield return _normalizer.Normalize(latestMotion, latestLapData, latestCarTelemetry);
-            }
+            return LatestMotion is not null
+                && LatestLapData is not null
+                && LatestCarTelemetry is not null
+                ? new F125TelemetryPacketSet(
+                    LatestMotion,
+                    LatestLapData,
+                    LatestCarTelemetry,
+                    LatestSession,
+                    LatestParticipants,
+                    LatestCarStatus,
+                    LatestCarDamage,
+                    new Dictionary<int, F125SessionHistoryPacket>(_sessionHistoryByCarIndex))
+                : null;
         }
     }
 

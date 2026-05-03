@@ -11,6 +11,14 @@ public sealed class F125NormalizerTests
     private const int MotionDataSize = 60;
     private const int LapDataSize = 50;
     private const int CarTelemetryDataSize = 60;
+    private const int CarStatusDataSize = 55;
+    private const int CarDamageDataSize = 42;
+    private const int ParticipantDataSize = 60;
+    private const int SessionForecastCountOffset = 126;
+    private const int SessionForecastStartOffset = 127;
+    private const int WeatherForecastSampleSize = 8;
+    private const int SessionHistoryHeaderSize = 7;
+    private const int SessionHistoryLapDataSize = 14;
 
     [Fact]
     public void NormalizesSyntheticPlayerCarTrioIntoTelemetrySample()
@@ -104,6 +112,157 @@ public sealed class F125NormalizerTests
         Assert.Null(sample.WeatherForecast);
     }
 
+    [Fact]
+    public void NormalizesOptionalPacketsIntoExpandedTelemetryChannels()
+    {
+        var playerCarIndex = (byte)1;
+        var motion = ReadPacket<F125MotionPacket>(
+            F125PacketIds.Motion,
+            playerCarIndex,
+            BuildMotionPayload(playerCarIndex));
+        var lapData = ReadPacket<F125LapDataPacket>(
+            F125PacketIds.LapData,
+            playerCarIndex,
+            BuildMultiCarLapDataPayload(playerCarIndex));
+        var carTelemetry = ReadPacket<F125CarTelemetryPacket>(
+            F125PacketIds.CarTelemetry,
+            playerCarIndex,
+            BuildCarTelemetryPayload(playerCarIndex));
+        var session = ReadPacket<F125SessionPacket>(
+            F125PacketIds.Session,
+            playerCarIndex,
+            BuildSessionPayload());
+        var participants = ReadPacket<F125ParticipantsPacket>(
+            F125PacketIds.Participants,
+            playerCarIndex,
+            BuildParticipantsPayload());
+        var carStatus = ReadPacket<F125CarStatusPacket>(
+            F125PacketIds.CarStatus,
+            playerCarIndex,
+            BuildCarStatusPayload(playerCarIndex));
+        var carDamage = ReadPacket<F125CarDamagePacket>(
+            F125PacketIds.CarDamage,
+            playerCarIndex,
+            BuildCarDamagePayload(playerCarIndex));
+        var playerHistory = ReadPacket<F125SessionHistoryPacket>(
+            F125PacketIds.SessionHistory,
+            playerCarIndex,
+            BuildSessionHistoryPayload(playerCarIndex));
+        var otherHistory = ReadPacket<F125SessionHistoryPacket>(
+            F125PacketIds.SessionHistory,
+            playerCarIndex,
+            BuildSessionHistoryPayload(carIndex: 0));
+
+        var sample = new F125Normalizer().Normalize(new F125TelemetryPacketSet(
+            motion,
+            lapData,
+            carTelemetry,
+            session,
+            participants,
+            carStatus,
+            carDamage,
+            new Dictionary<int, F125SessionHistoryPacket>
+            {
+                [0] = otherHistory,
+                [playerCarIndex] = playerHistory
+            }));
+
+        Assert.True(sample.DriverInput.DrsAllowed);
+        Assert.True(sample.DriverInput.PitLimiterActive);
+        Assert.True(sample.DriverInput.AbsActive);
+        Assert.True(sample.DriverInput.TcActive);
+        Assert.Equal(TyreCompound.Medium, sample.Tyres.Compound);
+        Assert.Equal(8, sample.Tyres.AgeLaps);
+        Assert.Equal(13.5, sample.Tyres.FrontLeftWear?.WearPercent.GetValueOrDefault() ?? 0, precision: 3);
+        Assert.Equal(14.5, sample.Tyres.FrontRightWear?.WearPercent.GetValueOrDefault() ?? 0, precision: 3);
+        Assert.Equal(11.5, sample.Tyres.RearLeftWear?.WearPercent.GetValueOrDefault() ?? 0, precision: 3);
+        Assert.Equal(12.5, sample.Tyres.RearRightWear?.WearPercent.GetValueOrDefault() ?? 0, precision: 3);
+
+        Assert.NotNull(sample.Damage);
+        Assert.Equal(2, sample.Damage.FrontLeftWingPercent.GetValueOrDefault(), precision: 3);
+        Assert.Equal(3, sample.Damage.FrontRightWingPercent.GetValueOrDefault(), precision: 3);
+        Assert.Equal(4, sample.Damage.RearWingPercent.GetValueOrDefault(), precision: 3);
+        Assert.Equal(5, sample.Damage.FloorPercent.GetValueOrDefault(), precision: 3);
+        Assert.Equal(6, sample.Damage.DiffuserPercent.GetValueOrDefault(), precision: 3);
+        Assert.Equal(7, sample.Damage.SidepodPercent.GetValueOrDefault(), precision: 3);
+        Assert.Equal(8, sample.Damage.GearboxPercent.GetValueOrDefault(), precision: 3);
+        Assert.Equal(9, sample.Damage.EnginePercent.GetValueOrDefault(), precision: 3);
+        Assert.Equal(21, sample.Damage.FrontLeftTyreDamage?.DamagePercent.GetValueOrDefault() ?? 0, precision: 3);
+        Assert.Equal(23, sample.Damage.FrontLeftBrakeDamage?.DamagePercent.GetValueOrDefault() ?? 0, precision: 3);
+
+        Assert.NotNull(sample.PowerUnit);
+        Assert.Equal(3_200_000, sample.PowerUnit.ErsStoreJoules.GetValueOrDefault(), precision: 3);
+        Assert.Equal(3_300, sample.PowerUnit.ErsDeployedThisLapJoules.GetValueOrDefault(), precision: 3);
+        Assert.Equal(1_100, sample.PowerUnit.ErsHarvestedThisLapMguk.GetValueOrDefault(), precision: 3);
+        Assert.Equal(2_200, sample.PowerUnit.ErsHarvestedThisLapMguh.GetValueOrDefault(), precision: 3);
+        Assert.Equal(ErsDeployMode.Overtake, sample.PowerUnit.ErsDeployMode);
+
+        Assert.Equal(TimeSpan.FromMilliseconds(83_111), sample.Lap.BestLapTime);
+        Assert.Equal(TimeSpan.FromMilliseconds(21_111), sample.Lap.LastSector1Time);
+        Assert.Equal(TimeSpan.FromMilliseconds(31_000), sample.Lap.LastSector2Time);
+        Assert.Equal(TimeSpan.FromMilliseconds(29_000), sample.Lap.LastSector3Time);
+        Assert.Equal(34.5, sample.Fuel.RemainingLiters.GetValueOrDefault(), precision: 3);
+        Assert.Equal(110.0, sample.Fuel.CapacityLiters.GetValueOrDefault(), precision: 3);
+        Assert.Equal(2.706, sample.Fuel.LitersPerLapEstimate.GetValueOrDefault(), precision: 3);
+        Assert.Equal(12, sample.Fuel.LapsRemainingEstimate);
+
+        Assert.Equal("-4", sample.Track.TrackId);
+        Assert.Equal(5_891, sample.Track.TrackLengthMeters.GetValueOrDefault(), precision: 3);
+        Assert.Equal(-2, sample.Track.TrackTemperatureC.GetValueOrDefault(), precision: 3);
+        Assert.Equal(18, sample.Track.AirTemperatureC.GetValueOrDefault(), precision: 3);
+        Assert.Equal(42, sample.Track.RainPercent.GetValueOrDefault(), precision: 3);
+        Assert.Equal(WeatherKind.LightRain, sample.Track.WeatherEnum);
+        Assert.Equal(SafetyCarStatus.Virtual, sample.Track.SafetyCarStatus);
+        Assert.False(sample.Track.FormationLap);
+        Assert.Equal(TimeSpan.FromSeconds(600), sample.Timing.SessionTimeLeft);
+        Assert.Equal(TimeSpan.FromSeconds(1_200), sample.Timing.SessionDuration);
+        Assert.NotNull(sample.WeatherForecast);
+        Assert.Collection(
+            sample.WeatherForecast.Samples,
+            first =>
+            {
+                Assert.Equal(0, first.MinutesAhead);
+                Assert.Equal(WeatherKind.LightRain, first.Weather);
+                Assert.Equal(42, first.RainPercent.GetValueOrDefault(), precision: 3);
+            },
+            second =>
+            {
+                Assert.Equal(15, second.MinutesAhead);
+                Assert.Equal(WeatherKind.HeavyRain, second.Weather);
+                Assert.Equal(72, second.RainPercent.GetValueOrDefault(), precision: 3);
+            });
+
+        Assert.NotNull(sample.Participants);
+        var participantsList = sample.Participants!;
+        Assert.Collection(
+            participantsList,
+            first =>
+            {
+                Assert.Equal("Avery Cole", first.DriverName);
+                Assert.Equal("Team 10", first.TeamName);
+                Assert.Equal(44, first.DriverNumber);
+                Assert.False(first.IsAi);
+                Assert.False(first.IsPlayer);
+                Assert.Equal(1, first.Position);
+                Assert.Equal(TyreCompound.Soft, first.TyreCompound);
+            },
+            second =>
+            {
+                Assert.Equal("Mika Stone", second.DriverName);
+                Assert.Equal("Team 12", second.TeamName);
+                Assert.Equal(81, second.DriverNumber);
+                Assert.True(second.IsAi);
+                Assert.True(second.IsPlayer);
+                Assert.Equal(2, second.Position);
+                Assert.Equal(4, second.GridPosition);
+                Assert.Equal(ResultStatus.Finished, second.ResultStatus);
+                Assert.Equal(TyreCompound.Medium, second.TyreCompound);
+                Assert.Equal(TimeSpan.FromMilliseconds(21_111), second.BestSector1);
+                Assert.Equal(TimeSpan.FromMilliseconds(31_000), second.BestSector2);
+                Assert.Equal(TimeSpan.FromMilliseconds(29_000), second.BestSector3);
+            });
+    }
+
     private static TPacket ReadPacket<TPacket>(
         byte packetId,
         byte playerCarIndex,
@@ -161,14 +320,31 @@ public sealed class F125NormalizerTests
     private static byte[] BuildLapDataPayload(byte playerCarIndex)
     {
         var payload = new byte[CarCount * LapDataSize];
-        var playerOffset = playerCarIndex * LapDataSize;
+        WriteLapData(payload, playerCarIndex, position: 2, gridPosition: 4, resultStatus: 3);
+        return payload;
+    }
+
+    private static byte[] BuildMultiCarLapDataPayload(byte playerCarIndex)
+    {
+        var payload = new byte[CarCount * LapDataSize];
+        WriteLapData(payload, carIndex: 0, position: 1, gridPosition: 3, resultStatus: 2);
+        WriteLapData(payload, playerCarIndex, position: 2, gridPosition: 4, resultStatus: 3);
+        return payload;
+    }
+
+    private static void WriteLapData(byte[] payload, byte carIndex, byte position, byte gridPosition, byte resultStatus)
+    {
+        var playerOffset = carIndex * LapDataSize;
         BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(playerOffset, sizeof(uint)), 83_210);
         BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(playerOffset + 4, sizeof(uint)), 12_345);
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 8, sizeof(ushort)), 23_456);
         payload[playerOffset + 10] = 1;
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 11, sizeof(ushort)), 12_345);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 14, sizeof(ushort)), 450);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 16, sizeof(ushort)), 1_750);
         BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 18, sizeof(float)), 1234.5f);
         BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 22, sizeof(float)), 5432.25f);
+        payload[playerOffset + 30] = position;
         payload[playerOffset + 31] = 7;
         payload[playerOffset + 32] = 1;
         payload[playerOffset + 33] = 2;
@@ -177,7 +353,8 @@ public sealed class F125NormalizerTests
         payload[playerOffset + 36] = 5;
         payload[playerOffset + 37] = 4;
         payload[playerOffset + 38] = 3;
-        return payload;
+        payload[playerOffset + 41] = gridPosition;
+        payload[playerOffset + 43] = resultStatus;
     }
 
     private static byte[] BuildCarTelemetryPayload(byte playerCarIndex)
@@ -196,5 +373,130 @@ public sealed class F125NormalizerTests
         payload[playerOffset + 18] = 1;
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 38, sizeof(ushort)), 102);
         return payload;
+    }
+
+    private static byte[] BuildSessionPayload()
+    {
+        var payload = new byte[SessionForecastStartOffset + 2 * WeatherForecastSampleSize];
+        payload[0] = 3;
+        payload[1] = unchecked((byte)-2);
+        payload[2] = 18;
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(4, sizeof(ushort)), 5_891);
+        payload[7] = unchecked((byte)-4);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(9, sizeof(ushort)), 600);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(11, sizeof(ushort)), 1_200);
+        payload[124] = 2;
+        payload[SessionForecastCountOffset] = 2;
+
+        var first = payload.AsSpan(SessionForecastStartOffset, WeatherForecastSampleSize);
+        first[1] = 0;
+        first[2] = 3;
+        first[3] = 22;
+        first[5] = 18;
+        first[7] = 42;
+
+        var second = payload.AsSpan(SessionForecastStartOffset + WeatherForecastSampleSize, WeatherForecastSampleSize);
+        second[1] = 15;
+        second[2] = 4;
+        second[3] = 20;
+        second[5] = 17;
+        second[7] = 72;
+        return payload;
+    }
+
+    private static byte[] BuildParticipantsPayload()
+    {
+        var payload = new byte[1 + 2 * ParticipantDataSize];
+        payload[0] = 2;
+        WriteParticipant(payload.AsSpan(1, ParticipantDataSize), "Avery Cole", teamId: 10, driverNumber: 44, isAi: false);
+        WriteParticipant(payload.AsSpan(1 + ParticipantDataSize, ParticipantDataSize), "Mika Stone", teamId: 12, driverNumber: 81, isAi: true);
+        return payload;
+    }
+
+    private static void WriteParticipant(Span<byte> payload, string driverName, byte teamId, byte driverNumber, bool isAi)
+    {
+        payload[0] = isAi ? (byte)1 : (byte)0;
+        payload[3] = teamId;
+        payload[5] = driverNumber;
+        var nameBytes = System.Text.Encoding.ASCII.GetBytes(driverName);
+        nameBytes.CopyTo(payload.Slice(7, nameBytes.Length));
+    }
+
+    private static byte[] BuildCarStatusPayload(byte playerCarIndex)
+    {
+        var payload = new byte[CarCount * CarStatusDataSize];
+        WriteCarStatus(payload, carIndex: 0, visualCompound: 16);
+        WriteCarStatus(payload, playerCarIndex, visualCompound: 17);
+        return payload;
+    }
+
+    private static void WriteCarStatus(byte[] payload, byte carIndex, byte visualCompound)
+    {
+        var playerOffset = carIndex * CarStatusDataSize;
+        payload[playerOffset] = 2;
+        payload[playerOffset + 1] = 1;
+        payload[playerOffset + 4] = 1;
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 5, sizeof(float)), 34.5f);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 9, sizeof(float)), 110.0f);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 13, sizeof(float)), 12.75f);
+        payload[playerOffset + 22] = 1;
+        payload[playerOffset + 25] = visualCompound;
+        payload[playerOffset + 26] = visualCompound;
+        payload[playerOffset + 27] = 8;
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 37, sizeof(float)), 3_200_000f);
+        payload[playerOffset + 41] = 3;
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 42, sizeof(float)), 1_100f);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 46, sizeof(float)), 2_200f);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 50, sizeof(float)), 3_300f);
+    }
+
+    private static byte[] BuildCarDamagePayload(byte playerCarIndex)
+    {
+        var payload = new byte[CarCount * CarDamageDataSize];
+        var playerOffset = playerCarIndex * CarDamageDataSize;
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset, sizeof(float)), 11.5f);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 4, sizeof(float)), 12.5f);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 8, sizeof(float)), 13.5f);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 12, sizeof(float)), 14.5f);
+        payload[playerOffset + 16] = 19;
+        payload[playerOffset + 17] = 20;
+        payload[playerOffset + 18] = 21;
+        payload[playerOffset + 19] = 22;
+        payload[playerOffset + 20] = 17;
+        payload[playerOffset + 21] = 18;
+        payload[playerOffset + 22] = 23;
+        payload[playerOffset + 23] = 24;
+        payload[playerOffset + 24] = 2;
+        payload[playerOffset + 25] = 3;
+        payload[playerOffset + 26] = 4;
+        payload[playerOffset + 27] = 5;
+        payload[playerOffset + 28] = 6;
+        payload[playerOffset + 29] = 7;
+        payload[playerOffset + 32] = 8;
+        payload[playerOffset + 33] = 9;
+        return payload;
+    }
+
+    private static byte[] BuildSessionHistoryPayload(byte carIndex)
+    {
+        var payload = new byte[SessionHistoryHeaderSize + 2 * SessionHistoryLapDataSize];
+        payload[0] = carIndex;
+        payload[1] = 2;
+        payload[3] = 2;
+        payload[4] = 2;
+        payload[5] = 2;
+        payload[6] = 2;
+        WriteLapHistory(payload.AsSpan(SessionHistoryHeaderSize, SessionHistoryLapDataSize), lapTimeMs: 84_222, sector1Ms: 21_000, sector2Ms: 32_000, sector3Ms: 31_222);
+        WriteLapHistory(payload.AsSpan(SessionHistoryHeaderSize + SessionHistoryLapDataSize, SessionHistoryLapDataSize), lapTimeMs: 83_111, sector1Ms: 21_111, sector2Ms: 31_000, sector3Ms: 29_000);
+        return payload;
+    }
+
+    private static void WriteLapHistory(Span<byte> payload, uint lapTimeMs, ushort sector1Ms, ushort sector2Ms, ushort sector3Ms)
+    {
+        BinaryPrimitives.WriteUInt32LittleEndian(payload[..sizeof(uint)], lapTimeMs);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.Slice(4, sizeof(ushort)), sector1Ms);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.Slice(7, sizeof(ushort)), sector2Ms);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.Slice(10, sizeof(ushort)), sector3Ms);
+        payload[13] = 1;
     }
 }

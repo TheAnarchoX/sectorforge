@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Text;
 
 namespace SectorForge.Collector.Adapters.F125.Packets;
 
@@ -14,8 +15,13 @@ public static class F125PacketPayloadReaders
     public static IReadOnlyList<IF125PacketPayloadReader> Default { get; } =
     [
         new F125MotionPacketReader(),
+        new F125SessionPacketReader(),
         new F125LapDataPacketReader(),
-        new F125CarTelemetryPacketReader()
+        new F125ParticipantsPacketReader(),
+        new F125CarTelemetryPacketReader(),
+        new F125CarStatusPacketReader(),
+        new F125CarDamagePacketReader(),
+        new F125SessionHistoryPacketReader()
     ];
 }
 
@@ -54,6 +60,67 @@ public sealed class F125MotionPacketReader : IF125PacketPayloadReader
     }
 }
 
+public sealed class F125SessionPacketReader : IF125PacketPayloadReader
+{
+    public byte PacketId => F125PacketIds.Session;
+
+    public F125PacketPayloadReadResult Read(F125PacketHeader header, ReadOnlySpan<byte> payload)
+    {
+        if (payload.Length < F125PacketLayout.SessionWeatherForecastStartOffset)
+        {
+            return F125PacketPayloadReadResult.Failed(F125PacketLayout.Truncated(
+                PacketId,
+                payload.Length,
+                F125PacketLayout.SessionWeatherForecastStartOffset));
+        }
+
+        var forecastCount = payload[F125PacketLayout.SessionWeatherForecastCountOffset];
+        if (forecastCount > F125PacketLayout.MaxWeatherForecastSamples)
+        {
+            return F125PacketPayloadReadResult.Failed(F125PacketLayout.InvalidPayload(
+                PacketId,
+                $"F1 25 session packet contains {forecastCount} weather forecast samples, above the supported maximum of {F125PacketLayout.MaxWeatherForecastSamples}."));
+        }
+
+        var requiredBytes = F125PacketLayout.SessionWeatherForecastStartOffset
+            + forecastCount * F125PacketLayout.WeatherForecastSampleSize;
+        if (payload.Length < requiredBytes)
+        {
+            return F125PacketPayloadReadResult.Failed(F125PacketLayout.Truncated(
+                PacketId,
+                payload.Length,
+                requiredBytes));
+        }
+
+        var forecastSamples = new List<F125WeatherForecastSample>(forecastCount);
+        for (var index = 0; index < forecastCount; index++)
+        {
+            var sample = payload.Slice(
+                F125PacketLayout.SessionWeatherForecastStartOffset + index * F125PacketLayout.WeatherForecastSampleSize,
+                F125PacketLayout.WeatherForecastSampleSize);
+            forecastSamples.Add(new F125WeatherForecastSample(
+                MinutesAhead: sample[1],
+                WeatherCode: sample[2],
+                TrackTemperatureC: F125PacketLayout.ReadSignedByte(sample[3]),
+                AirTemperatureC: F125PacketLayout.ReadSignedByte(sample[5]),
+                RainPercent: sample[7]));
+        }
+
+        var session = new F125SessionData(
+            WeatherCode: payload[0],
+            TrackTemperatureC: F125PacketLayout.ReadSignedByte(payload[1]),
+            AirTemperatureC: F125PacketLayout.ReadSignedByte(payload[2]),
+            TrackLengthMeters: BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(4, sizeof(ushort))),
+            TrackId: F125PacketLayout.ReadSignedByte(payload[7]),
+            SessionTimeLeft: TimeSpan.FromSeconds(BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(9, sizeof(ushort)))),
+            SessionDuration: TimeSpan.FromSeconds(BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(11, sizeof(ushort)))),
+            SafetyCarStatusCode: payload[124],
+            ForecastSamples: forecastSamples);
+
+        return F125PacketPayloadReadResult.Parsed(new F125SessionPacket(header, payload.ToArray(), session));
+    }
+}
+
 public sealed class F125LapDataPacketReader : IF125PacketPayloadReader
 {
     public byte PacketId => F125PacketIds.LapData;
@@ -70,42 +137,96 @@ public sealed class F125LapDataPacketReader : IF125PacketPayloadReader
             return F125PacketPayloadReadResult.Failed(failure);
         }
 
-        var playerPayload = F125PacketLayout.PlayerPayload(
+        var carCount = F125PacketLayout.AvailableCarCount(payload, F125PacketLayout.LapDataSize);
+        var cars = new List<F125PlayerLapData>(carCount);
+        for (var carIndex = 0; carIndex < carCount; carIndex++)
+        {
+            cars.Add(ReadLapData(
+                carIndex,
+                F125PacketLayout.CarPayload(payload, F125PacketLayout.LapDataSize, carIndex)));
+        }
+
+        return F125PacketPayloadReadResult.Parsed(new F125LapDataPacket(
             header,
-            payload,
-            F125PacketLayout.LapDataSize);
-        var currentLapTime = BinaryPrimitives.ReadUInt32LittleEndian(playerPayload.Slice(4, sizeof(uint)));
-        var lastLapTime = BinaryPrimitives.ReadUInt32LittleEndian(playerPayload.Slice(0, sizeof(uint)));
-        var playerCar = new F125PlayerLapData(
-            LapNumber: playerPayload[31],
-            CurrentLapTime: TimeSpan.FromMilliseconds(currentLapTime),
-            LastLapTime: lastLapTime == 0 ? null : TimeSpan.FromMilliseconds(lastLapTime),
-            BestLapTime: null,
-            SectorIndex: playerPayload[34],
-            LapDistanceMeters: BinaryPrimitives.ReadSingleLittleEndian(playerPayload.Slice(18, sizeof(float))),
-            Sector1Time: ReadSectorTime(playerPayload, millisecondsOffset: 8, minutesOffset: 10),
-            Sector2Time: ReadSectorTime(playerPayload, millisecondsOffset: 11, minutesOffset: 13),
-            TotalDistanceMeters: BinaryPrimitives.ReadSingleLittleEndian(playerPayload.Slice(22, sizeof(float))),
-            IsValid: playerPayload[35] == 0,
-            PitStatusCode: playerPayload[32],
-            PitStopCount: playerPayload[33],
-            PenaltiesSeconds: playerPayload[36],
-            WarningsCount: playerPayload[37],
-            CornersCut: playerPayload[38]);
-
-        return F125PacketPayloadReadResult.Parsed(new F125LapDataPacket(header, payload.ToArray(), playerCar));
+            payload.ToArray(),
+            cars,
+            cars[header.PlayerCarIndex]));
     }
 
-    private static TimeSpan? ReadSectorTime(ReadOnlySpan<byte> payload, int millisecondsOffset, int minutesOffset)
+    private static F125PlayerLapData ReadLapData(int carIndex, ReadOnlySpan<byte> payload)
     {
-        var millisecondsPart = BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(millisecondsOffset, sizeof(ushort)));
-        var minutesPart = payload[minutesOffset];
-        var totalMilliseconds = minutesPart * 60_000 + millisecondsPart;
+        var currentLapTime = BinaryPrimitives.ReadUInt32LittleEndian(payload.Slice(4, sizeof(uint)));
+        var lastLapTime = BinaryPrimitives.ReadUInt32LittleEndian(payload.Slice(0, sizeof(uint)));
 
-        return totalMilliseconds == 0
-            ? null
-            : TimeSpan.FromMilliseconds(totalMilliseconds);
+        return new F125PlayerLapData(
+            CarIndex: carIndex,
+            LapNumber: payload[31],
+            CurrentLapTime: TimeSpan.FromMilliseconds(currentLapTime),
+            LastLapTime: F125PacketLayout.ReadMilliseconds(lastLapTime),
+            BestLapTime: null,
+            Position: payload[30],
+            SectorIndex: payload[34],
+            LapDistanceMeters: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(18, sizeof(float))),
+            Sector1Time: F125PacketLayout.ReadSectorTime(payload, millisecondsOffset: 8, minutesOffset: 10),
+            Sector2Time: F125PacketLayout.ReadSectorTime(payload, millisecondsOffset: 11, minutesOffset: 13),
+            DeltaToCarInFront: F125PacketLayout.ReadMilliseconds(BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(14, sizeof(ushort)))),
+            DeltaToRaceLeader: F125PacketLayout.ReadMilliseconds(BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(16, sizeof(ushort)))),
+            TotalDistanceMeters: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(22, sizeof(float))),
+            IsValid: payload[35] == 0,
+            PitStatusCode: payload[32],
+            PitStopCount: payload[33],
+            GridPosition: payload[41],
+            ResultStatusCode: payload[43],
+            PenaltiesSeconds: payload[36],
+            WarningsCount: payload[37],
+            CornersCut: payload[38]);
     }
+}
+
+public sealed class F125ParticipantsPacketReader : IF125PacketPayloadReader
+{
+    public byte PacketId => F125PacketIds.Participants;
+
+    public F125PacketPayloadReadResult Read(F125PacketHeader header, ReadOnlySpan<byte> payload)
+    {
+        if (payload.Length < 1)
+        {
+            return F125PacketPayloadReadResult.Failed(F125PacketLayout.Truncated(PacketId, payload.Length, 1));
+        }
+
+        var activeCarCount = payload[0];
+        if (activeCarCount > F125PacketLayout.CarCount)
+        {
+            return F125PacketPayloadReadResult.Failed(F125PacketLayout.InvalidPayload(
+                PacketId,
+                $"F1 25 participants packet contains {activeCarCount} active cars, above the supported maximum of {F125PacketLayout.CarCount}."));
+        }
+
+        var requiredBytes = 1 + activeCarCount * F125PacketLayout.ParticipantDataSize;
+        if (payload.Length < requiredBytes)
+        {
+            return F125PacketPayloadReadResult.Failed(F125PacketLayout.Truncated(PacketId, payload.Length, requiredBytes));
+        }
+
+        var participants = new List<F125ParticipantData>(activeCarCount);
+        for (var carIndex = 0; carIndex < activeCarCount; carIndex++)
+        {
+            var participantPayload = payload.Slice(
+                1 + carIndex * F125PacketLayout.ParticipantDataSize,
+                F125PacketLayout.ParticipantDataSize);
+            participants.Add(new F125ParticipantData(
+                CarIndex: carIndex,
+                DriverName: ReadName(participantPayload.Slice(7, F125PacketLayout.ParticipantNameLength)),
+                TeamId: participantPayload[3],
+                DriverNumber: participantPayload[5],
+                IsAi: participantPayload[0] != 0));
+        }
+
+        return F125PacketPayloadReadResult.Parsed(new F125ParticipantsPacket(header, payload.ToArray(), participants));
+    }
+
+    private static string ReadName(ReadOnlySpan<byte> nameBytes)
+        => Encoding.ASCII.GetString(nameBytes).TrimEnd('\0', ' ');
 }
 
 public sealed class F125CarTelemetryPacketReader : IF125PacketPayloadReader
@@ -143,12 +264,219 @@ public sealed class F125CarTelemetryPacketReader : IF125PacketPayloadReader
     }
 }
 
+public sealed class F125CarStatusPacketReader : IF125PacketPayloadReader
+{
+    public byte PacketId => F125PacketIds.CarStatus;
+
+    public F125PacketPayloadReadResult Read(F125PacketHeader header, ReadOnlySpan<byte> payload)
+    {
+        var failure = F125PacketLayout.ValidatePlayerPayload(
+            header,
+            payload,
+            F125PacketLayout.CarStatusDataSize,
+            PacketId);
+        if (failure is not null)
+        {
+            return F125PacketPayloadReadResult.Failed(failure);
+        }
+
+        var cars = ReadCars(payload);
+        return F125PacketPayloadReadResult.Parsed(new F125CarStatusPacket(
+            header,
+            payload.ToArray(),
+            cars,
+            cars[header.PlayerCarIndex]));
+    }
+
+    private static IReadOnlyList<F125CarStatusData> ReadCars(ReadOnlySpan<byte> payload)
+    {
+        var carCount = F125PacketLayout.AvailableCarCount(payload, F125PacketLayout.CarStatusDataSize);
+        var cars = new List<F125CarStatusData>(carCount);
+        for (var carIndex = 0; carIndex < carCount; carIndex++)
+        {
+            cars.Add(ReadCarStatus(
+                carIndex,
+                F125PacketLayout.CarPayload(payload, F125PacketLayout.CarStatusDataSize, carIndex)));
+        }
+
+        return cars;
+    }
+
+    private static F125CarStatusData ReadCarStatus(int carIndex, ReadOnlySpan<byte> payload)
+        => new(
+            CarIndex: carIndex,
+            TcActive: payload[0] != 0,
+            AbsActive: payload[1] != 0,
+            PitLimiterActive: payload[4] != 0,
+            DrsAllowed: payload[22] != 0,
+            FuelInTankLiters: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(5, sizeof(float))),
+            FuelCapacityLiters: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(9, sizeof(float))),
+            FuelRemainingLaps: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(13, sizeof(float))),
+            ActualTyreCompoundCode: payload[25],
+            VisualTyreCompoundCode: payload[26],
+            TyreAgeLaps: payload[27],
+            ErsStoreJoules: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(37, sizeof(float))),
+            ErsDeployModeCode: payload[41],
+            ErsHarvestedThisLapMguk: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(42, sizeof(float))),
+            ErsHarvestedThisLapMguh: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(46, sizeof(float))),
+            ErsDeployedThisLapJoules: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(50, sizeof(float))));
+}
+
+public sealed class F125CarDamagePacketReader : IF125PacketPayloadReader
+{
+    public byte PacketId => F125PacketIds.CarDamage;
+
+    public F125PacketPayloadReadResult Read(F125PacketHeader header, ReadOnlySpan<byte> payload)
+    {
+        var failure = F125PacketLayout.ValidatePlayerPayload(
+            header,
+            payload,
+            F125PacketLayout.CarDamageDataSize,
+            PacketId);
+        if (failure is not null)
+        {
+            return F125PacketPayloadReadResult.Failed(failure);
+        }
+
+        var cars = ReadCars(payload);
+        return F125PacketPayloadReadResult.Parsed(new F125CarDamagePacket(
+            header,
+            payload.ToArray(),
+            cars,
+            cars[header.PlayerCarIndex]));
+    }
+
+    private static IReadOnlyList<F125CarDamageData> ReadCars(ReadOnlySpan<byte> payload)
+    {
+        var carCount = F125PacketLayout.AvailableCarCount(payload, F125PacketLayout.CarDamageDataSize);
+        var cars = new List<F125CarDamageData>(carCount);
+        for (var carIndex = 0; carIndex < carCount; carIndex++)
+        {
+            cars.Add(ReadCarDamage(
+                carIndex,
+                F125PacketLayout.CarPayload(payload, F125PacketLayout.CarDamageDataSize, carIndex)));
+        }
+
+        return cars;
+    }
+
+    private static F125CarDamageData ReadCarDamage(int carIndex, ReadOnlySpan<byte> payload)
+        => new(
+            CarIndex: carIndex,
+            FrontLeftTyreWearPercent: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(8, sizeof(float))),
+            FrontRightTyreWearPercent: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(12, sizeof(float))),
+            RearLeftTyreWearPercent: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(0, sizeof(float))),
+            RearRightTyreWearPercent: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(4, sizeof(float))),
+            FrontLeftTyreDamagePercent: payload[18],
+            FrontRightTyreDamagePercent: payload[19],
+            RearLeftTyreDamagePercent: payload[16],
+            RearRightTyreDamagePercent: payload[17],
+            FrontLeftBrakeDamagePercent: payload[22],
+            FrontRightBrakeDamagePercent: payload[23],
+            RearLeftBrakeDamagePercent: payload[20],
+            RearRightBrakeDamagePercent: payload[21],
+            FrontLeftWingDamagePercent: payload[24],
+            FrontRightWingDamagePercent: payload[25],
+            RearWingDamagePercent: payload[26],
+            FloorDamagePercent: payload[27],
+            DiffuserDamagePercent: payload[28],
+            SidepodDamagePercent: payload[29],
+            GearboxDamagePercent: payload[32],
+            EngineDamagePercent: payload[33]);
+}
+
+public sealed class F125SessionHistoryPacketReader : IF125PacketPayloadReader
+{
+    public byte PacketId => F125PacketIds.SessionHistory;
+
+    public F125PacketPayloadReadResult Read(F125PacketHeader header, ReadOnlySpan<byte> payload)
+    {
+        if (payload.Length < F125PacketLayout.SessionHistoryHeaderSize)
+        {
+            return F125PacketPayloadReadResult.Failed(F125PacketLayout.Truncated(
+                PacketId,
+                payload.Length,
+                F125PacketLayout.SessionHistoryHeaderSize));
+        }
+
+        var carIndex = payload[0];
+        if (carIndex >= F125PacketLayout.CarCount)
+        {
+            return F125PacketPayloadReadResult.Failed(F125PacketLayout.InvalidPayload(
+                PacketId,
+                $"F1 25 session history packet uses car index {carIndex}, outside the supported car array."));
+        }
+
+        var lapCount = payload[1];
+        if (lapCount > F125PacketLayout.MaxSessionHistoryLaps)
+        {
+            return F125PacketPayloadReadResult.Failed(F125PacketLayout.InvalidPayload(
+                PacketId,
+                $"F1 25 session history packet contains {lapCount} laps, above the supported maximum of {F125PacketLayout.MaxSessionHistoryLaps}."));
+        }
+
+        var requiredBytes = F125PacketLayout.SessionHistoryHeaderSize
+            + lapCount * F125PacketLayout.SessionHistoryLapDataSize;
+        if (payload.Length < requiredBytes)
+        {
+            return F125PacketPayloadReadResult.Failed(F125PacketLayout.Truncated(PacketId, payload.Length, requiredBytes));
+        }
+
+        var laps = new List<F125LapHistoryData>(lapCount);
+        for (var index = 0; index < lapCount; index++)
+        {
+            laps.Add(ReadLapHistory(
+                index + 1,
+                payload.Slice(
+                    F125PacketLayout.SessionHistoryHeaderSize + index * F125PacketLayout.SessionHistoryLapDataSize,
+                    F125PacketLayout.SessionHistoryLapDataSize)));
+        }
+
+        var history = new F125SessionHistoryData(
+            CarIndex: carIndex,
+            Laps: laps,
+            BestLapTime: GetLapByNumber(laps, payload[3])?.LapTime,
+            BestSector1: GetLapByNumber(laps, payload[4])?.Sector1,
+            BestSector2: GetLapByNumber(laps, payload[5])?.Sector2,
+            BestSector3: GetLapByNumber(laps, payload[6])?.Sector3,
+            LastCompletedLap: laps.LastOrDefault(lap => lap.LapTime is not null));
+
+        return F125PacketPayloadReadResult.Parsed(new F125SessionHistoryPacket(header, payload.ToArray(), history));
+    }
+
+    private static F125LapHistoryData ReadLapHistory(int lapNumber, ReadOnlySpan<byte> payload)
+    {
+        var lapTime = BinaryPrimitives.ReadUInt32LittleEndian(payload[..sizeof(uint)]);
+        return new F125LapHistoryData(
+            LapNumber: lapNumber,
+            LapTime: F125PacketLayout.ReadMilliseconds(lapTime),
+            Sector1: F125PacketLayout.ReadSectorTime(payload, millisecondsOffset: 4, minutesOffset: 6),
+            Sector2: F125PacketLayout.ReadSectorTime(payload, millisecondsOffset: 7, minutesOffset: 9),
+            Sector3: F125PacketLayout.ReadSectorTime(payload, millisecondsOffset: 10, minutesOffset: 12),
+            IsValid: payload[13] == 0 ? false : true);
+    }
+
+    private static F125LapHistoryData? GetLapByNumber(IReadOnlyList<F125LapHistoryData> laps, byte lapNumber)
+        => lapNumber == 0 || lapNumber > laps.Count ? null : laps[lapNumber - 1];
+}
+
 internal static class F125PacketLayout
 {
     public const int CarCount = 22;
     public const int CarMotionDataSize = 60;
     public const int LapDataSize = 50;
     public const int CarTelemetryDataSize = 60;
+    public const int CarStatusDataSize = 55;
+    public const int CarDamageDataSize = 42;
+    public const int ParticipantDataSize = 60;
+    public const int ParticipantNameLength = 48;
+    public const int SessionWeatherForecastCountOffset = 126;
+    public const int SessionWeatherForecastStartOffset = 127;
+    public const int WeatherForecastSampleSize = 8;
+    public const int MaxWeatherForecastSamples = 64;
+    public const int SessionHistoryHeaderSize = 7;
+    public const int SessionHistoryLapDataSize = 14;
+    public const int MaxSessionHistoryLaps = 100;
 
     public static F125PacketReadFailure? ValidatePlayerPayload(
         F125PacketHeader header,
@@ -184,6 +512,43 @@ internal static class F125PacketLayout
         ReadOnlySpan<byte> payload,
         int playerCarDataSize)
         => payload.Slice(PlayerCarOffset(header, playerCarDataSize), playerCarDataSize);
+
+    public static ReadOnlySpan<byte> CarPayload(ReadOnlySpan<byte> payload, int carDataSize, int carIndex)
+        => payload.Slice(carIndex * carDataSize, carDataSize);
+
+    public static int AvailableCarCount(ReadOnlySpan<byte> payload, int carDataSize)
+        => Math.Min(CarCount, payload.Length / carDataSize);
+
+    public static TimeSpan? ReadSectorTime(ReadOnlySpan<byte> payload, int millisecondsOffset, int minutesOffset)
+    {
+        var millisecondsPart = BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(millisecondsOffset, sizeof(ushort)));
+        var minutesPart = payload[minutesOffset];
+        var totalMilliseconds = minutesPart * 60_000 + millisecondsPart;
+
+        return totalMilliseconds == 0
+            ? null
+            : TimeSpan.FromMilliseconds(totalMilliseconds);
+    }
+
+    public static TimeSpan? ReadMilliseconds(uint milliseconds)
+        => milliseconds == 0 ? null : TimeSpan.FromMilliseconds(milliseconds);
+
+    public static TimeSpan? ReadMilliseconds(ushort milliseconds)
+        => milliseconds == 0 ? null : TimeSpan.FromMilliseconds(milliseconds);
+
+    public static sbyte ReadSignedByte(byte value)
+        => unchecked((sbyte)value);
+
+    public static F125PacketReadFailure Truncated(byte packetId, int actualBytes, int requiredBytes)
+        => new(
+            F125PacketReadFailureKind.TruncatedPayload,
+            $"F1 25 packet {packetId} requires {requiredBytes} payload bytes but received {actualBytes}.",
+            ActualBytes: actualBytes,
+            RequiredBytes: requiredBytes,
+            PacketId: packetId);
+
+    public static F125PacketReadFailure InvalidPayload(byte packetId, string message)
+        => new(F125PacketReadFailureKind.InvalidPayload, message, PacketId: packetId);
 
     private static int PlayerCarOffset(F125PacketHeader header, int playerCarDataSize)
         => header.PlayerCarIndex * playerCarDataSize;

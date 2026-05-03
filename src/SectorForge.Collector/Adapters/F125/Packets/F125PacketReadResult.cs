@@ -16,6 +16,7 @@ public enum F125PacketReadFailureKind
 {
     TruncatedHeader,
     TruncatedPayload,
+    InvalidPayload,
     InvalidPacketFormat,
     InvalidPlayerCarIndex,
     PacketReaderFailure

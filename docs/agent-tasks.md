@@ -481,10 +481,10 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### Pre-SF-049: Complete F1 25 Packet Readers For Slices A-D
 
-- Status: `ready`
+- Status: `done`
 - Type: protocol adapter plan
 - Goal: Finish the F1 25 packet reader, optional-packet aggregation, and normalizer work needed before surfacing the SF-046/SF-047/SF-048 channels in the dashboard.
-- Notes: Priority 4 already uses `SF-040` through `SF-049`, so these are intentionally listed as pre-frontend implementation tasks instead of silently reusing or renumbering task IDs. Assign new IDs or open a new adapter priority before taking them as implementation work. Keep all parser tests synthetic; do not copy vendor packet tables or recorded captures.
+- Notes: Completed on 2026-05-03. Added session-scoped optional packet aggregation for the F1 25 UDP adapter, packet readers for session/weather, participants, car status, car damage, and session history, plus normalizer coverage for mapped Slice A-D fields. Publishing remains anchored to car telemetry packets; optional data appears on the next car telemetry sample and stays `null` until its source packet arrives. Parser and normalizer tests use synthetic byte arrays only.
 - Required tasks before SF-049:
   - Add an optional-packet aggregation state for `F125UdpTelemetryAdapter` so motion, lap data, car telemetry, car status, car damage, session/weather, participant, and session-history packets can arrive at different rates. Publishing must continue when optional packets are missing, reset cached packets on session UID changes, and leave missing channel groups `null`.
   - Add a F1 25 car-status packet reader and normalizer extension for remaining Slice A driver flags plus Slice B/C power-unit, ERS deploy mode, tyre compound, and tyre age fields. Tests must cover typed parser failures, player-car selection, session reset behavior, and normalized samples with and without a latest status packet.
@@ -495,10 +495,10 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-049: Surface New F1 25 Channels In Dashboard And Lap Channels API
 
-- Status: `blocked`
+- Status: `ready`
 - Type: frontend feature
 - Goal: Render the new SF-046/047/048 channels in the dashboard with strict null-guarding, and extend the SF-050 lap channel manifest to include them when available.
-- Notes: Do not take this task until the pre-SF-049 F1 25 packet-reader plan is assigned and completed. The frontend should surface real optional channels, not only newly added nullable model fields.
+- Notes: Pre-SF-049 is complete, so this task can now surface real optional channels populated by the F1 25 adapter. Panels must still be strictly null-guarded because optional packet groups may not have arrived for a session.
 - Suggested files: `src/SectorForge.Web/src/types/*`, `src/SectorForge.Web/src/components/dashboard/*`, `src/SectorForge.Api/Services/*`, `src/SectorForge.Api/Program.cs`, `tests/SectorForge.Api.Tests/*`, `docs/architecture.md`
 - Acceptance criteria:
   - Live workspace shows DRS / pit limiter / ABS / TC indicator strip, sector 1/2/3 split tiles, and a lap-valid badge - each panel mounts only when its source field is non-null.
@@ -624,6 +624,7 @@ The dashboard already has a `Compare` workspace placeholder driven by the worksp
   - Lint and frontend build pass.
 
 ### SF-059: Add Compare Workspace To Frontend Routing
+
 - Status: `ready`
 - Type: frontend feature
 - Goal: Ensure the Compare workspace is accessible via the frontend routing system (e.g. `/compare`) and that it can be navigated to from the workspace rail, so users can easily find and use the new comparison features.
@@ -659,6 +660,7 @@ The dashboard already has a `Compare` workspace placeholder driven by the worksp
   - Lint and frontend build pass.
 
 ### SF-05C: External Export Of Comparison Data
+
 - Status: `ready`
 - Type: backend feature
 - Goal: Add an API endpoint that allows users to export the telemetry data for a set of laps in a format compatible with external analysis tools (e.g. CSV, MoTeC i2 format), so they can perform more advanced analysis or visualization outside of the dashboard.
@@ -671,39 +673,21 @@ The dashboard already has a `Compare` workspace placeholder driven by the worksp
 
 ## Priority 6: LMU Plugin Adapter
 
-Note: LMU's UDP plugin is a popular community adapter for Assetto Corsa and Assetto Corsa Competizione, so it can be a good next step after F1 25 to expand the user base. However, it's a third-party plugin with its own release cadence and support model, so it may require more maintenance work to keep up with changes. The adapter should be designed to handle potential protocol changes gracefully and minimize breakage when the plugin updates.
+Note: Keep LMU first after the compare slice because it is the next real-game path with clear growth value and it can build on the existing adapter, configuration, storage, and dashboard foundations. Treat it as the next proving ground for production adapter ergonomics: explicit enablement, resilient parsing, useful status errors, and documentation that helps users configure the game without copying vendor protocol material.
 
-## Priority 7: ACC Shared Memory Adapter
+## Priority 7: WebView2 Desktop Packaging
 
-Note: ACC's shared memory API is a different integration approach than UDP, so it will require a new adapter structure that reads from shared memory instead of listening on a socket. This can be a good opportunity to further abstract the adapter interface and allow for multiple integration methods. However, shared memory can be more complex to implement and debug than UDP, especially around synchronization and cross-platform support, so it may take more time to get right.
+Note: Move the desktop shell up so non-developer users can run SectorForge without understanding Vite, ports, or PowerShell. This is a growth and support win: a WebView2 host can preserve the local-first architecture while giving users a familiar Windows app surface, room for startup behavior, local settings, and cleaner operational diagnostics.
 
-## Priority 8: AMS2 Project Cars UDP Adapter
+## Priority 8: Release Packaging, Publishing, and Versioning
 
-Note: Like the LMU plugin, this is a third-party UDP adapter for Assetto Corsa and Assetto Corsa Competizione. It may have a different packet structure and update cadence than the F1 25 UDP adapter, so it will require its own parser and normalizer. However, since it's also UDP-based, some of the existing infrastructure from the F1 25 adapter (e.g. the UDP listener abstraction) can likely be reused, which may speed up development compared to the ACC shared memory adapter.
+Note: Follow the desktop shell with repeatable release packaging so interested users can actually install and update the app. This should cover signed or clearly documented unsigned builds, portable zip or installer output, versioning, release notes, checksums where practical, and a GitHub Releases flow that can be operated without manual guesswork.
 
-## Priority 9: WebView2 Desktop Packaging
+## Priority 9: Community Contributions And Custom Adapters
 
-Note: Packaging the frontend as a WebView2 desktop app can make it more accessible to users who are not comfortable running a web server or using the command line. It also allows for tighter integration with the Windows OS, such as auto-start on boot, system tray icons, and native notifications. However, it adds complexity to the build and release process, and may require additional maintenance to keep up with WebView2 updates and Windows compatibility issues. It should be considered after the core features are stable and the user base is growing.
+Note: Once there is a usable desktop/release path, make contribution and custom-adapter workflows easier to follow. This supports growth by turning early users into testers and contributors, and supports operations by setting expectations for adapter quality, issue triage, reproducible diagnostics, community support channels, and how external protocol research should be documented safely.
 
-## Priority 10: Release Packaging, Publishing, and Versioning
-
-Note: this is very needed because now only people who know how to build and run the project from source can use it, and we want to make it available to a wider audience who may not be developers. This will include creating release builds for the collector and frontend, packaging them in a user-friendly way (e.g. an installer or portable zip), and publishing them on GitHub Releases or a similar platform. It will also involve setting up a versioning strategy (e.g. semantic versioning) and possibly automating the release process with CI/CD pipelines. However, it requires additional work to set up and maintain the build and release infrastructure, and may involve troubleshooting issues that arise in the packaging process. It should be considered after the core features are stable and there is demand from users for easier access to releases.
-
-## Priority 11: Hardware Display Integration
-
-Note: Integrating with hardware displays (e.g. Raspberry Pi dashboards, Arduino-based gauges) can be a great way to extend the project's reach and allow users to create custom physical telemetry displays. However, it requires additional hardware-specific code and testing, and may involve supporting multiple platforms and communication protocols (e.g. serial, I2C, MQTT). It should be considered after the core software features are stable and there is demand from the community for hardware integration.
-
-## Priority 12: Strategy Analysis Models
-
-Note: Adding strategy analysis models (e.g. pit stop optimization, fuel load calculations, tire wear predictions) can provide advanced insights for competitive racing and add significant value for users. However, it requires domain expertise in racing strategy, as well as careful design to ensure the models are accurate and useful without overwhelming users with complexity. It should be considered after the core telemetry features are solid and there is interest from the community in strategy analysis.
-
-## Priority 13: AI Coaching And Assistance
-
-Note: Building AI coaching features (e.g. real-time driving advice, post-session performance analysis, personalized training plans) can be a long-term vision for the project that leverages machine learning and data analysis to help users improve their racing skills. However, it requires significant development effort, access to large datasets for training, and careful consideration of user experience to ensure the AI provides actionable and relevant insights without being intrusive or overwhelming. It should be considered as a future direction once the core telemetry and analysis features are well-established and there is a strong user base to support it. This will not implement an LLM or integrate with an AI provider but instead be a completely custom-built solution using traditional ML techniques and domain-specific heuristics, at least in the initial implementation.
-
-## Priority 14: Community Contributions And Custom Adapters
-
-Note: Encouraging and supporting community contributions (e.g. new game adapters, UI features, bug fixes) can help grow the project and make it more sustainable in the long term. This can be facilitated by clear contribution guidelines, good documentation, and an active presence in relevant communities (e.g. racing sim forums, GitHub). However, it also requires time and effort to review and manage contributions, as well as maintain a welcoming and inclusive community culture. It should be an ongoing priority as the project grows. This should include things like:
+This should include things like:
 
 - Clear contribution guidelines in the README.
 - A CONTRIBUTING.md file with detailed instructions for setting up a development environment, running tests, and submitting pull requests.
@@ -711,10 +695,30 @@ Note: Encouraging and supporting community contributions (e.g. new game adapters
 - Regularly reviewing and merging pull requests, and providing constructive feedback to contributors.
 - A Discord server or other community hub for real-time discussion and support.
 
+## Priority 10: ACC Shared Memory Adapter
+
+Note: ACC is a strong follow-up adapter because it broadens game coverage and forces the architecture to support a non-UDP ingestion path. From a dev perspective, this is the right time to introduce shared-memory lifecycle, synchronization, and diagnostics after the release path exists. From a growth perspective, ACC support gives SectorForge a broader sim-racing audience while keeping adapter-specific parsing outside `SectorForge.Core`.
+
+## Priority 11: AMS2 Project Cars UDP Adapter
+
+Note: AMS2 should follow ACC as another real-game expansion that can reuse the UDP listener, adapter configuration, parser test patterns, and normalized telemetry model. It is a good later adapter because it should be less architectural novelty than shared memory, but still adds valuable coverage and validates that the adapter boundary works across multiple packet families.
+
+## Priority 12: Hardware Display Integration
+
+Note: Hardware display support fits after the desktop, release, community, and adapter foundations are stronger. It can grow the ecosystem, but it also adds operational surface area around device setup, connection failures, schemas, and long-running support. Treat this as an integration layer over stable local APIs rather than an early core dependency.
+
+## Priority 13: Strategy Analysis Models
+
+Note: Strategy models should wait until the app has broader telemetry coverage, enough retained session history, and stable comparison/export flows. They can become a high-value product layer for pit timing, fuel, tyre wear, and stint planning, but they need careful validation and clear UX so users understand confidence and limitations.
+
+## Priority 14: AI Coaching And Assistance
+
+Note: AI coaching remains the longest-horizon product layer. It depends on trustworthy telemetry, comparison tools, strategy primitives, and enough user feedback to avoid vague or noisy advice. This should not start as an LLM integration; the initial direction remains a custom-built solution using traditional ML techniques and domain-specific heuristics where the outputs can be evaluated and explained.
+
 ## Parking Lot
 
 - Add screenshots or short GIFs to README after the UI stabilizes.
 - Add hardware display integration notes.
 - Add setup notes and strategy analysis models.
 - Add export formats after storage format settles.
-- Add WebView2 or desktop packaging only after the telemetry loop is solid.
+- Add desktop packaging follow-up tasks once the WebView2 horizon is broken into implementation slices.
