@@ -452,7 +452,7 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-047: Extend TelemetrySample - Slice B+C (Damage, Power Unit, Extended Tyres)
 
-- Status: `ready`
+- Status: `done`
 - Type: backend feature
 - Goal: Additively expand `TelemetrySample` with optional `DamageState`, `PowerUnitState`, and tyre compound/age/wear so F1-class data can flow end to end.
 - Suggested files: `src/SectorForge.Core/Telemetry/TelemetryModels.cs`, `src/SectorForge.Collector/Adapters/F125/F125Normalizer.cs`, `src/SectorForge.Web/src/types/*`, `tests/SectorForge.Core.Tests/*`, `docs/architecture.md`
@@ -475,14 +475,29 @@ This backlog is written for coding agents and human contributors. Each task is i
   - `TimingState` gains optional `SessionTimeLeft`, `SessionDuration`.
   - `ParticipantState` gains optional `Sector1`, `Sector2`, `BestSector1`, `BestSector2`, `BestSector3`, `TyreCompound`, `PitStopCount`, `ResultStatus`, `GridPosition`, `DriverNumber`, `IsAi`.
   - New enums (`SafetyCarStatus`, `WeatherKind`, `ResultStatus`) include `Unknown = 0`.
-  - F1 25 normalizer populates the multi-participant grid; non-F1 adapters leave fields `null`.
+  - F1 25 normalizer population is deferred to the pre-SF-049 packet-reader plan below; non-F1 adapters leave fields `null`.
   - Round-trip tests cover the new fields.
+
+### Pre-SF-049: Complete F1 25 Packet Readers For Slices A-D
+
+- Status: `ready`
+- Type: protocol adapter plan
+- Goal: Finish the F1 25 packet reader, optional-packet aggregation, and normalizer work needed before surfacing the SF-046/SF-047/SF-048 channels in the dashboard.
+- Notes: Priority 4 already uses `SF-040` through `SF-049`, so these are intentionally listed as pre-frontend implementation tasks instead of silently reusing or renumbering task IDs. Assign new IDs or open a new adapter priority before taking them as implementation work. Keep all parser tests synthetic; do not copy vendor packet tables or recorded captures.
+- Required tasks before SF-049:
+  - Add an optional-packet aggregation state for `F125UdpTelemetryAdapter` so motion, lap data, car telemetry, car status, car damage, session/weather, participant, and session-history packets can arrive at different rates. Publishing must continue when optional packets are missing, reset cached packets on session UID changes, and leave missing channel groups `null`.
+  - Add a F1 25 car-status packet reader and normalizer extension for remaining Slice A driver flags plus Slice B/C power-unit, ERS deploy mode, tyre compound, and tyre age fields. Tests must cover typed parser failures, player-car selection, session reset behavior, and normalized samples with and without a latest status packet.
+  - Add a F1 25 car-damage packet reader and normalizer extension for Slice B/C tyre wear, tyre damage, brake damage, wing, floor, diffuser, sidepod, gearbox, and engine damage fields. Tests must cover synthetic per-corner values and default-null behavior when the packet has not arrived.
+  - Add a F1 25 session/weather packet reader and normalizer extension for Slice D track/session metadata, weather forecast samples, rain percentage, safety-car status, formation-lap state, session duration, and session time remaining. Tests must cover forecast list bounds and nulls for unavailable values.
+  - Add F1 25 participant timing readers and normalizer support for Slice D multi-participant timing: participant identity, team/car metadata where available, driver number, AI flag, grid position, result status, pit-stop count, per-driver sectors, best sectors, and tyre compound. Combine participant, lap-data, and session-history style packets without requiring all of them before publishing.
+  - Update `docs/game-adapters.md` and `docs/protocol-notes.md` with original-language implementation notes and current limitations after the readers land.
 
 ### SF-049: Surface New F1 25 Channels In Dashboard And Lap Channels API
 
-- Status: `ready`
+- Status: `blocked`
 - Type: frontend feature
 - Goal: Render the new SF-046/047/048 channels in the dashboard with strict null-guarding, and extend the SF-050 lap channel manifest to include them when available.
+- Notes: Do not take this task until the pre-SF-049 F1 25 packet-reader plan is assigned and completed. The frontend should surface real optional channels, not only newly added nullable model fields.
 - Suggested files: `src/SectorForge.Web/src/types/*`, `src/SectorForge.Web/src/components/dashboard/*`, `src/SectorForge.Api/Services/*`, `src/SectorForge.Api/Program.cs`, `tests/SectorForge.Api.Tests/*`, `docs/architecture.md`
 - Acceptance criteria:
   - Live workspace shows DRS / pit limiter / ABS / TC indicator strip, sector 1/2/3 split tiles, and a lap-valid badge - each panel mounts only when its source field is non-null.
@@ -594,6 +609,26 @@ The dashboard already has a `Compare` workspace placeholder driven by the worksp
   - Architecture doc covers the lap channel API contract from SF-050 and the basket model from SF-051.
   - README links to the compare workflow once the UI ships.
   - Docs note current limitations (single-channel overlay at a time, retained sample blob constraints).
+
+## Priority 6: LMU Plugin Adapter
+
+Note: LMU's UDP plugin is a popular community adapter for Assetto Corsa and Assetto Corsa Competizione, so it can be a good next step after F1 25 to expand the user base. However, it's a third-party plugin with its own release cadence and support model, so it may require more maintenance work to keep up with changes. The adapter should be designed to handle potential protocol changes gracefully and minimize breakage when the plugin updates.
+
+## Priority 7: ACC Shared Memory Adapter
+
+Note: ACC's shared memory API is a different integration approach than UDP, so it will require a new adapter structure that reads from shared memory instead of listening on a socket. This can be a good opportunity to further abstract the adapter interface and allow for multiple integration methods. However, shared memory can be more complex to implement and debug than UDP, especially around synchronization and cross-platform support, so it may take more time to get right.
+
+## Priority 8: AMS2 Project Cars UDP Adapter
+
+Note: Like the LMU plugin, this is a third-party UDP adapter for Assetto Corsa and Assetto Corsa Competizione. It may have a different packet structure and update cadence than the F1 25 UDP adapter, so it will require its own parser and normalizer. However, since it's also UDP-based, some of the existing infrastructure from the F1 25 adapter (e.g. the UDP listener abstraction) can likely be reused, which may speed up development compared to the ACC shared memory adapter.
+
+## Priority 9: WebView2 Desktop Packaging
+
+Note: Packaging the frontend as a WebView2 desktop app can make it more accessible to users who are not comfortable running a web server or using the command line. It also allows for tighter integration with the Windows OS, such as auto-start on boot, system tray icons, and native notifications. However, it adds complexity to the build and release process, and may require additional maintenance to keep up with WebView2 updates and Windows compatibility issues. It should be considered after the core features are stable and the user base is growing.
+
+## Priority 10: Release Packaging, Publishing, and Versioning
+
+Note: this is very needed because now only people who know how to build and run the project from source can use it, and we want to make it available to a wider audience who may not be developers.
 
 ## Parking Lot
 

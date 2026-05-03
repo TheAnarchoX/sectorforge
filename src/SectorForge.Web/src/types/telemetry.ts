@@ -8,6 +8,21 @@ export type TelemetryRunMode = "Idle" | "Live" | "Replay";
 
 export type PitStatus = "Unknown" | "None" | "Pitting" | "InPitArea";
 
+export type TyreCompound =
+  | "Unknown"
+  | "Soft"
+  | "Medium"
+  | "Hard"
+  | "Intermediate"
+  | "Wet";
+
+export type ErsDeployMode =
+  | "Unknown"
+  | "None"
+  | "Medium"
+  | "Hotlap"
+  | "Overtake";
+
 export type TelemetrySource = {
   adapterId: string;
   game: string;
@@ -24,6 +39,41 @@ export type WheelTemperatureState = {
   innerC?: number | null;
   middleC?: number | null;
   outerC?: number | null;
+};
+
+export type WheelWearState = {
+  wearPercent?: number | null;
+};
+
+export type WheelDamageState = {
+  damagePercent?: number | null;
+};
+
+export type DamageState = {
+  frontLeftWingPercent?: number | null;
+  frontRightWingPercent?: number | null;
+  rearWingPercent?: number | null;
+  floorPercent?: number | null;
+  diffuserPercent?: number | null;
+  sidepodPercent?: number | null;
+  gearboxPercent?: number | null;
+  enginePercent?: number | null;
+  frontLeftTyreDamage?: WheelDamageState | null;
+  frontRightTyreDamage?: WheelDamageState | null;
+  rearLeftTyreDamage?: WheelDamageState | null;
+  rearRightTyreDamage?: WheelDamageState | null;
+  frontLeftBrakeDamage?: WheelDamageState | null;
+  frontRightBrakeDamage?: WheelDamageState | null;
+  rearLeftBrakeDamage?: WheelDamageState | null;
+  rearRightBrakeDamage?: WheelDamageState | null;
+};
+
+export type PowerUnitState = {
+  ersStoreJoules?: number | null;
+  ersDeployedThisLapJoules?: number | null;
+  ersHarvestedThisLapMguk?: number | null;
+  ersHarvestedThisLapMguh?: number | null;
+  ersDeployMode?: ErsDeployMode | null;
 };
 
 export type TelemetrySample = {
@@ -85,6 +135,12 @@ export type TelemetrySample = {
     frontRightPressurePsi?: number | null;
     rearLeftPressurePsi?: number | null;
     rearRightPressurePsi?: number | null;
+    compound?: TyreCompound | null;
+    ageLaps?: number | null;
+    frontLeftWear?: WheelWearState | null;
+    frontRightWear?: WheelWearState | null;
+    rearLeftWear?: WheelWearState | null;
+    rearRightWear?: WheelWearState | null;
   };
   brakes: {
     frontLeftTemperatureC?: number | null;
@@ -122,6 +178,8 @@ export type TelemetrySample = {
     sectorDelta?: string | null;
   };
   participants?: ParticipantState[] | null;
+  damage?: DamageState | null;
+  powerUnit?: PowerUnitState | null;
 };
 
 export type ParticipantState = {

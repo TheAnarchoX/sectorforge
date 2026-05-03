@@ -79,6 +79,23 @@ public sealed class SqliteTelemetrySessionStoreTests
     }
 
     [Fact]
+    public async Task SaveSampleRoundTripsSliceBCFieldsInRawBlob()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), "SectorForge.Tests", $"{Guid.NewGuid():N}.db");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath }.ToString();
+        var store = new SqliteTelemetrySessionStore(connectionString);
+        var sample = TelemetryModelTests.CreateSliceBCSample();
+
+        await store.SaveSampleAsync(sample);
+
+        var details = await store.GetSessionAsync(sample.SessionId);
+
+        Assert.NotNull(details);
+        var roundTripped = Assert.Single(details.Samples);
+        TelemetryModelTests.AssertSliceBCFieldsEqual(sample, roundTripped);
+    }
+
+    [Fact]
     public async Task SaveSamplePrunesOlderRawBlobsButKeepsSessionSummaryAndLaps()
     {
         var databasePath = Path.Combine(Path.GetTempPath(), "SectorForge.Tests", $"{Guid.NewGuid():N}.db");

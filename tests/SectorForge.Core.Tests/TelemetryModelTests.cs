@@ -58,6 +58,21 @@ public sealed class TelemetryModelTests
     }
 
     [Fact]
+    public void FakeSampleLeavesSliceBCOptionalFieldsUnset()
+    {
+        var sample = new FakeTelemetryAdapter().CreateSample(TimeSpan.FromSeconds(3), 1, Guid.NewGuid());
+
+        Assert.Null(sample.Damage);
+        Assert.Null(sample.PowerUnit);
+        Assert.Null(sample.Tyres.Compound);
+        Assert.Null(sample.Tyres.AgeLaps);
+        Assert.Null(sample.Tyres.FrontLeftWear);
+        Assert.Null(sample.Tyres.FrontRightWear);
+        Assert.Null(sample.Tyres.RearLeftWear);
+        Assert.Null(sample.Tyres.RearRightWear);
+    }
+
+    [Fact]
     public void SliceAFieldsRoundTripThroughJson()
     {
         var sample = CreateSliceASample();
@@ -95,6 +110,18 @@ public sealed class TelemetryModelTests
         Assert.Equal(sample.DriverInput.PitLimiterActive, roundTripped.DriverInput.PitLimiterActive);
         Assert.Equal(sample.DriverInput.AbsActive, roundTripped.DriverInput.AbsActive);
         Assert.Equal(sample.DriverInput.TcActive, roundTripped.DriverInput.TcActive);
+    }
+
+    [Fact]
+    public void SliceBCFieldsRoundTripThroughJson()
+    {
+        var sample = CreateSliceBCSample();
+
+        var json = JsonSerializer.Serialize(sample, JsonOptions());
+        var roundTripped = JsonSerializer.Deserialize<TelemetrySample>(json, JsonOptions());
+
+        Assert.NotNull(roundTripped);
+        AssertSliceBCFieldsEqual(sample, roundTripped);
     }
 
     internal static TelemetrySample CreateSliceASample()
@@ -143,6 +170,94 @@ public sealed class TelemetryModelTests
             }
         };
     }
+
+    internal static TelemetrySample CreateSliceBCSample()
+    {
+        var sample = new FakeTelemetryAdapter().CreateSample(TimeSpan.FromSeconds(12), 2, Guid.NewGuid());
+
+        return sample with
+        {
+            Tyres = sample.Tyres with
+            {
+                Compound = TyreCompound.Soft,
+                AgeLaps = 7,
+                FrontLeftWear = new WheelWearState(12.5),
+                FrontRightWear = new WheelWearState(11.25),
+                RearLeftWear = new WheelWearState(18.75),
+                RearRightWear = new WheelWearState(19.5)
+            },
+            Damage = new DamageState(
+                FrontLeftWingPercent: 4.5,
+                FrontRightWingPercent: 6.25,
+                RearWingPercent: 2.0,
+                FloorPercent: 1.5,
+                DiffuserPercent: 3.75,
+                SidepodPercent: 8.0,
+                GearboxPercent: 5.0,
+                EnginePercent: 9.5,
+                FrontLeftTyreDamage: new WheelDamageState(16.5),
+                FrontRightTyreDamage: new WheelDamageState(17.25),
+                RearLeftTyreDamage: new WheelDamageState(22.75),
+                RearRightTyreDamage: new WheelDamageState(24.0),
+                FrontLeftBrakeDamage: new WheelDamageState(3.0),
+                FrontRightBrakeDamage: new WheelDamageState(3.5),
+                RearLeftBrakeDamage: new WheelDamageState(4.25),
+                RearRightBrakeDamage: new WheelDamageState(4.75)),
+            PowerUnit = new PowerUnitState(
+                ErsStoreJoules: 3_450_000,
+                ErsDeployedThisLapJoules: 820_000,
+                ErsHarvestedThisLapMguk: 125_500,
+                ErsHarvestedThisLapMguh: 91_250,
+                ErsDeployMode: ErsDeployMode.Overtake)
+        };
+    }
+
+    internal static void AssertSliceBCFieldsEqual(TelemetrySample expected, TelemetrySample actual)
+    {
+        Assert.Equal(expected.Tyres.Compound, actual.Tyres.Compound);
+        Assert.Equal(expected.Tyres.AgeLaps, actual.Tyres.AgeLaps);
+        AssertWheelWearEqual(expected.Tyres.FrontLeftWear, actual.Tyres.FrontLeftWear);
+        AssertWheelWearEqual(expected.Tyres.FrontRightWear, actual.Tyres.FrontRightWear);
+        AssertWheelWearEqual(expected.Tyres.RearLeftWear, actual.Tyres.RearLeftWear);
+        AssertWheelWearEqual(expected.Tyres.RearRightWear, actual.Tyres.RearRightWear);
+
+        Assert.NotNull(expected.Damage);
+        Assert.NotNull(actual.Damage);
+        var expectedDamage = expected.Damage!;
+        var actualDamage = actual.Damage!;
+        Assert.Equal(expectedDamage.FrontLeftWingPercent, actualDamage.FrontLeftWingPercent);
+        Assert.Equal(expectedDamage.FrontRightWingPercent, actualDamage.FrontRightWingPercent);
+        Assert.Equal(expectedDamage.RearWingPercent, actualDamage.RearWingPercent);
+        Assert.Equal(expectedDamage.FloorPercent, actualDamage.FloorPercent);
+        Assert.Equal(expectedDamage.DiffuserPercent, actualDamage.DiffuserPercent);
+        Assert.Equal(expectedDamage.SidepodPercent, actualDamage.SidepodPercent);
+        Assert.Equal(expectedDamage.GearboxPercent, actualDamage.GearboxPercent);
+        Assert.Equal(expectedDamage.EnginePercent, actualDamage.EnginePercent);
+        AssertWheelDamageEqual(expectedDamage.FrontLeftTyreDamage, actualDamage.FrontLeftTyreDamage);
+        AssertWheelDamageEqual(expectedDamage.FrontRightTyreDamage, actualDamage.FrontRightTyreDamage);
+        AssertWheelDamageEqual(expectedDamage.RearLeftTyreDamage, actualDamage.RearLeftTyreDamage);
+        AssertWheelDamageEqual(expectedDamage.RearRightTyreDamage, actualDamage.RearRightTyreDamage);
+        AssertWheelDamageEqual(expectedDamage.FrontLeftBrakeDamage, actualDamage.FrontLeftBrakeDamage);
+        AssertWheelDamageEqual(expectedDamage.FrontRightBrakeDamage, actualDamage.FrontRightBrakeDamage);
+        AssertWheelDamageEqual(expectedDamage.RearLeftBrakeDamage, actualDamage.RearLeftBrakeDamage);
+        AssertWheelDamageEqual(expectedDamage.RearRightBrakeDamage, actualDamage.RearRightBrakeDamage);
+
+        Assert.NotNull(expected.PowerUnit);
+        Assert.NotNull(actual.PowerUnit);
+        var expectedPowerUnit = expected.PowerUnit!;
+        var actualPowerUnit = actual.PowerUnit!;
+        Assert.Equal(expectedPowerUnit.ErsStoreJoules, actualPowerUnit.ErsStoreJoules);
+        Assert.Equal(expectedPowerUnit.ErsDeployedThisLapJoules, actualPowerUnit.ErsDeployedThisLapJoules);
+        Assert.Equal(expectedPowerUnit.ErsHarvestedThisLapMguk, actualPowerUnit.ErsHarvestedThisLapMguk);
+        Assert.Equal(expectedPowerUnit.ErsHarvestedThisLapMguh, actualPowerUnit.ErsHarvestedThisLapMguh);
+        Assert.Equal(expectedPowerUnit.ErsDeployMode, actualPowerUnit.ErsDeployMode);
+    }
+
+    private static void AssertWheelWearEqual(WheelWearState? expected, WheelWearState? actual)
+        => Assert.Equal(expected?.WearPercent, actual?.WearPercent);
+
+    private static void AssertWheelDamageEqual(WheelDamageState? expected, WheelDamageState? actual)
+        => Assert.Equal(expected?.DamagePercent, actual?.DamagePercent);
 
     private static JsonSerializerOptions JsonOptions()
     {

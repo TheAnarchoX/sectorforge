@@ -33,6 +33,25 @@ public enum PitStatus
     InPitArea
 }
 
+public enum TyreCompound
+{
+    Unknown = 0,
+    Soft,
+    Medium,
+    Hard,
+    Intermediate,
+    Wet
+}
+
+public enum ErsDeployMode
+{
+    Unknown = 0,
+    None,
+    Medium,
+    Hotlap,
+    Overtake
+}
+
 public sealed record TelemetrySource(
     string AdapterId,
     GameId Game,
@@ -56,7 +75,9 @@ public sealed record TelemetrySample(
     TrackState Track,
     DriverInputState DriverInput,
     TimingState Timing,
-    IReadOnlyList<ParticipantState>? Participants = null);
+    IReadOnlyList<ParticipantState>? Participants = null,
+    DamageState? Damage = null,
+    PowerUnitState? PowerUnit = null);
 
 public sealed record SessionState(
     Guid Id,
@@ -111,7 +132,13 @@ public sealed record TyreState(
     double? FrontLeftPressurePsi = null,
     double? FrontRightPressurePsi = null,
     double? RearLeftPressurePsi = null,
-    double? RearRightPressurePsi = null);
+    double? RearRightPressurePsi = null,
+    TyreCompound? Compound = null,
+    int? AgeLaps = null,
+    WheelWearState? FrontLeftWear = null,
+    WheelWearState? FrontRightWear = null,
+    WheelWearState? RearLeftWear = null,
+    WheelWearState? RearRightWear = null);
 
 public sealed record WheelTemperatureState(
     double? SurfaceC,
@@ -119,6 +146,28 @@ public sealed record WheelTemperatureState(
     double? InnerC = null,
     double? MiddleC = null,
     double? OuterC = null);
+
+public sealed record WheelWearState(double? WearPercent = null);
+
+public sealed record WheelDamageState(double? DamagePercent = null);
+
+public sealed record DamageState(
+    double? FrontLeftWingPercent = null,
+    double? FrontRightWingPercent = null,
+    double? RearWingPercent = null,
+    double? FloorPercent = null,
+    double? DiffuserPercent = null,
+    double? SidepodPercent = null,
+    double? GearboxPercent = null,
+    double? EnginePercent = null,
+    WheelDamageState? FrontLeftTyreDamage = null,
+    WheelDamageState? FrontRightTyreDamage = null,
+    WheelDamageState? RearLeftTyreDamage = null,
+    WheelDamageState? RearRightTyreDamage = null,
+    WheelDamageState? FrontLeftBrakeDamage = null,
+    WheelDamageState? FrontRightBrakeDamage = null,
+    WheelDamageState? RearLeftBrakeDamage = null,
+    WheelDamageState? RearRightBrakeDamage = null);
 
 public sealed record BrakeState(
     double? FrontLeftTemperatureC,
@@ -131,6 +180,13 @@ public sealed record FuelState(
     double? CapacityLiters,
     double? LitersPerLapEstimate,
     int? LapsRemainingEstimate);
+
+public sealed record PowerUnitState(
+    double? ErsStoreJoules = null,
+    double? ErsDeployedThisLapJoules = null,
+    double? ErsHarvestedThisLapMguk = null,
+    double? ErsHarvestedThisLapMguh = null,
+    ErsDeployMode? ErsDeployMode = null);
 
 public sealed record TrackState(
     string? TrackName,
