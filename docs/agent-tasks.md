@@ -248,9 +248,9 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-035: Add Session Overview
 
-- Staus: `ready`
+- Status: `ready`
 - Type: frontend feature
-- Goal: Add a session overview panel that shows key metadata and lap summaries for the user and the other participants in the session. This will provide context for the telemetry data and allow users to quickly understand the session details at a glance. Give insight into the drivers, cars, teams, track, and lap performance without needing to dive into the raw telemetry.
+- Goal: Add a session overview panel that shows key metadata and lap summaries for the user and the other participants in the current active/loaded session. This will provide context for the telemetry data and allow users to quickly understand the session details at a glance. Give insight into the drivers, cars, teams, track, and lap performance without needing to dive into the raw telemetry.
 - Suggested files: `src/SectorForge.Web/src/*`, `src/SectorForge.Api/Program.cs` if API shape needs small additions
 - Acceptance criteria:
   - Overview panel shows session metadata like game, track, car, and participants.

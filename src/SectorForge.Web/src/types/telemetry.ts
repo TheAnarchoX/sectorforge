@@ -149,6 +149,17 @@ export type CurrentLapTelemetrySeries = {
   points: LapTelemetryPoint[];
 };
 
+export type DashboardReplayState = {
+  sessionId: string;
+  sessionName?: string | null;
+  sampleIndex: number;
+  sampleCount: number;
+  isPlaying: boolean;
+  sample: TelemetrySample;
+  traceSeries: TelemetryTraceSeries;
+  lapTrace: CurrentLapTelemetrySeries;
+};
+
 export type ConnectionState =
   | "connecting"
   | "connected"

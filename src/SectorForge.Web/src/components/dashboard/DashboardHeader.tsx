@@ -13,7 +13,6 @@ type DashboardHeaderProps = {
   connectionState: ConnectionState;
   runMode: TelemetryRunMode;
   isCollectorRunning: boolean;
-  isLiveRunning: boolean;
   isReplayRunning: boolean;
   isBusy: boolean;
   trackName?: string | null;
@@ -29,7 +28,6 @@ export function DashboardHeader({
   connectionState,
   runMode,
   isCollectorRunning,
-  isLiveRunning,
   isReplayRunning,
   isBusy,
   trackName,
@@ -107,7 +105,7 @@ export function DashboardHeader({
             className="icon-button primary"
             type="button"
             onClick={onStartCollector}
-            disabled={isBusy || isLiveRunning}
+            disabled={isBusy || isCollectorRunning}
             aria-label="Start fake telemetry"
             title="Start fake telemetry"
           >

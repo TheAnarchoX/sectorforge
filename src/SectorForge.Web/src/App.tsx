@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { DashboardHeader } from "./components/dashboard/DashboardHeader";
 import {
   ErrorBanner,
@@ -7,9 +8,13 @@ import { MainTelemetryColumn } from "./components/dashboard/MainTelemetryColumn"
 import { TelemetrySidebar } from "./components/dashboard/TelemetrySidebar";
 import { TimingBoard } from "./components/dashboard/TimingBoard";
 import { useTelemetryDashboard } from "./hooks/useTelemetryDashboard";
+import type { DashboardReplayState } from "./types/telemetry";
 import "./App.css";
 
 function App() {
+  const [replayState, setReplayState] = useState<DashboardReplayState | null>(
+    null,
+  );
   const {
     connectionState,
     apiAvailability,
@@ -30,12 +35,33 @@ function App() {
   const activeSource = collectorStatus?.source ?? sample?.source ?? null;
   const runMode = collectorStatus?.runMode ?? "Idle";
   const isCollectorRunning = collectorStatus?.isRunning ?? false;
-  const isLiveRunning = isCollectorRunning && runMode === "Live";
   const isReplayRunning = isCollectorRunning && runMode === "Replay";
   const isApiOffline = apiAvailability === "offline";
+  const activeReplayState = isReplayRunning ? replayState : null;
+  const displaySample = activeReplayState?.sample ?? sample;
+  const displaySource = activeReplayState?.sample.source ?? activeSource;
+  const displayTraceSeries = activeReplayState?.traceSeries ?? traceSeries;
+  const displayLapTrace = activeReplayState?.lapTrace ?? lapTrace;
   const activeReplaySessionId = isReplayRunning
-    ? (sample?.session.id ?? collectorStatus?.latestSample?.sessionId ?? null)
+    ? (activeReplayState?.sessionId ??
+      displaySample?.session.id ??
+      collectorStatus?.latestSample?.sessionId ??
+      null)
     : null;
+  const replayNotice = isReplayRunning
+    ? [
+        {
+          title: activeReplayState?.isPlaying
+            ? "Replay active"
+            : "Replay paused",
+          message:
+            activeReplayState === null
+              ? "A stored capture is driving the dashboard. Load the replay timeline below to scrub, pause, or resume the session."
+              : `${activeReplayState.sessionName ?? "Stored capture"} is driving the dashboard at sample ${activeReplayState.sampleIndex + 1} of ${activeReplayState.sampleCount}. Use the timing board controls below to scrub or resume playback.`,
+          tone: "warning" as const,
+        },
+      ]
+    : [];
   const stateNotices = isApiOffline
     ? [
         {
@@ -45,31 +71,34 @@ function App() {
           tone: "danger" as const,
         },
       ]
-    : !isCollectorRunning
-      ? [
-          {
-            title: "Collector idle",
-            message:
-              sessions.length > 0
-                ? "Live telemetry is stopped. Press Start fake to resume streaming, or replay one of the stored captures below."
-                : "Live telemetry is stopped. Press Start fake to begin streaming and create the first local capture.",
-            tone: "warning" as const,
-          },
-        ]
-      : [];
+    : replayNotice.length > 0
+      ? replayNotice
+      : !isCollectorRunning
+        ? [
+            {
+              title: "Collector idle",
+              message:
+                sessions.length > 0
+                  ? "Live telemetry is stopped. Press Start fake to resume streaming, or replay one of the stored captures below."
+                  : "Live telemetry is stopped. Press Start fake to begin streaming and create the first local capture.",
+              tone: "warning" as const,
+            },
+          ]
+        : [];
 
   return (
-    <main className="app-shell">
+    <main
+      className={`app-shell${isReplayRunning ? " app-shell-replay-active" : ""}`}
+    >
       <DashboardHeader
         connectionState={connectionState}
         runMode={runMode}
         isCollectorRunning={isCollectorRunning}
-        isLiveRunning={isLiveRunning}
         isReplayRunning={isReplayRunning}
         isBusy={isBusy}
-        trackName={sample?.track.trackName}
-        sessionName={sample?.session.name}
-        sourceName={activeSource?.displayName}
+        trackName={displaySample?.track.trackName}
+        sessionName={displaySample?.session.name}
+        sourceName={displaySource?.displayName}
         samplesPublished={collectorStatus?.samplesPublished ?? 0}
         onStartCollector={() => void startCollector()}
         onStopCollector={() => void stopCollector()}
@@ -99,14 +128,14 @@ function App() {
 
       <div className="dashboard-grid">
         <MainTelemetryColumn
-          activeSource={activeSource}
+          activeSource={displaySource}
           runMode={runMode}
-          sample={sample}
-          traceSeries={traceSeries}
-          lapTrace={lapTrace}
+          sample={displaySample}
+          traceSeries={displayTraceSeries}
+          lapTrace={displayLapTrace}
         />
         <TelemetrySidebar
-          sample={sample}
+          sample={displaySample}
           games={games}
           collectorStatus={collectorStatus}
         />
@@ -114,13 +143,15 @@ function App() {
 
       <TimingBoard
         collectorStatus={collectorStatus}
-        sample={sample}
-        activeSource={activeSource}
+        sample={displaySample}
+        activeSource={displaySource}
         sessions={sessions}
         isApiOffline={isApiOffline}
         isBusy={isBusy}
         activeReplaySessionId={activeReplaySessionId}
-        onStartReplay={(sessionId) => void startReplay(sessionId)}
+        onStartReplay={startReplay}
+        onStopReplay={stopCollector}
+        onReplayStateChange={setReplayState}
       />
     </main>
   );

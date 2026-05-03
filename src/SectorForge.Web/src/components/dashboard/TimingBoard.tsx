@@ -1,19 +1,25 @@
 import { useEffect, useState } from "react";
-import { Activity } from "lucide-react";
+import type { ChangeEvent, Dispatch, SetStateAction } from "react";
+import { Activity, Pause, Play, Square } from "lucide-react";
 import { getSessionDetails } from "../../api/telemetryApi";
 import type {
   CollectorStatus,
+  CurrentLapTelemetrySeries,
+  DashboardReplayState,
   TelemetrySample,
   TelemetrySessionDetails,
   TelemetrySessionSummary,
   TelemetrySource,
+  TelemetryTraceSeries,
 } from "../../types/telemetry";
 import { TraceLane } from "./DashboardPrimitives";
 import {
+  clamp,
   formatDelta,
   formatNumber,
   formatShortTimestamp,
   formatTime,
+  parseDurationSeconds,
 } from "../../utils/telemetryFormat";
 
 type TimingBoardProps = {
@@ -24,11 +30,127 @@ type TimingBoardProps = {
   isApiOffline: boolean;
   isBusy: boolean;
   activeReplaySessionId: string | null;
-  onStartReplay: (sessionId: string) => void;
+  onStartReplay: (sessionId: string) => Promise<boolean>;
+  onStopReplay: () => Promise<void> | void;
+  onReplayStateChange: Dispatch<SetStateAction<DashboardReplayState | null>>;
 };
 
 function isAbortError(error: unknown) {
   return error instanceof Error && error.name === "AbortError";
+}
+
+const REPLAY_TRACE_WINDOW = 180;
+const REPLAY_STEP_MS_FALLBACK = 60;
+const REPLAY_STEP_MS_MIN = 35;
+const REPLAY_STEP_MS_MAX = 140;
+const EMPTY_REPLAY_LAP_TRACE: CurrentLapTelemetrySeries = {
+  sessionId: null,
+  lapNumber: null,
+  points: [],
+};
+
+function buildReplayTraceSeries(
+  samples: TelemetrySample[],
+  sampleIndex: number,
+): TelemetryTraceSeries {
+  if (samples.length === 0) {
+    return {
+      speed: [],
+      rpm: [],
+      throttle: [],
+      brake: [],
+      steering: [],
+    };
+  }
+
+  const clampedIndex = clamp(sampleIndex, 0, samples.length - 1);
+  const windowStart = Math.max(0, clampedIndex + 1 - REPLAY_TRACE_WINDOW);
+  const windowSamples = samples.slice(windowStart, clampedIndex + 1);
+
+  return {
+    speed: windowSamples.map((nextSample) => nextSample.vehicle.speedKph ?? 0),
+    rpm: windowSamples.map((nextSample) => nextSample.vehicle.rpm ?? 0),
+    throttle: windowSamples.map(
+      (nextSample) => (nextSample.driverInput.throttle ?? 0) * 100,
+    ),
+    brake: windowSamples.map(
+      (nextSample) => (nextSample.driverInput.brake ?? 0) * 100,
+    ),
+    steering: windowSamples.map(
+      (nextSample) => (nextSample.driverInput.steering ?? 0) * 100,
+    ),
+  };
+}
+
+function buildReplayLapTrace(
+  samples: TelemetrySample[],
+  sampleIndex: number,
+): CurrentLapTelemetrySeries {
+  if (samples.length === 0) {
+    return EMPTY_REPLAY_LAP_TRACE;
+  }
+
+  const clampedIndex = clamp(sampleIndex, 0, samples.length - 1);
+  const currentSample = samples[clampedIndex] ?? null;
+
+  if (currentSample === null) {
+    return EMPTY_REPLAY_LAP_TRACE;
+  }
+
+  const currentLapNumber = currentSample.lap.lapNumber ?? null;
+  if (currentLapNumber === null) {
+    return {
+      sessionId: currentSample.session.id,
+      lapNumber: null,
+      points: [],
+    };
+  }
+
+  const points = samples.slice(0, clampedIndex + 1).flatMap((nextSample) => {
+    if (nextSample.lap.lapNumber !== currentLapNumber) {
+      return [];
+    }
+
+    const elapsedSeconds = parseDurationSeconds(nextSample.lap.currentLapTime);
+    const speedKph = nextSample.vehicle.speedKph;
+
+    if (
+      elapsedSeconds === null ||
+      speedKph === null ||
+      speedKph === undefined
+    ) {
+      return [];
+    }
+
+    return [{ elapsedSeconds, value: speedKph }];
+  });
+
+  return {
+    sessionId: currentSample.session.id,
+    lapNumber: currentLapNumber,
+    points,
+  };
+}
+
+function getReplayDelayMs(samples: TelemetrySample[], sampleIndex: number) {
+  if (sampleIndex >= samples.length - 1) {
+    return REPLAY_STEP_MS_FALLBACK;
+  }
+
+  const currentTimestamp = Date.parse(samples[sampleIndex]?.timestamp ?? "");
+  const nextTimestamp = Date.parse(samples[sampleIndex + 1]?.timestamp ?? "");
+
+  if (Number.isNaN(currentTimestamp) || Number.isNaN(nextTimestamp)) {
+    return REPLAY_STEP_MS_FALLBACK;
+  }
+
+  const acceleratedDelay = Math.max(1, (nextTimestamp - currentTimestamp) / 8);
+
+  return clamp(
+    Math.round(acceleratedDelay),
+    REPLAY_STEP_MS_MIN,
+    REPLAY_STEP_MS_MAX,
+  );
 }
 
 export function TimingBoard({
@@ -40,6 +162,8 @@ export function TimingBoard({
   isBusy,
   activeReplaySessionId,
   onStartReplay,
+  onStopReplay,
+  onReplayStateChange,
 }: TimingBoardProps) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null,
@@ -48,21 +172,31 @@ export function TimingBoard({
     useState<TelemetrySessionDetails | null>(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [replayIndex, setReplayIndex] = useState(0);
+  const [isReplayPlaying, setIsReplayPlaying] = useState(false);
+  const [requestedReplaySessionId, setRequestedReplaySessionId] = useState<
+    string | null
+  >(null);
+
+  const effectiveSelectedSessionId = activeReplaySessionId ?? selectedSessionId;
 
   const selectedSessionSummary =
-    selectedSessionId === null
+    effectiveSelectedSessionId === null
       ? null
-      : (sessions.find((session) => session.id === selectedSessionId) ?? null);
+      : (sessions.find(
+          (session) => session.id === effectiveSelectedSessionId,
+        ) ?? null);
   const hasSelectedSession = selectedSessionSummary !== null;
   const selectedSessionLastSeenAt = selectedSessionSummary?.lastSeenAt ?? null;
   const selectedSessionSampleCount = selectedSessionSummary?.sampleCount ?? 0;
   const visibleSession =
-    hasSelectedSession && selectedSession?.session.id === selectedSessionId
+    hasSelectedSession &&
+    selectedSession?.session.id === effectiveSelectedSessionId
       ? selectedSession
       : null;
 
   useEffect(() => {
-    if (selectedSessionId === null || !hasSelectedSession) {
+    if (effectiveSelectedSessionId === null || !hasSelectedSession) {
       return;
     }
 
@@ -72,11 +206,11 @@ export function TimingBoard({
       setIsDetailLoading(true);
       setDetailError(null);
       setSelectedSession((current) =>
-        current?.session.id === selectedSessionId ? current : null,
+        current?.session.id === effectiveSelectedSessionId ? current : null,
       );
 
       try {
-        const details = await getSessionDetails(selectedSessionId, {
+        const details = await getSessionDetails(effectiveSelectedSessionId, {
           signal: abortController.signal,
         });
         setSelectedSession(details);
@@ -102,10 +236,89 @@ export function TimingBoard({
       abortController.abort();
     };
   }, [
+    effectiveSelectedSessionId,
     hasSelectedSession,
-    selectedSessionId,
     selectedSessionLastSeenAt,
     selectedSessionSampleCount,
+  ]);
+
+  const visibleReplaySampleCount = visibleSession?.samples.length ?? 0;
+  const visibleReplayIndex =
+    visibleReplaySampleCount === 0
+      ? 0
+      : clamp(replayIndex, 0, visibleReplaySampleCount - 1);
+  const visibleReplaySample =
+    visibleSession?.samples[visibleReplayIndex] ?? null;
+  const replaySession =
+    activeReplaySessionId !== null &&
+    visibleSession?.session.id === activeReplaySessionId
+      ? visibleSession
+      : null;
+  const isReplaySessionActive = replaySession !== null;
+  const replaySampleCount = replaySession?.samples.length ?? 0;
+  const isReplayAtEnd =
+    replaySampleCount > 0 && visibleReplayIndex >= replaySampleCount - 1;
+  const isReplayAdvancing =
+    isReplaySessionActive && isReplayPlaying && !isReplayAtEnd;
+  const replayProgressLabel =
+    visibleReplaySampleCount > 0
+      ? `${visibleReplayIndex + 1}/${visibleReplaySampleCount}`
+      : "0/0";
+
+  useEffect(() => {
+    if (!isReplayAdvancing || replaySampleCount === 0) {
+      return;
+    }
+
+    const replayStep = window.setTimeout(
+      () => {
+        setReplayIndex((current) =>
+          current >= replaySampleCount - 1 ? current : current + 1,
+        );
+      },
+      getReplayDelayMs(replaySession.samples, visibleReplayIndex),
+    );
+
+    return () => {
+      window.clearTimeout(replayStep);
+    };
+  }, [isReplayAdvancing, replaySampleCount, replaySession, visibleReplayIndex]);
+
+  useEffect(() => {
+    if (replaySession === null || replaySampleCount === 0) {
+      onReplayStateChange(null);
+      return;
+    }
+
+    const replaySample = replaySession.samples[visibleReplayIndex] ?? null;
+    if (replaySample === null) {
+      onReplayStateChange(null);
+      return;
+    }
+
+    onReplayStateChange({
+      sessionId: replaySession.session.id,
+      sessionName:
+        replaySample.session.name ??
+        replaySession.session.trackName ??
+        replaySession.session.sourceName ??
+        replaySession.session.game,
+      sampleIndex: visibleReplayIndex,
+      sampleCount: replaySampleCount,
+      isPlaying: isReplayAdvancing,
+      sample: replaySample,
+      traceSeries: buildReplayTraceSeries(
+        replaySession.samples,
+        visibleReplayIndex,
+      ),
+      lapTrace: buildReplayLapTrace(replaySession.samples, visibleReplayIndex),
+    });
+  }, [
+    isReplayAdvancing,
+    onReplayStateChange,
+    replaySampleCount,
+    replaySession,
+    visibleReplayIndex,
   ]);
 
   const sessionSpeedValues =
@@ -118,27 +331,194 @@ export function TimingBoard({
     visibleSession?.session.trackName ??
     selectedSessionSummary?.trackName ??
     "Inspect a recent capture";
-  const detailStatus = visibleSession
-    ? `${visibleSession.samples.length} samples`
-    : hasSelectedSession && isDetailLoading
-      ? "Loading"
-      : sessions.length > 0
-        ? "Select"
-        : "Empty";
+  const detailStatus = isReplaySessionActive
+    ? `${isReplayAdvancing ? "Replay" : "Paused"} ${replayProgressLabel}`
+    : visibleSession
+      ? `${visibleSession.samples.length} samples`
+      : hasSelectedSession && isDetailLoading
+        ? "Loading"
+        : sessions.length > 0
+          ? "Select"
+          : "Empty";
 
   const handleSelectSession = (sessionId: string) => {
+    if (activeReplaySessionId !== null && activeReplaySessionId !== sessionId) {
+      return;
+    }
+
     setSelectedSessionId(sessionId);
     setIsDetailLoading(true);
     setDetailError(null);
+    setReplayIndex((current) =>
+      selectedSessionId === sessionId ? current : 0,
+    );
     setSelectedSession((current) =>
       current?.session.id === sessionId ? current : null,
     );
   };
 
+  const handleStartReplay = async (sessionId: string) => {
+    handleSelectSession(sessionId);
+    setReplayIndex(0);
+    setIsReplayPlaying(true);
+    setRequestedReplaySessionId(sessionId);
+
+    const started = await onStartReplay(sessionId);
+    setRequestedReplaySessionId((current) =>
+      current === sessionId ? null : current,
+    );
+
+    if (!started) {
+      setIsReplayPlaying(false);
+    }
+  };
+
+  const handleStopReplay = async () => {
+    setIsReplayPlaying(false);
+    setRequestedReplaySessionId(null);
+    await onStopReplay();
+  };
+
+  const handleResumeReplay = () => {
+    if (visibleReplaySampleCount === 0) {
+      return;
+    }
+
+    setReplayIndex((current) =>
+      current >= visibleReplaySampleCount - 1 ? 0 : current,
+    );
+    setIsReplayPlaying(true);
+  };
+
+  const handlePauseReplay = () => {
+    setIsReplayPlaying(false);
+  };
+
+  const handleReplayTimelineChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setIsReplayPlaying(false);
+    setReplayIndex(Number(event.target.value));
+  };
+
+  const replayControlsSection =
+    visibleSession === null ? null : (
+      <div className="session-detail-section">
+        <div className="session-detail-heading">
+          <div>
+            <div className="panel-kicker">Replay controls</div>
+            <h3 className="panel-title">Timeline transport</h3>
+          </div>
+          <div className="session-detail-note mono">
+            {requestedReplaySessionId === visibleSession.session.id &&
+            activeReplaySessionId === null
+              ? "Starting"
+              : isReplaySessionActive
+                ? isReplayAdvancing
+                  ? "Replay active"
+                  : "Replay paused"
+                : "Ready"}
+          </div>
+        </div>
+
+        <div className="replay-controls">
+          <div className="replay-controls-row">
+            <div className="status-pill mono">
+              {requestedReplaySessionId === visibleSession.session.id &&
+              activeReplaySessionId === null
+                ? "Starting replay"
+                : isReplaySessionActive
+                  ? isReplayAdvancing
+                    ? "Replay live"
+                    : "Replay paused"
+                  : "Replay ready"}
+            </div>
+
+            <div
+              className="replay-controls-actions"
+              role="group"
+              aria-label="Replay transport controls"
+            >
+              {isReplaySessionActive ? (
+                <button
+                  className="icon-button primary"
+                  type="button"
+                  onClick={
+                    isReplayAdvancing ? handlePauseReplay : handleResumeReplay
+                  }
+                  disabled={replaySampleCount === 0}
+                >
+                  {isReplayAdvancing ? <Pause size={16} /> : <Play size={16} />}
+                  {isReplayAdvancing ? "Pause" : "Resume"}
+                </button>
+              ) : (
+                <button
+                  className="icon-button primary"
+                  type="button"
+                  onClick={() =>
+                    void handleStartReplay(visibleSession.session.id)
+                  }
+                  disabled={isBusy || visibleSession.samples.length === 0}
+                >
+                  <Play size={16} />
+                  Start replay
+                </button>
+              )}
+
+              <button
+                className="icon-button danger"
+                type="button"
+                onClick={() => void handleStopReplay()}
+                disabled={!isReplaySessionActive || isBusy}
+              >
+                <Square size={16} />
+                Stop replay
+              </button>
+            </div>
+          </div>
+
+          <div className="replay-slider-group">
+            <label
+              className="detail-label"
+              htmlFor={`replay-timeline-${visibleSession.session.id}`}
+            >
+              Replay timeline
+            </label>
+            <input
+              id={`replay-timeline-${visibleSession.session.id}`}
+              className="replay-slider"
+              type="range"
+              min={0}
+              max={Math.max(0, visibleSession.samples.length - 1)}
+              value={visibleReplayIndex}
+              onChange={handleReplayTimelineChange}
+              disabled={
+                !isReplaySessionActive || visibleSession.samples.length === 0
+              }
+            />
+            <div className="replay-timeline-meta mono">
+              <span>Sample {replayProgressLabel}</span>
+              <span>
+                {formatTime(visibleReplaySample?.timing.sessionElapsed)}
+              </span>
+              <span>
+                {formatShortTimestamp(visibleReplaySample?.timestamp)}
+              </span>
+            </div>
+            <div className="table-subvalue muted">
+              {isReplaySessionActive
+                ? "Drag to scrub the stored capture. Scrubbing pauses playback until you resume."
+                : "Start replay to drive the dashboard from this stored capture, then scrub through the timeline here."}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+
   const detailBody = (() => {
     if (visibleSession !== null) {
       return (
         <div className="panel-body session-detail-body">
+          {!isReplaySessionActive && replayControlsSection}
+
           <div className="detail-grid">
             <div className="detail-cell">
               <div className="detail-label">Game</div>
@@ -433,7 +813,9 @@ export function TimingBoard({
 
                 {sessions.slice(0, 10).map((session) => {
                   const isActiveReplay = activeReplaySessionId === session.id;
-                  const isSelected = selectedSessionId === session.id;
+                  const isReplayRequested =
+                    requestedReplaySessionId === session.id;
+                  const isSelected = effectiveSelectedSessionId === session.id;
                   const rowClassName = [
                     isActiveReplay ? "table-row-active" : null,
                     isSelected ? "table-row-selected" : null,
@@ -452,8 +834,15 @@ export function TimingBoard({
                           className={`session-select ${isSelected ? "active" : ""}`}
                           type="button"
                           onClick={() => handleSelectSession(session.id)}
+                          disabled={
+                            activeReplaySessionId !== null && !isActiveReplay
+                          }
                           aria-pressed={isSelected}
-                          title="Inspect capture detail"
+                          title={
+                            activeReplaySessionId !== null && !isActiveReplay
+                              ? "Stop the active replay before inspecting another capture"
+                              : "Inspect capture detail"
+                          }
                         >
                           <span className="table-stack">
                             <span>
@@ -479,10 +868,19 @@ export function TimingBoard({
                         <button
                           className={`session-action ${isActiveReplay ? "active" : ""}`}
                           type="button"
-                          onClick={() => onStartReplay(session.id)}
-                          disabled={isBusy || isActiveReplay}
+                          onClick={() => void handleStartReplay(session.id)}
+                          disabled={
+                            isBusy ||
+                            isActiveReplay ||
+                            isReplayRequested ||
+                            (activeReplaySessionId !== null && !isActiveReplay)
+                          }
                         >
-                          {isActiveReplay ? "Replaying" : "Replay"}
+                          {isActiveReplay
+                            ? "Active"
+                            : isReplayRequested
+                              ? "Starting"
+                              : "Replay"}
                         </button>
                       </td>
                     </tr>
@@ -504,6 +902,16 @@ export function TimingBoard({
           {detailBody}
         </aside>
       </div>
+
+      {isReplaySessionActive && replayControlsSection !== null && (
+        <div
+          className="replay-dock"
+          role="complementary"
+          aria-label="Active replay controls"
+        >
+          {replayControlsSection}
+        </div>
+      )}
     </section>
   );
 }

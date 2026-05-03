@@ -23,6 +23,7 @@ import { parseDurationSeconds } from "../utils/telemetryFormat";
 const TRACE_HISTORY_LIMIT = 180;
 const MAX_LAP_TRACE_POINTS = 720;
 const SESSION_REFRESH_INTERVAL_MS = 5000;
+const CONNECTION_RETRY_INTERVAL_MS = 1500;
 
 const EMPTY_LAP_TRACE: CurrentLapTelemetrySeries = {
   sessionId: null,
@@ -330,6 +331,58 @@ export function useTelemetryDashboard() {
       .withUrl(getTelemetryHubUrl())
       .withAutomaticReconnect()
       .build();
+    let isDisposed = false;
+    let connectionRetryTimeout: number | null = null;
+
+    const clearConnectionRetryTimeout = () => {
+      if (connectionRetryTimeout !== null) {
+        window.clearTimeout(connectionRetryTimeout);
+        connectionRetryTimeout = null;
+      }
+    };
+
+    const scheduleConnectionStart = (delayMs: number) => {
+      if (isDisposed || connectionRetryTimeout !== null) {
+        return;
+      }
+
+      connectionRetryTimeout = window.setTimeout(() => {
+        connectionRetryTimeout = null;
+        void startConnection();
+      }, delayMs);
+    };
+
+    const startConnection = async () => {
+      if (
+        isDisposed ||
+        connection.state !== signalR.HubConnectionState.Disconnected
+      ) {
+        return;
+      }
+
+      try {
+        setConnectionState("connecting");
+        await connection.start();
+
+        if (isDisposed) {
+          return;
+        }
+
+        setConnectionState("connected");
+        setApiAvailability("online");
+        await syncDashboardEffect({ silent: true });
+      } catch (startError: unknown) {
+        if (isDisposed) {
+          return;
+        }
+
+        const nextAlert = createDashboardAlert("signalr", startError);
+        setConnectionState("disconnected");
+        setApiAvailability(nextAlert.apiAvailability);
+        setError(nextAlert.alert);
+        scheduleConnectionStart(CONNECTION_RETRY_INTERVAL_MS);
+      }
+    };
 
     connection.on("collectorStatus", (status: CollectorStatus) => {
       handleCollectorStatus(status);
@@ -341,25 +394,27 @@ export function useTelemetryDashboard() {
 
     connection.onreconnecting(() => setConnectionState("reconnecting"));
     connection.onreconnected(() => {
+      clearConnectionRetryTimeout();
       setConnectionState("connected");
       setApiAvailability("online");
       void syncDashboardEffect({ silent: true });
     });
-    connection.onclose(() => setConnectionState("disconnected"));
+    connection.onclose(() => {
+      if (isDisposed) {
+        return;
+      }
 
-    connection
-      .start()
-      .then(() => setConnectionState("connected"))
-      .catch((startError: unknown) => {
-        const nextAlert = createDashboardAlert("signalr", startError);
-        setConnectionState("disconnected");
-        setApiAvailability(nextAlert.apiAvailability);
-        setError(nextAlert.alert);
-      });
+      setConnectionState("disconnected");
+      scheduleConnectionStart(CONNECTION_RETRY_INTERVAL_MS);
+    });
+
+    scheduleConnectionStart(0);
 
     return () => {
+      isDisposed = true;
       window.clearTimeout(initialFetch);
       window.clearInterval(sessionRefresh);
+      clearConnectionRetryTimeout();
       void connection.stop();
     };
   }, []);
@@ -431,10 +486,12 @@ export function useTelemetryDashboard() {
     try {
       setCollectorStatus(await startReplayRequest(sessionId));
       setApiAvailability("online");
+      return true;
     } catch (replayError) {
       const nextAlert = createDashboardAlert("startReplay", replayError);
       setApiAvailability(nextAlert.apiAvailability);
       setError(nextAlert.alert);
+      return false;
     } finally {
       setIsBusy(false);
     }
