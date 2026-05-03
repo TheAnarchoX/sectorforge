@@ -35,6 +35,7 @@ Useful commands:
 ```powershell
 .\tools\verify.ps1
 .\tests\coverage\Invoke-Coverage.ps1
+npx --yes pnpm@10.33.2 --dir .\src\SectorForge.Web test:coverage
 dotnet test .\src\SectorForge.slnx
 .\tools\format.ps1
 .\tools\clean.ps1
@@ -43,12 +44,13 @@ dotnet test .\src\SectorForge.slnx
 
 `tools\verify.ps1` runs the full local quality gate: backend tests, .NET format verification, frontend lint, and frontend build.
 `tests\coverage\Invoke-Coverage.ps1` generates merged Cobertura and HTML coverage reports under `artifacts\coverage\report` and enforces the baseline thresholds from `tests\coverage\coverage-thresholds.json`.
+`npx --yes pnpm@10.33.2 --dir .\src\SectorForge.Web test:coverage` runs the Vitest + React Testing Library frontend suite, writes HTML/Cobertura output to `artifacts\coverage\frontend`, and enforces the 90% line-coverage gate. The current frontend baseline is 92.31% line coverage.
 
 SQLite raw sample storage keeps the newest 1,800 sample blobs per session by default so long fake telemetry runs do not grow without bound. Adjust `Storage:RetainedSampleBlobLimit` in `src/SectorForge.Api/appsettings.json` if you want a shorter or longer local trace.
 
 ## Continuous Integration
 
-Pull requests and pushes to `main` run the baseline checks on Windows through GitHub Actions: merged .NET coverage with threshold enforcement, .NET format verification, frontend lint, and frontend build. The workflow uploads the HTML/Cobertura coverage report as an artifact and caches NuGet and pnpm dependencies to keep repeat runs quick.
+Pull requests and pushes to `main` run the baseline checks on Windows through GitHub Actions: merged .NET coverage with threshold enforcement, frontend Vitest coverage with a 90% line gate, .NET format verification, frontend lint, and frontend build. The workflow uploads both backend and frontend HTML/Cobertura coverage reports as an artifact and caches NuGet and pnpm dependencies to keep repeat runs quick.
 
 ## VS Code
 

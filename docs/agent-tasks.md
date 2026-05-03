@@ -274,10 +274,11 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-037: Frontend Testing Baseline with Coverage Reporting, CI Integration, and 90%+ Coverage Target
 
-- Status: `ready`
+- Status: `done`
 - Type: testing
 - Goal: Add a frontend testing baseline with code coverage reporting and a target of 90%+ coverage. This will help ensure the frontend remains maintainable and that new features are well-tested.
 - Suggested files: `src/SectorForge.Web/src/*`, CI workflow updates, docs
+- Notes: Added a Vitest + React Testing Library frontend baseline on 2026-05-03. Frontend coverage now writes HTML/Cobertura reports under `artifacts/coverage/frontend`, CI runs `pnpm --dir .\src\SectorForge.Web test:coverage`, and the current baseline is 92.31% line coverage.
 - Acceptance criteria:
   - Frontend tests are added using a suitable testing framework (e.g., Jest, React Testing Library).
   - Code coverage reports are generated for the frontend and can be viewed locally.

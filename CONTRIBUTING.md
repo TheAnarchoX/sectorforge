@@ -25,9 +25,11 @@ When you need the current coverage baseline or are touching low-covered runtime 
 
 ```powershell
 .\tests\coverage\Invoke-Coverage.ps1
+npx --yes pnpm@10.33.2 --dir .\src\SectorForge.Web test:coverage
 ```
 
 The coverage script generates merged Cobertura and HTML reports under `artifacts\coverage\report` and enforces the thresholds in `tests\coverage\coverage-thresholds.json`.
+The frontend coverage command runs Vitest + React Testing Library, writes HTML/Cobertura output to `artifacts\coverage\frontend`, and enforces the 90% frontend line-coverage gate. The current baseline is 92.31% line coverage.
 
 ## Agent Task Backlog
 

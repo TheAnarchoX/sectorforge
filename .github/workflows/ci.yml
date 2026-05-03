@@ -64,7 +64,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: artifacts/coverage/report
+          path: |
+            artifacts/coverage/report
+            artifacts/coverage/frontend
           if-no-files-found: error
 
       - name: Verify .NET formatting
@@ -72,6 +74,9 @@ jobs:
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Test frontend with coverage
+        run: pnpm --dir .\src\SectorForge.Web test:coverage
 
       - name: Lint frontend
         run: pnpm --dir .\src\SectorForge.Web lint
