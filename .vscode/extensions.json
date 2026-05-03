@@ -6,7 +6,6 @@
     "dbaeumer.vscode-eslint",
     "bradlc.vscode-tailwindcss",
     "editorconfig.editorconfig",
-    "github.copilot",
     "github.copilot-chat"
   ]
 }
