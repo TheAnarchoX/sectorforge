@@ -49,7 +49,12 @@ function DashboardHeaderImpl({
   return (
     <header className="topbar" aria-label="Race control header">
       <div className="topbar-brand">
-        <img className="brand-mark" src="/favicon.svg" alt="" aria-hidden="true" />
+        <img
+          className="brand-mark"
+          src="/favicon.svg"
+          alt=""
+          aria-hidden="true"
+        />
         <div className="brand-stack">
           <img
             className="brand-wordmark"
@@ -57,7 +62,9 @@ function DashboardHeaderImpl({
             alt="SectorForge"
             draggable={false}
           />
-          <span className="brand-subtitle">LOCAL-FIRST SIM TELEMETRY PITWALL</span>
+          <span className="brand-subtitle">
+            LOCAL-FIRST SIM TELEMETRY PITWALL
+          </span>
         </div>
       </div>
 

@@ -368,10 +368,11 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-041: Add UDP Listener Abstraction
 
-- Status: `ready`
+- Status: `done`
 - Type: infrastructure
 - Goal: Create reusable UDP receive plumbing for F1 and future UDP adapters.
 - Suggested files: `SectorForge.Core`, `SectorForge.Collector`, tests
+- Notes: Added `IUdpTelemetryListener`, `IUdpTelemetryListenerFactory`, `UdpTelemetryListenerOptions`, and `UdpTelemetryDatagram` in `SectorForge.Core/Telemetry/Udp/` plus a `UdpClient`-backed `UdpTelemetryListener` and factory in `SectorForge.Collector/Adapters/Udp/` on 2026-05-03. Listener exposes the bound `LocalEndPoint` (so tests can use ephemeral port 0), honours `CancellationToken` to stop cleanly, and allows bind/socket exceptions to propagate so the collector can record them in `LastError`. No game-specific parsing lives in the listener; F1 25 wiring is deferred to SF-043.
 - Acceptance criteria:
   - UDP listener has configurable IP/port and cancellation support.
   - Listener can be tested without requiring a real game.
