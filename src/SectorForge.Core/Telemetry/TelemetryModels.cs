@@ -81,6 +81,12 @@ public enum ResultStatus
     NotClassified
 }
 
+public enum LapChannelValueKind
+{
+    Number,
+    Boolean
+}
+
 public sealed record TelemetrySource(
     string AdapterId,
     GameId Game,
@@ -313,6 +319,42 @@ public sealed record LapSummary(
     TimeSpan? LapTime,
     TimeSpan? BestLapTime,
     DateTimeOffset UpdatedAt);
+
+public sealed record TelemetryLapSamples(
+    TelemetrySessionSummary Session,
+    LapSummary? Lap,
+    IReadOnlyList<TelemetrySample> Samples);
+
+public sealed record LapChannelManifestEntry(
+    string Key,
+    string Label,
+    LapChannelValueKind ValueKind,
+    string? Unit = null);
+
+public sealed record LapChannelData(
+    IReadOnlyList<double?> Time,
+    IReadOnlyList<double?> SpeedKph,
+    IReadOnlyList<double?> Rpm,
+    IReadOnlyList<double?> Throttle,
+    IReadOnlyList<double?> Brake,
+    IReadOnlyList<double?> Steering,
+    IReadOnlyList<double?>? LapDistance = null,
+    IReadOnlyList<double?>? LateralG = null,
+    IReadOnlyList<double?>? LongitudinalG = null,
+    IReadOnlyList<bool?>? DrsActive = null,
+    IReadOnlyList<double?>? ErsStoreJoules = null);
+
+public sealed record LapChannelsResponse(
+    Guid SessionId,
+    int LapNumber,
+    TimeSpan? LapTime,
+    TimeSpan? BestLapTime,
+    TimeSpan? Sector1Time,
+    TimeSpan? Sector2Time,
+    TimeSpan? Sector3Time,
+    int SampleCount,
+    IReadOnlyList<LapChannelManifestEntry> Manifest,
+    LapChannelData Channels);
 
 public sealed record TelemetrySessionDetails(
     TelemetrySessionSummary Session,

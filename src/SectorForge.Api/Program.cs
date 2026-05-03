@@ -50,6 +50,7 @@ builder.Services.AddSingleton<ITelemetrySessionStore>(services =>
         builder.Configuration.GetConnectionString("SectorForge") ?? SqliteTelemetrySessionStore.CreateDefaultConnectionString(),
         storage.RetainedSampleBlobLimit);
 });
+builder.Services.AddSingleton<LapChannelService>();
 builder.Services.AddSingleton<ILiveTelemetryPublisher, SignalRTelemetryPublisher>();
 builder.Services.AddSingleton<IUdpTelemetryListenerFactory, UdpTelemetryListenerFactory>();
 builder.Services.AddSingleton<F125PacketReader>();
@@ -99,6 +100,31 @@ app.MapGet("/api/sessions/{id:guid}", async (Guid id, ITelemetrySessionStore sto
 {
     var session = await store.GetSessionAsync(id, cancellationToken);
     return session is null ? Results.NotFound() : Results.Ok(session);
+});
+
+app.MapGet("/api/sessions/{sessionId:guid}/laps/{lapNumber:int}/channels", async (
+    Guid sessionId,
+    int lapNumber,
+    LapChannelService lapChannels,
+    CancellationToken cancellationToken) =>
+{
+    if (lapNumber <= 0)
+    {
+        return Results.BadRequest(new { error = "Lap number must be greater than zero." });
+    }
+
+    var result = await lapChannels.GetLapChannelsAsync(sessionId, lapNumber, cancellationToken);
+    return result.Status switch
+    {
+        LapChannelLookupStatus.Found => Results.Ok(result.Response),
+        LapChannelLookupStatus.SessionNotFound => Results.NotFound(new { error = "Session was not found." }),
+        LapChannelLookupStatus.LapNotFound => Results.NotFound(new { error = "Lap was not found for this session." }),
+        LapChannelLookupStatus.LapNotRetained => Results.Problem(
+            title: "Lap sample blobs are no longer retained.",
+            detail: "The lap summary still exists, but all raw sample blobs for this lap have been pruned by the retained sample blob limit.",
+            statusCode: StatusCodes.Status410Gone),
+        _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError)
+    };
 });
 
 app.MapDelete("/api/sessions/{id:guid}", async (

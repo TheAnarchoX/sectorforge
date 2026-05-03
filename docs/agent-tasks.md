@@ -325,7 +325,7 @@ This backlog is written for coding agents and human contributors. Each task is i
   - README has a "Setup" section with clear, step-by-step instructions for local development.
   - Instructions cover prerequisites (e.g., .NET SDK, Node.js), installation steps, and how to start the dev environment.
   - Setup instructions are tested to ensure they work as written.
-  
+
 ### SFI-003: Add Architecture Overview To README
 
 - Status: `done`
@@ -518,9 +518,10 @@ Execution Phase 1: compare foundations.
 
 ### SF-050: Add Lap Channel Retrieval API
 
-- Status: `ready`
+- Status: `done`
 - Type: backend feature
 - Goal: Expose a per-lap channel endpoint that returns aligned arrays (distance, time, speed, rpm, throttle, brake, steering) for one stored lap so the frontend can overlay laps without re-streaming through replay.
+- Notes: Completed on 2026-05-03. Added the lap channel endpoint, retained lap-sample lookup from SQLite blobs, stable channel manifest entries for base compare channels plus available SF-049 optional channels, `410 Gone` handling for pruned lap blobs, API/store tests, and architecture documentation.
 - Suggested files: `src/SectorForge.Api/Program.cs`, `src/SectorForge.Api/Services/*`, `src/SectorForge.Infrastructure/Storage/*`, `src/SectorForge.Core/Telemetry/*`, `tests/SectorForge.Api.Tests/*`, `tests/SectorForge.Core.Tests/*`
 - Acceptance criteria:
   - `GET /api/sessions/{sessionId}/laps/{lapNumber}/channels` returns aligned arrays plus lap metadata (number, lap time, sector splits) as JSON.
@@ -532,9 +533,10 @@ Execution Phase 1: compare foundations.
 
 ### SF-059: Add Compare Workspace Shell And URL Entry
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend feature
 - Goal: Turn the existing Compare workspace placeholder into the stable entry point for comparison work, including workspace rail navigation and a URL/deep-link path such as `/compare`.
+- Notes: Completed on 2026-05-03. Added minimal workspace URL sync for `/compare` and the existing workspace rail, extracted a reusable `CompareWorkspace` shell with empty/loading/error frames, and covered direct-link, rail navigation, and frame-state behavior with frontend tests.
 - Suggested files: `src/SectorForge.Web/src/App.tsx`, `src/SectorForge.Web/src/components/dashboard/CompareWorkspace.tsx`
 - Acceptance criteria:
   - Compare workspace is registered through the frontend workspace/routing system and can be accessed via a URL (e.g. `/compare`), adding minimal URL sync if the app still uses internal workspace state.
@@ -747,13 +749,114 @@ Execution Phase 5: sharing, notes, and external analysis.
   - Endpoint includes error handling for unknown sessions/laps and unsupported formats.
   - Tests cover valid export requests, error cases, and format correctness.
 
+## Intermezzo 2: Tablet Support for Driver View over Local Network
+
+Note: This intermezzo keeps the local-network driver-display work near the compare roadmap without renumbering later priorities. The goal is a no-port, no-IP tablet flow for the existing Driver View: the main dashboard can advertise a LAN driver URL or QR code, the tablet opens a dedicated driver route, and the frontend reconnects cleanly while preserving the last known telemetry state. The desktop shell context that can host and support this flow belongs under Priority 7, while broader installer, signing, and release packaging remain under Priority 8.
+
+Execution Phase 1: architecture and app entry points.
+
+### SFI2-001: Define LAN Driver View Architecture
+
+- Status: `needs-research`
+- Type: product architecture
+- Goal: Decide the Windows-first, local-first architecture for tablet driver view pairing, API endpoint discovery, reconnect behavior, and manual fallback before implementation begins.
+- Suggested files: `docs/architecture.md`, `docs/agent-tasks.md`, `README.md`
+- Acceptance criteria:
+  - Architecture notes describe how the local API, SignalR hub, dashboard, and tablet browser cooperate without requiring Docker, WSL, admin rights, or cloud services.
+  - Discovery and pairing options are evaluated for normal home LAN constraints, including QR deep links, advertised hostnames/IPs, firewall limitations, and manual fallback.
+  - The chosen design preserves the .NET API/collector as the source of truth and keeps the React driver view as a client of local APIs.
+  - Follow-up implementation tasks are updated if research changes their scope or ordering.
+
+### SFI2-002: Add Driver View URL Entry And Tablet Layout
+
+- Status: `ready`
+- Type: frontend feature
+- Goal: Make the existing driver view directly accessible through a stable URL that is suitable for tablet browsers and future desktop hosting.
+- Suggested files: `src/SectorForge.Web/src/App.tsx`, `src/SectorForge.Web/src/components/dashboard/DriverView.tsx`, `src/SectorForge.Web/src/hooks/*`, `src/SectorForge.Web/src/types/*`
+- Acceptance criteria:
+  - A direct route or URL state such as `/driver` opens the simplified driver view without requiring users to navigate through the full dashboard first.
+  - The driver view layout remains readable and touch-friendly on common tablet viewport sizes in portrait and landscape.
+  - Live, replay, stopped-collector, API-offline, and no-telemetry states render clear status indicators without exposing stack traces.
+  - Existing full dashboard, Sessions, Replay, and Compare workspace state is not disrupted by opening or leaving the driver route.
+  - Frontend lint and build pass.
+
+### SFI2-003: Add Local Network Pairing Manifest API
+
+- Status: `ready`
+- Type: backend feature
+- Goal: Expose a small local pairing manifest that lets the dashboard and tablet driver view agree on the API base URL, SignalR hub URL, and driver-view launch URL.
+- Suggested files: `src/SectorForge.Api/Program.cs`, `src/SectorForge.Api/Services/*`, `src/SectorForge.Core/Telemetry/Configuration/*`, `tests/SectorForge.Api.Tests/*`, `docs/architecture.md`
+- Acceptance criteria:
+  - API exposes a local-only endpoint that returns connection metadata for pairing, including API base URL, telemetry hub path, driver-view path, display name, generated-at timestamp, and any configured advertised host value.
+  - Endpoint supports a Windows-friendly configured override for the advertised LAN host/IP when automatic detection is ambiguous.
+  - Response does not include secrets, telemetry captures, local file paths, or unnecessary machine details.
+  - Tests cover default localhost metadata, configured advertised host metadata, and invalid or unavailable advertised host handling where practical.
+  - Architecture docs describe the endpoint contract and its local-network limitations.
+
+Execution Phase 2: pairing and resilient tablet connection.
+
+### SFI2-004: Add Dashboard QR Pairing Panel
+
+- Status: `ready`
+- Type: frontend feature
+- Goal: Let users open a pairing panel in the main dashboard that shows a QR code and copyable link for launching the tablet driver view.
+- Suggested files: `src/SectorForge.Web/src/components/dashboard/*`, `src/SectorForge.Web/src/api/*`, `src/SectorForge.Web/src/App.tsx`, `src/SectorForge.Web/package.json`
+- Acceptance criteria:
+  - Dashboard exposes a clear driver-view pairing action from the live/driver workspace area.
+  - Pairing panel renders a QR code for the driver-view URL using the pairing manifest from SFI2-003.
+  - Panel also provides a copyable URL and concise connection status when the app cannot determine a LAN-reachable address.
+  - QR and link generation are null-guarded so the dashboard remains usable if the API is offline.
+  - Frontend lint and build pass.
+
+### SFI2-005: Add Tablet Connection Bootstrap And Manual Fallback
+
+- Status: `ready`
+- Type: frontend resilience
+- Goal: Make the tablet driver view connect from QR launch data when available, remember the last working API endpoint, and offer manual endpoint entry when automatic pairing fails.
+- Suggested files: `src/SectorForge.Web/src/hooks/*`, `src/SectorForge.Web/src/api/*`, `src/SectorForge.Web/src/components/dashboard/DriverView.tsx`, `src/SectorForge.Web/src/types/*`
+- Acceptance criteria:
+  - Driver view can bootstrap its API/SignalR base URL from the QR/deep-link payload or pairing manifest.
+  - Last known good endpoint is persisted locally and reused on reload when it is still reachable.
+  - Manual endpoint entry validates basic URL shape, tests API reachability, and stores successful values without requiring a page rebuild.
+  - Connection errors guide the user to check same-network connectivity, collector/API running state, and manual address entry.
+  - Frontend tests cover bootstrap precedence, cached endpoint reuse, and manual fallback behavior where practical.
+  - Frontend lint and build pass.
+
+### SFI2-006: Add Driver View Offline Cache And Reconnect UX
+
+- Status: `ready`
+- Type: frontend resilience
+- Goal: Keep the tablet driver view useful during temporary network interruptions by showing the last known good telemetry state while reconnecting.
+- Suggested files: `src/SectorForge.Web/src/hooks/*`, `src/SectorForge.Web/src/components/dashboard/DriverView.tsx`, `src/SectorForge.Web/src/utils/*`, `src/SectorForge.Web/src/types/*`
+- Acceptance criteria:
+  - Driver view caches the latest valid telemetry/status snapshot locally in memory and, where appropriate, in browser storage.
+  - When SignalR or API connectivity drops, the view marks data as stale while continuing to show the last known values.
+  - Reconnect attempts use bounded retry/backoff and recover automatically when the collector/API becomes available again.
+  - UI clearly distinguishes stale telemetry, stopped collector, API offline, and no telemetry received states.
+  - Frontend tests cover stale-state transitions and reconnect recovery where practical.
+  - Frontend lint and build pass.
+
+Execution Phase 3: validation and support docs.
+
+### SFI2-007: Document And Validate Tablet Driver View Flow
+
+- Status: `ready`
+- Type: documentation and validation
+- Goal: Document the local-network tablet driver view workflow and add lightweight validation steps so contributors can test it without specialized hardware.
+- Suggested files: `README.md`, `docs/architecture.md`, `docs/agent-tasks.md`, `tools/*`, `src/SectorForge.Web/src/**/*.test.*`
+- Acceptance criteria:
+  - README or architecture docs explain the supported local-network flow: start SectorForge, open pairing, scan QR, connect tablet, recover from disconnects, and use manual fallback.
+  - Docs call out expected limitations around home-router isolation, Windows firewall prompts, localhost versus LAN addresses, HTTPS/browser restrictions, and retained last-known state.
+  - Validation guidance includes a same-machine browser check and a LAN-device check without requiring Docker, WSL, admin rights, or a real game.
+  - Any new tests or scripts added by the intermezzo are referenced from the docs.
+
 ## Priority 6: LMU Plugin Adapter
 
 Note: Keep LMU first after the compare slice because it is the next real-game path with clear growth value and it can build on the existing adapter, configuration, storage, and dashboard foundations. Treat it as the next proving ground for production adapter ergonomics: explicit enablement, resilient parsing, useful status errors, and documentation that helps users configure the game without copying vendor protocol material.
 
 ## Priority 7: WebView2 Desktop Packaging
 
-Note: Move the desktop shell up so non-developer users can run SectorForge without understanding Vite, ports, or PowerShell. This is a growth and support win: a WebView2 host can preserve the local-first architecture while giving users a familiar Windows app surface, room for startup behavior, local settings, and cleaner operational diagnostics.
+Note: Move the desktop shell up so non-developer users can run SectorForge without understanding Vite, ports, or PowerShell. This is a growth and support win: a WebView2 host can preserve the local-first architecture while giving users a familiar Windows app surface, room for startup behavior, local settings, and cleaner operational diagnostics. This is also where the local driver-pairing host belongs: the shell should open the existing dashboard or driver pairing route, surface API/web startup and connectivity status clearly, use the same React app rather than a desktop-only telemetry model, and provide a natural home for QR pairing once the Intermezzo 2 LAN flow exists. Release installers, signing, auto-update, and GitHub Releases packaging remain under Priority 8.
 
 ## Priority 8: Release Packaging, Publishing, and Versioning
 

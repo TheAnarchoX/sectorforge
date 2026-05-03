@@ -33,6 +33,8 @@ public interface ITelemetrySessionStore
 
     Task<TelemetrySessionDetails?> GetSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
 
+    Task<TelemetryLapSamples?> GetLapSamplesAsync(Guid sessionId, int lapNumber, CancellationToken cancellationToken = default);
+
     Task<bool> DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
 }
 

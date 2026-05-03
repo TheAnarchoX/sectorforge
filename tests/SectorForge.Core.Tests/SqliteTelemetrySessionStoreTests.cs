@@ -150,6 +150,36 @@ public sealed class SqliteTelemetrySessionStoreTests
     }
 
     [Fact]
+    public async Task GetLapSamplesDistinguishesUnknownLapAndPrunedLap()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), "SectorForge.Tests", $"{Guid.NewGuid():N}.db");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath }.ToString();
+        var store = new SqliteTelemetrySessionStore(connectionString, retainedSampleBlobLimit: 2);
+        var adapter = new FakeTelemetryAdapter();
+        var sessionId = Guid.NewGuid();
+
+        await store.SaveSampleAsync(adapter.CreateSample(TimeSpan.FromSeconds(5), 1, sessionId));
+        await store.SaveSampleAsync(adapter.CreateSample(TimeSpan.FromSeconds(95), 2, sessionId));
+        await store.SaveSampleAsync(adapter.CreateSample(TimeSpan.FromSeconds(185), 3, sessionId));
+
+        var unknownSession = await store.GetLapSamplesAsync(Guid.NewGuid(), 1);
+        var unknownLap = await store.GetLapSamplesAsync(sessionId, 99);
+        var prunedLap = await store.GetLapSamplesAsync(sessionId, 1);
+        var retainedLap = await store.GetLapSamplesAsync(sessionId, 2);
+
+        Assert.Null(unknownSession);
+        Assert.NotNull(unknownLap);
+        Assert.Null(unknownLap.Lap);
+        Assert.Empty(unknownLap.Samples);
+        Assert.NotNull(prunedLap);
+        Assert.NotNull(prunedLap.Lap);
+        Assert.Empty(prunedLap.Samples);
+        Assert.NotNull(retainedLap);
+        Assert.NotNull(retainedLap.Lap);
+        Assert.Equal([2L], retainedLap.Samples.Select(sample => sample.Sequence).ToArray());
+    }
+
+    [Fact]
     public async Task DeleteSessionRemovesSummaryAndBlobs()
     {
         var databasePath = Path.Combine(Path.GetTempPath(), "SectorForge.Tests", $"{Guid.NewGuid():N}.db");

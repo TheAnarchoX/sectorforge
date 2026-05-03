@@ -102,6 +102,11 @@ internal sealed class EmptyTelemetrySessionStore : ITelemetrySessionStore
         return Task.FromResult<TelemetrySessionDetails?>(null);
     }
 
+    public Task<TelemetryLapSamples?> GetLapSamplesAsync(Guid sessionId, int lapNumber, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<TelemetryLapSamples?>(null);
+    }
+
     public Task<bool> DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         return Task.FromResult(false);

@@ -1,5 +1,6 @@
-import { useCallback, useState } from "react";
-import { GitCompareArrows, Plug } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Plug } from "lucide-react";
+import { CompareWorkspace } from "./components/dashboard/CompareWorkspace";
 import { DashboardHeader } from "./components/dashboard/DashboardHeader";
 import {
   ErrorBanner,
@@ -21,8 +22,59 @@ import { useTelemetryDashboard } from "./hooks/useTelemetryDashboard";
 import type { DashboardReplayState, TelemetrySource } from "./types/telemetry";
 import "./App.css";
 
+const WORKSPACE_ROUTES: Record<Workspace, string> = {
+  live: "/",
+  driver: "/driver",
+  sessions: "/sessions",
+  compare: "/compare",
+  adapters: "/adapters",
+};
+
+function normalizePathname(pathname: string) {
+  const normalized = pathname.replace(/\/+$/, "");
+  return normalized === "" ? "/" : normalized;
+}
+
+function workspaceFromPathname(pathname: string): Workspace {
+  switch (normalizePathname(pathname)) {
+    case "/driver":
+      return "driver";
+    case "/sessions":
+      return "sessions";
+    case "/compare":
+      return "compare";
+    case "/adapters":
+      return "adapters";
+    default:
+      return "live";
+  }
+}
+
+function readWorkspaceFromLocation(): Workspace {
+  if (typeof window === "undefined") {
+    return "live";
+  }
+
+  return workspaceFromPathname(window.location.pathname);
+}
+
+function pushWorkspaceRoute(nextWorkspace: Workspace) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const nextPathname = WORKSPACE_ROUTES[nextWorkspace];
+  if (normalizePathname(window.location.pathname) === nextPathname) {
+    return;
+  }
+
+  window.history.pushState({ workspace: nextWorkspace }, "", nextPathname);
+}
+
 function App() {
-  const [workspace, setWorkspace] = useState<Workspace>("live");
+  const [workspace, setWorkspace] = useState<Workspace>(() =>
+    readWorkspaceFromLocation(),
+  );
   const [replayState, setReplayState] = useState<DashboardReplayState | null>(
     null,
   );
@@ -114,6 +166,26 @@ function App() {
   const handleSessionDeleted = useCallback(() => {
     void refreshSessions();
   }, [refreshSessions]);
+  const handleWorkspaceSelect = useCallback((nextWorkspace: Workspace) => {
+    setWorkspace(nextWorkspace);
+    pushWorkspaceRoute(nextWorkspace);
+  }, []);
+  const handleOpenSessions = useCallback(() => {
+    handleWorkspaceSelect("sessions");
+  }, [handleWorkspaceSelect]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const handlePopState = () => {
+      setWorkspace(readWorkspaceFromLocation());
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   const liveWorkspace = (
     <section className="pitwall-console" aria-label="Pitwall console">
@@ -153,7 +225,7 @@ function App() {
     >
       <WorkspaceRail
         active={workspace}
-        onSelect={setWorkspace}
+        onSelect={handleWorkspaceSelect}
         isReplayRunning={isReplayRunning}
       />
 
@@ -207,14 +279,7 @@ function App() {
         )}
 
         {workspace === "compare" && (
-          <WorkspacePlaceholder
-            kicker="Compare"
-            title="Lap overlays — coming soon"
-            body="Pin two or more laps from the Sessions workspace to compare deltas, traces, and sector splits side-by-side. Pick a session first."
-            icon={<GitCompareArrows size={20} />}
-            actionLabel="Open Sessions"
-            onAction={() => setWorkspace("sessions")}
-          />
+          <CompareWorkspace onOpenSessions={handleOpenSessions} />
         )}
 
         {workspace === "adapters" && (
@@ -254,44 +319,6 @@ function App() {
         )}
       </div>
     </main>
-  );
-}
-
-type WorkspacePlaceholderProps = {
-  kicker: string;
-  title: string;
-  body: string;
-  icon: React.ReactNode;
-  actionLabel?: string;
-  onAction?: () => void;
-};
-
-function WorkspacePlaceholder({
-  kicker,
-  title,
-  body,
-  icon,
-  actionLabel,
-  onAction,
-}: WorkspacePlaceholderProps) {
-  return (
-    <section className="workspace-empty" aria-label={title}>
-      <div className="workspace-empty-icon" aria-hidden="true">
-        {icon}
-      </div>
-      <span className="workspace-empty-kicker">{kicker}</span>
-      <h2 className="workspace-empty-title">{title}</h2>
-      <p className="workspace-empty-body">{body}</p>
-      {actionLabel && onAction && (
-        <button
-          type="button"
-          className="icon-button primary"
-          onClick={onAction}
-        >
-          {actionLabel}
-        </button>
-      )}
-    </section>
   );
 }
 

@@ -47,6 +47,12 @@ The MVP stores:
 
 This is intentionally simple. The `ITelemetrySessionStore` abstraction leaves room for batching, chunk files, DuckDB, Parquet export, or a dedicated time-series layout later.
 
+## Lap Channel API
+
+`GET /api/sessions/{sessionId}/laps/{lapNumber}/channels` returns one stored lap as aligned arrays for compare overlays. The response includes lap metadata (`sessionId`, `lapNumber`, `lapTime`, `bestLapTime`, `sector1Time`, `sector2Time`, `sector3Time`, `sampleCount`), a stable `manifest`, and `channels` arrays for `time`, `speedKph`, `rpm`, `throttle`, `brake`, and `steering`. When retained samples contain the values, the manifest and channels also include `lapDistance`, `lateralG`, `longitudinalG`, `drsActive`, and `ersStoreJoules`.
+
+The endpoint reads from retained `telemetry_sample_blobs`, not replay output. Unknown sessions and unknown laps return `404`. If a lap summary still exists but all raw blobs for that lap were pruned by `Storage:RetainedSampleBlobLimit`, the endpoint returns `410 Gone` with a clear problem response so the UI can explain that the lap is no longer retained for channel comparison.
+
 ## Development Defaults
 
 - API: `http://localhost:5221`

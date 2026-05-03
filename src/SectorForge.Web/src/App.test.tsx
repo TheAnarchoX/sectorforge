@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CollectorStatus } from "./types/telemetry";
@@ -76,6 +76,7 @@ function createDashboardState(
 
 describe("App", () => {
   beforeEach(() => {
+    window.history.replaceState(null, "", "/");
     dashboardHookMock.current = createDashboardState();
     memoryMonitorMock.current = null;
   });
@@ -105,7 +106,8 @@ describe("App", () => {
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /compare/i }));
-    expect(screen.getByText(/Lap overlays/i)).toBeInTheDocument();
+    expect(screen.getByText("No comparison set loaded")).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/compare");
 
     await user.click(screen.getByRole("button", { name: /adapters/i }));
     expect(screen.getByTestId("adapter-row-fake")).toBeInTheDocument();
@@ -153,6 +155,38 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: /compare/i }));
     await user.click(screen.getByRole("button", { name: "Open Sessions" }));
     expect(screen.getByText("Stored sessions")).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/sessions");
+  });
+
+  it("opens Compare from the URL and follows browser workspace navigation", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/compare");
+
+    render(<App />);
+
+    expect(screen.getByText("No comparison set loaded")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /compare/i })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+
+    const workspaceRail = screen.getByRole("navigation", {
+      name: "Workspaces",
+    });
+    await user.click(
+      within(workspaceRail).getByRole("button", { name: /sessions/i }),
+    );
+    expect(window.location.pathname).toBe("/sessions");
+    expect(screen.getByText("Stored sessions")).toBeInTheDocument();
+
+    act(() => {
+      window.history.pushState(null, "", "/driver");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "Awaiting telemetry" }),
+    ).toBeInTheDocument();
   });
 
   it("renders development memory warnings in the shared notice area", () => {

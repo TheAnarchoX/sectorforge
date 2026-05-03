@@ -140,6 +140,29 @@ public sealed class SqliteTelemetrySessionStore : ITelemetrySessionStore
         return new TelemetrySessionDetails(session, laps, samples);
     }
 
+    public async Task<TelemetryLapSamples?> GetLapSamplesAsync(Guid sessionId, int lapNumber, CancellationToken cancellationToken = default)
+    {
+        await EnsureDatabaseAsync(cancellationToken);
+
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        var session = await GetSessionSummaryAsync(connection, sessionId, cancellationToken);
+        if (session is null)
+        {
+            return null;
+        }
+
+        var lap = await GetLapSummaryAsync(connection, sessionId, lapNumber, cancellationToken);
+        if (lap is null)
+        {
+            return new TelemetryLapSamples(session, Lap: null, Samples: []);
+        }
+
+        var samples = await GetStoredLapSamplesAsync(connection, sessionId, lapNumber, cancellationToken);
+        return new TelemetryLapSamples(session, lap, samples);
+    }
+
     public async Task<bool> DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         await EnsureDatabaseAsync(cancellationToken);
@@ -402,15 +425,58 @@ public sealed class SqliteTelemetrySessionStore : ITelemetrySessionStore
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            laps.Add(new LapSummary(
-                SessionId: Guid.Parse(reader.GetString(0)),
-                LapNumber: reader.GetInt32(1),
-                LapTime: reader.IsDBNull(2) ? null : TimeSpan.FromTicks(reader.GetInt64(2)),
-                BestLapTime: reader.IsDBNull(3) ? null : TimeSpan.FromTicks(reader.GetInt64(3)),
-                UpdatedAt: DateTimeOffset.Parse(reader.GetString(4), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)));
+            laps.Add(ReadLapSummary(reader));
         }
 
         return laps;
+    }
+
+    private static async Task<LapSummary?> GetLapSummaryAsync(
+        SqliteConnection connection,
+        Guid sessionId,
+        int lapNumber,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT session_id, lap_number, lap_time_ticks, best_lap_ticks, updated_at
+            FROM lap_summaries
+            WHERE session_id = $sessionId AND lap_number = $lapNumber;
+            """;
+        Add(command, "$sessionId", sessionId.ToString());
+        Add(command, "$lapNumber", lapNumber);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken) ? ReadLapSummary(reader) : null;
+    }
+
+    private static async Task<IReadOnlyList<TelemetrySample>> GetStoredLapSamplesAsync(
+        SqliteConnection connection,
+        Guid sessionId,
+        int lapNumber,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT payload_json
+            FROM telemetry_sample_blobs
+            WHERE session_id = $sessionId
+            ORDER BY sequence ASC, id ASC;
+            """;
+        Add(command, "$sessionId", sessionId.ToString());
+
+        var samples = new List<TelemetrySample>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var sample = JsonSerializer.Deserialize<TelemetrySample>(reader.GetString(0), JsonOptions);
+            if (sample?.Lap.LapNumber == lapNumber)
+            {
+                samples.Add(sample);
+            }
+        }
+
+        return samples;
     }
 
     private static async Task<IReadOnlyList<TelemetrySample>> GetRecentSamplesAsync(
@@ -459,6 +525,16 @@ public sealed class SqliteTelemetrySessionStore : ITelemetrySessionStore
             LastSeenAt: DateTimeOffset.Parse(reader.GetString(6), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
             BestLapTime: reader.IsDBNull(7) ? null : TimeSpan.FromTicks(reader.GetInt64(7)),
             SampleCount: reader.GetInt64(8));
+    }
+
+    private static LapSummary ReadLapSummary(SqliteDataReader reader)
+    {
+        return new LapSummary(
+            SessionId: Guid.Parse(reader.GetString(0)),
+            LapNumber: reader.GetInt32(1),
+            LapTime: reader.IsDBNull(2) ? null : TimeSpan.FromTicks(reader.GetInt64(2)),
+            BestLapTime: reader.IsDBNull(3) ? null : TimeSpan.FromTicks(reader.GetInt64(3)),
+            UpdatedAt: DateTimeOffset.Parse(reader.GetString(4), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
     }
 
     private static void Add(SqliteCommand command, string name, object? value)

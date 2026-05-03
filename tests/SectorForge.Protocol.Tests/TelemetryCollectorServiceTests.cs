@@ -440,6 +440,11 @@ public sealed class TelemetryCollectorServiceTests
             return Task.FromResult<TelemetrySessionDetails?>(null);
         }
 
+        public Task<TelemetryLapSamples?> GetLapSamplesAsync(Guid sessionId, int lapNumber, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<TelemetryLapSamples?>(null);
+        }
+
         public Task<bool> DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(false);
@@ -497,6 +502,39 @@ public sealed class TelemetryCollectorServiceTests
             return Task.FromResult<TelemetrySessionDetails?>(new TelemetrySessionDetails(summary, [], sessionSamples));
         }
 
+        public Task<TelemetryLapSamples?> GetLapSamplesAsync(Guid sessionId, int lapNumber, CancellationToken cancellationToken = default)
+        {
+            var sessionSamples = samples.Where(sample => sample.SessionId == sessionId).ToArray();
+            if (sessionSamples.Length == 0)
+            {
+                return Task.FromResult<TelemetryLapSamples?>(null);
+            }
+
+            var lastSample = sessionSamples[^1];
+            var summary = new TelemetrySessionSummary(
+                Id: sessionId,
+                Game: lastSample.Source.Game,
+                SourceName: lastSample.Source.DisplayName,
+                TrackName: lastSample.Track.TrackName,
+                CarName: lastSample.Vehicle.CarName,
+                StartedAt: sessionSamples[0].Session.StartedAt,
+                LastSeenAt: lastSample.Timestamp,
+                BestLapTime: lastSample.Lap.BestLapTime,
+                SampleCount: sessionSamples.Length);
+
+            var lapSamples = sessionSamples.Where(sample => sample.Lap.LapNumber == lapNumber).ToArray();
+            var lap = lapSamples.Length == 0
+                ? null
+                : new LapSummary(
+                    SessionId: sessionId,
+                    LapNumber: lapNumber,
+                    LapTime: lapSamples[^1].Lap.LastLapTime ?? lapSamples[^1].Lap.CurrentLapTime,
+                    BestLapTime: lapSamples[^1].Lap.BestLapTime,
+                    UpdatedAt: lapSamples[^1].Timestamp);
+
+            return Task.FromResult<TelemetryLapSamples?>(new TelemetryLapSamples(summary, lap, lapSamples));
+        }
+
         public Task<bool> DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(false);
@@ -548,6 +586,19 @@ public sealed class TelemetryCollectorServiceTests
         public Task<TelemetrySessionDetails?> GetSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             return Task.FromResult<TelemetrySessionDetails?>(session.Session.Id == sessionId ? session : null);
+        }
+
+        public Task<TelemetryLapSamples?> GetLapSamplesAsync(Guid sessionId, int lapNumber, CancellationToken cancellationToken = default)
+        {
+            if (session.Session.Id != sessionId)
+            {
+                return Task.FromResult<TelemetryLapSamples?>(null);
+            }
+
+            var lap = session.Laps.FirstOrDefault(candidate => candidate.LapNumber == lapNumber);
+            var lapSamples = session.Samples.Where(sample => sample.Lap.LapNumber == lapNumber).ToArray();
+
+            return Task.FromResult<TelemetryLapSamples?>(new TelemetryLapSamples(session.Session, lap, lapSamples));
         }
 
         public Task<bool> DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
