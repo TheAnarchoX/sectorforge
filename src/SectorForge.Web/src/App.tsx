@@ -5,6 +5,7 @@ import {
   StateNotice,
 } from "./components/dashboard/DashboardPrimitives";
 import { MainTelemetryColumn } from "./components/dashboard/MainTelemetryColumn";
+import { SimplifiedDriveView } from "./components/dashboard/SimplifiedDriveView";
 import { TelemetrySidebar } from "./components/dashboard/TelemetrySidebar";
 import { TimingBoard } from "./components/dashboard/TimingBoard";
 import { useTelemetryDashboard } from "./hooks/useTelemetryDashboard";
@@ -12,6 +13,7 @@ import type { DashboardReplayState } from "./types/telemetry";
 import "./App.css";
 
 function App() {
+  const [isSimplifiedView, setIsSimplifiedView] = useState(false);
   const [replayState, setReplayState] = useState<DashboardReplayState | null>(
     null,
   );
@@ -88,18 +90,22 @@ function App() {
 
   return (
     <main
-      className={`app-shell${isReplayRunning ? " app-shell-replay-active" : ""}`}
+      className={`app-shell${isReplayRunning && !isSimplifiedView ? " app-shell-replay-active" : ""}`}
     >
       <DashboardHeader
         connectionState={connectionState}
         runMode={runMode}
         isCollectorRunning={isCollectorRunning}
         isReplayRunning={isReplayRunning}
+        isSimplifiedView={isSimplifiedView}
         isBusy={isBusy}
         trackName={displaySample?.track.trackName}
         sessionName={displaySample?.session.name}
         sourceName={displaySource?.displayName}
         samplesPublished={collectorStatus?.samplesPublished ?? 0}
+        onToggleSimplifiedView={() =>
+          setIsSimplifiedView((currentValue) => !currentValue)
+        }
         onStartCollector={() => void startCollector()}
         onStopCollector={() => void stopCollector()}
         onRefresh={() => void refreshDashboard()}
@@ -126,33 +132,46 @@ function App() {
         </section>
       )}
 
-      <div className="dashboard-grid">
-        <MainTelemetryColumn
+      {isSimplifiedView ? (
+        <SimplifiedDriveView
           activeSource={displaySource}
           runMode={runMode}
           sample={displaySample}
-          traceSeries={displayTraceSeries}
-          lapTrace={displayLapTrace}
         />
-        <TelemetrySidebar
-          sample={displaySample}
-          games={games}
+      ) : (
+        <div className="dashboard-grid">
+          <MainTelemetryColumn
+            activeSource={displaySource}
+            runMode={runMode}
+            sample={displaySample}
+            traceSeries={displayTraceSeries}
+            lapTrace={displayLapTrace}
+          />
+          <TelemetrySidebar
+            sample={displaySample}
+            games={games}
+            collectorStatus={collectorStatus}
+          />
+        </div>
+      )}
+
+      <div
+        className={isSimplifiedView ? "timing-board-hidden" : undefined}
+        aria-hidden={isSimplifiedView}
+      >
+        <TimingBoard
           collectorStatus={collectorStatus}
+          sample={displaySample}
+          activeSource={displaySource}
+          sessions={sessions}
+          isApiOffline={isApiOffline}
+          isBusy={isBusy}
+          activeReplaySessionId={activeReplaySessionId}
+          onStartReplay={startReplay}
+          onStopReplay={stopCollector}
+          onReplayStateChange={setReplayState}
         />
       </div>
-
-      <TimingBoard
-        collectorStatus={collectorStatus}
-        sample={displaySample}
-        activeSource={displaySource}
-        sessions={sessions}
-        isApiOffline={isApiOffline}
-        isBusy={isBusy}
-        activeReplaySessionId={activeReplaySessionId}
-        onStartReplay={startReplay}
-        onStopReplay={stopCollector}
-        onReplayStateChange={setReplayState}
-      />
     </main>
   );
 }

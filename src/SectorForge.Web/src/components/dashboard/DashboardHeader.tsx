@@ -1,5 +1,6 @@
 import {
   Flag,
+  Gauge,
   Pause,
   Play,
   RadioTower,
@@ -14,11 +15,13 @@ type DashboardHeaderProps = {
   runMode: TelemetryRunMode;
   isCollectorRunning: boolean;
   isReplayRunning: boolean;
+  isSimplifiedView: boolean;
   isBusy: boolean;
   trackName?: string | null;
   sessionName?: string | null;
   sourceName?: string | null;
   samplesPublished: number;
+  onToggleSimplifiedView: () => void;
   onStartCollector: () => void;
   onStopCollector: () => void;
   onRefresh: () => void;
@@ -29,11 +32,13 @@ export function DashboardHeader({
   runMode,
   isCollectorRunning,
   isReplayRunning,
+  isSimplifiedView,
   isBusy,
   trackName,
   sessionName,
   sourceName,
   samplesPublished,
+  onToggleSimplifiedView,
   onStartCollector,
   onStopCollector,
   onRefresh,
@@ -99,8 +104,28 @@ export function DashboardHeader({
         <div
           className="button-row"
           role="group"
-          aria-label="Collector controls"
+          aria-label="Dashboard controls"
         >
+          <button
+            className={`icon-button${isSimplifiedView ? " active" : ""}`}
+            type="button"
+            onClick={onToggleSimplifiedView}
+            aria-pressed={isSimplifiedView}
+            aria-label={
+              isSimplifiedView
+                ? "Switch to full dashboard view"
+                : "Switch to simplified drive view"
+            }
+            title={
+              isSimplifiedView
+                ? "Switch to full dashboard view"
+                : "Switch to simplified drive view"
+            }
+          >
+            <Gauge size={17} />
+            {isSimplifiedView ? "Full view" : "Drive view"}
+          </button>
+
           <button
             className="icon-button primary"
             type="button"

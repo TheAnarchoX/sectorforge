@@ -259,19 +259,20 @@ This backlog is written for coding agents and human contributors. Each task is i
   - UI is clear and organized, allowing users to quickly grasp session details.
   - Frontend lint and build pass without errors.
 
-### SF-037: Add Simplified View Mode for while Driving
+### SF-036: Add Simplified View Mode for while Driving
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend feature
 - Goal: Add a simplified view mode that shows only essential telemetry values in a large, easy-to-read format. This mode can be toggled on while driving to reduce distraction and allow the driver to focus on key information like speed, lap time, and position. This is intended to be used on a secondary monitor or in a WebView overlay while playing, providing at-a-glance telemetry without needing to navigate the full dashboard.
 - Suggested files: `src/SectorForge.Web/src/*`
+- Notes: Added a toggleable drive view on 2026-05-03 that swaps the full dashboard for a large-format telemetry layout with speed, lap time, position, delta, gear, fuel, and pedal load while keeping replay progression alive behind the simplified shell.
 - Acceptance criteria:
   - UI has a toggle to switch between the full dashboard and the simplified view mode.
   - Simplified view shows only essential telemetry values in a large, clear format.
   - Layout is optimized for quick glances while driving, with high contrast and large fonts.
   - Frontend lint and build pass without errors.
 
-### SF-038: Frontend Testing Baseline with Coverage Reporting, CI Integration, and 90%+ Coverage Target
+### SF-037: Frontend Testing Baseline with Coverage Reporting, CI Integration, and 90%+ Coverage Target
 
 - Status: `ready`
 - Type: testing
@@ -282,6 +283,18 @@ This backlog is written for coding agents and human contributors. Each task is i
   - Code coverage reports are generated for the frontend and can be viewed locally.
   - CI workflow is updated to run frontend tests and fail if coverage falls below the target.
   - A baseline coverage percentage is established and documented.
+
+### SF-038: Frontend Memory Usage Monitoring And Optimization To prevent Leaks and Out-of-Memory Issues During Long Sessions
+
+- Status: `ready`
+- Type: frontend resilience
+- Goal: Implement memory usage monitoring in the frontend and optimize any identified leaks or inefficiencies. This will help ensure the dashboard remains responsive and stable during long driving sessions, especially when replaying stored sessions with large amounts of telemetry data.
+- Suggested files: `src/SectorForge.Web/src/*`, docs
+- Acceptance criteria:
+  - Memory usage is monitored in development builds, with warnings for high usage.
+  - Any identified memory leaks or inefficiencies are addressed and optimized.
+  - The frontend remains responsive and does not crash due to memory issues during long sessions or replays.
+  - Documentation includes notes on memory optimization strategies used.
 
 ## Intermezzo: README Polish
 
