@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CollectorStatus } from "./types/telemetry";
@@ -145,6 +145,10 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: /adapters/i }));
     expect(screen.getAllByText("Fake telemetry").length).toBeGreaterThan(0);
+    expect(
+      within(screen.getByTestId("adapter-row-fake")).getByText("Running"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("adapter-stop-fake")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /compare/i }));
     await user.click(screen.getByRole("button", { name: "Open Sessions" }));

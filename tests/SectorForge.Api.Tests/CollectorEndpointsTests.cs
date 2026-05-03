@@ -3,7 +3,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Configuration;
 using SectorForge.Core.Telemetry;
 
 namespace SectorForge.Api.Tests;
@@ -371,16 +370,9 @@ public sealed class CollectorEndpointsTests
 
     private static WebApplicationFactory<Program> CreateFactory(string connectionString)
     {
-        return new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        return ApiTestFactory.Create(new Dictionary<string, string?>
         {
-            builder.ConfigureAppConfiguration((_, configBuilder) =>
-            {
-                configBuilder.AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["Collector:AutoStart"] = "false",
-                    ["ConnectionStrings:SectorForge"] = connectionString
-                });
-            });
+            ["ConnectionStrings:SectorForge"] = connectionString
         });
     }
 

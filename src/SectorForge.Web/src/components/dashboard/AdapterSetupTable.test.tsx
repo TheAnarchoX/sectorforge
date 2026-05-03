@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { AdapterSetupTable } from "./AdapterSetupTable";
@@ -121,6 +121,40 @@ describe("AdapterSetupTable", () => {
     await user.click(screen.getByTestId("adapter-stop-f1-25-udp"));
 
     expect(onStopAdapter).toHaveBeenCalledTimes(1);
+  });
+
+  it("folds the active adapter into the State column", () => {
+    const adapters = [
+      createTelemetrySource({ status: "Available" }),
+      createTelemetrySource({
+        adapterId: "f1-25-udp",
+        displayName: "EA Sports F1 25",
+        inputKind: "UDP",
+        isSimulated: false,
+        status: "Available",
+        game: "F1 25",
+        notes: null,
+      }),
+    ];
+
+    renderTable({
+      adapters,
+      activeAdapterId: "f1-25-udp",
+      isCollectorRunning: true,
+    });
+
+    expect(
+      screen.queryByRole("columnheader", { name: "Active" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("adapter-row-f1-25-udp")).getByText("Active"),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("adapter-row-fake")).getByText("Available"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("adapter-start-fake")).toHaveTextContent(
+      "Switch",
+    );
   });
 
   it("disables the Start button for unavailable (NotImplemented) adapters", () => {

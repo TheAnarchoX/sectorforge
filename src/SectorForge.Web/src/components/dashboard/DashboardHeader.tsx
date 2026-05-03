@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { Pause, Play, RefreshCw } from "lucide-react";
 import type {
   ConnectionState,
@@ -46,34 +46,25 @@ function DashboardHeaderImpl({
     [adapters],
   );
   const defaultAdapterId =
-    activeAdapterId ?? startableAdapters[0]?.adapterId ?? "fake";
-  const [selectedAdapterId, setSelectedAdapterId] = useState(defaultAdapterId);
-  useEffect(() => {
-    if (
-      !startableAdapters.some(
-        (adapter) => adapter.adapterId === selectedAdapterId,
-      )
-    ) {
-      setSelectedAdapterId(defaultAdapterId);
-    }
-  }, [defaultAdapterId, selectedAdapterId, startableAdapters]);
-  // Follow the active adapter so the picker reflects what's actually running
-  // (e.g. when the collector was started outside the dashboard or via a
-  // launch profile that selects something other than "fake").
-  useEffect(() => {
-    if (
-      activeAdapterId &&
-      startableAdapters.some((adapter) => adapter.adapterId === activeAdapterId)
-    ) {
-      setSelectedAdapterId(activeAdapterId);
-    }
-  }, [activeAdapterId, startableAdapters]);
+    activeAdapterId ?? startableAdapters[0]?.adapterId ?? "";
+  const [requestedAdapterId, setRequestedAdapterId] = useState<string | null>(
+    null,
+  );
+  const selectedAdapterId =
+    requestedAdapterId !== null &&
+    startableAdapters.some(
+      (adapter) => adapter.adapterId === requestedAdapterId,
+    )
+      ? requestedAdapterId
+      : defaultAdapterId;
   const modeLabel = isCollectorRunning ? runMode.toUpperCase() : "IDLE";
   const modeTone: ChipTone = !isCollectorRunning
     ? "stop"
     : runMode === "Replay"
       ? "warn"
       : "live";
+  const isLiveAdapterActive =
+    isCollectorRunning && runMode === "Live" && activeAdapterId !== null;
   const signalTone: ChipTone =
     connectionState === "connected"
       ? "live"
@@ -125,6 +116,11 @@ function DashboardHeaderImpl({
           value={isCollectorRunning ? "ONLINE" : "OFFLINE"}
           tone={isCollectorRunning ? "live" : "stop"}
         />
+        <StatusChip
+          label="ADAPTER"
+          value={isLiveAdapterActive ? "ACTIVE" : "IDLE"}
+          tone={isLiveAdapterActive ? "live" : "stop"}
+        />
       </div>
 
       <div
@@ -137,7 +133,7 @@ function DashboardHeaderImpl({
           <select
             className="topbar-adapter-select mono"
             value={selectedAdapterId}
-            onChange={(event) => setSelectedAdapterId(event.target.value)}
+            onChange={(event) => setRequestedAdapterId(event.target.value)}
             disabled={isBusy || startableAdapters.length === 0}
             aria-label="Telemetry adapter to start"
           >

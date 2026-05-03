@@ -48,7 +48,11 @@ function App() {
   const activeSource = collectorStatus?.source ?? sample?.source ?? null;
   const runMode = collectorStatus?.runMode ?? "Idle";
   const isCollectorRunning = collectorStatus?.isRunning ?? false;
+  const isLiveRunning = isCollectorRunning && runMode === "Live";
   const isReplayRunning = isCollectorRunning && runMode === "Replay";
+  const activeLiveAdapterId = isLiveRunning
+    ? (collectorStatus?.activeAdapterId ?? activeSource?.adapterId ?? null)
+    : null;
   const isApiOffline = apiAvailability === "offline";
   const activeReplayState = isReplayRunning ? replayState : null;
   const displaySample = activeReplayState?.sample ?? sample;
@@ -165,7 +169,7 @@ function App() {
           sourceName={displaySource?.displayName}
           samplesPublished={collectorStatus?.samplesPublished ?? 0}
           adapters={games}
-          activeAdapterId={displaySource?.adapterId ?? null}
+          activeAdapterId={activeLiveAdapterId}
           onStartAdapter={handleStartAdapter}
           onStopCollector={handleStopCollector}
           onRefresh={handleRefresh}
@@ -216,7 +220,7 @@ function App() {
         {workspace === "adapters" && (
           <AdaptersWorkspace
             games={games}
-            activeSource={displaySource}
+            activeAdapterId={activeLiveAdapterId}
             collectorRunMode={runMode}
             samplesPublished={collectorStatus?.samplesPublished ?? 0}
             isCollectorRunning={isCollectorRunning}
@@ -293,7 +297,7 @@ function WorkspacePlaceholder({
 
 type AdaptersWorkspaceProps = {
   games: TelemetrySource[];
-  activeSource: TelemetrySource | null;
+  activeAdapterId: string | null;
   collectorRunMode: string;
   samplesPublished: number;
   isCollectorRunning: boolean;
@@ -304,7 +308,7 @@ type AdaptersWorkspaceProps = {
 
 function AdaptersWorkspace({
   games,
-  activeSource,
+  activeAdapterId,
   collectorRunMode,
   samplesPublished,
   isCollectorRunning,
@@ -334,7 +338,7 @@ function AdaptersWorkspace({
       ) : (
         <AdapterSetupTable
           adapters={games}
-          activeAdapterId={activeSource?.adapterId ?? null}
+          activeAdapterId={activeAdapterId}
           isCollectorRunning={isCollectorRunning}
           isBusy={isBusy}
           onStartAdapter={onStartAdapter}

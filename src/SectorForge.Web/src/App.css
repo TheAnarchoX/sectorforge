@@ -1533,6 +1533,10 @@
   color: var(--accent-green);
 }
 
+.status-chip-active {
+  color: var(--accent-amber);
+}
+
 .status-chip-available {
   color: var(--accent-cyan);
 }

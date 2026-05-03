@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { DashboardHeader } from "./DashboardHeader";
 import { createTelemetrySource } from "../../test/telemetryFixtures";
@@ -58,5 +58,32 @@ describe("DashboardHeader adapter picker", () => {
     rerender(<DashboardHeader {...props} activeAdapterId="f1-25-udp" />);
 
     expect(getAdapterSelect().value).toBe("f1-25-udp");
+  });
+
+  it("shows the live adapter as active in the status chips", () => {
+    renderHeader({
+      runMode: "Live",
+      isCollectorRunning: true,
+      activeAdapterId: "f1-25-udp",
+    });
+
+    const statusGroup = within(screen.getByLabelText("System status"));
+
+    expect(statusGroup.getByText("ADAPTER")).toBeInTheDocument();
+    expect(statusGroup.getByText("ACTIVE")).toBeInTheDocument();
+  });
+
+  it("does not mark an adapter active during replay", () => {
+    renderHeader({
+      runMode: "Replay",
+      isCollectorRunning: true,
+      isReplayRunning: true,
+      activeAdapterId: null,
+    });
+
+    const statusGroup = within(screen.getByLabelText("System status"));
+
+    expect(statusGroup.getByText("ADAPTER")).toBeInTheDocument();
+    expect(statusGroup.getByText("IDLE")).toBeInTheDocument();
   });
 });

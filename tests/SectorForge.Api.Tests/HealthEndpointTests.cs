@@ -1,20 +1,12 @@
-using Microsoft.AspNetCore.Mvc.Testing;
-
 namespace SectorForge.Api.Tests;
 
-public sealed class HealthEndpointTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class HealthEndpointTests
 {
-    private readonly WebApplicationFactory<Program> _factory;
-
-    public HealthEndpointTests(WebApplicationFactory<Program> factory)
-    {
-        _factory = factory;
-    }
-
     [Fact]
     public async Task HealthEndpointReturnsOk()
     {
-        using var client = _factory.CreateClient();
+        using var factory = ApiTestFactory.Create();
+        using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/api/health");
 

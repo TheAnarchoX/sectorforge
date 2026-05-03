@@ -160,6 +160,8 @@ function AdapterRow({
   const [isOpen, setIsOpen] = useState(false);
   const guide = ADAPTER_GUIDES[adapter.adapterId] ?? FALLBACK_GUIDE;
   const detailRowId = `adapter-detail-${adapter.adapterId}`;
+  const isAdapterActive = isActive && isCollectorRunning;
+  const stateLabel = isAdapterActive ? "Active" : adapter.status;
   const isNotImplemented = adapter.status === "NotImplemented";
   const isOffline = adapter.status === "Offline";
   const startDisabled = isBusy || isNotImplemented;
@@ -175,7 +177,13 @@ function AdapterRow({
   return (
     <>
       <tr
-        className={isOpen ? "adapter-row adapter-row-open" : "adapter-row"}
+        className={[
+          "adapter-row",
+          isOpen ? "adapter-row-open" : null,
+          isAdapterActive ? "table-row-active" : null,
+        ]
+          .filter(Boolean)
+          .join(" ")}
         data-testid={`adapter-row-${adapter.adapterId}`}
       >
         <td>
@@ -198,14 +206,13 @@ function AdapterRow({
         <td>{adapter.inputKind}</td>
         <td>
           <span
-            className={`status-chip status-chip-${adapter.status.toLowerCase()}`}
+            className={`status-chip status-chip-${stateLabel.toLowerCase()}`}
           >
-            {adapter.status}
+            {stateLabel}
           </span>
         </td>
-        <td className="mono">{isActive ? "yes" : "—"}</td>
         <td className="adapter-row-actions">
-          {isActive && isCollectorRunning ? (
+          {isAdapterActive ? (
             <button
               type="button"
               className="adapter-row-button adapter-row-button-stop"
@@ -228,7 +235,7 @@ function AdapterRow({
               {isCollectorRunning ? "Switch" : "Start"}
             </button>
           )}
-        </td>{" "}
+        </td>
       </tr>
       {isOpen && (
         <tr
@@ -236,7 +243,7 @@ function AdapterRow({
           className="adapter-row-detail"
           data-testid={`adapter-detail-${adapter.adapterId}`}
         >
-          <td colSpan={5}>
+          <td colSpan={4}>
             <div className="adapter-setup">
               <section className="adapter-setup-section">
                 <h4 className="adapter-setup-heading">{guide.inGameTitle}</h4>
@@ -342,7 +349,6 @@ export function AdapterSetupTable({
           <th>Adapter</th>
           <th>Input</th>
           <th>State</th>
-          <th>Active</th>
           <th>Control</th>
         </tr>
       </thead>
