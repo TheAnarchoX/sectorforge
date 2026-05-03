@@ -87,12 +87,21 @@ public sealed class F125NormalizerTests
         Assert.Null(sample.Brakes.FrontLeftTemperatureC);
         Assert.Null(sample.Fuel.RemainingLiters);
         Assert.Null(sample.Track.TrackName);
+        Assert.Null(sample.Track.TrackId);
+        Assert.Null(sample.Track.TrackLengthMeters);
+        Assert.Null(sample.Track.RainPercent);
+        Assert.Null(sample.Track.WeatherEnum);
+        Assert.Null(sample.Track.SafetyCarStatus);
+        Assert.Null(sample.Track.FormationLap);
         Assert.Null(sample.DriverInput.DrsAllowed);
         Assert.Null(sample.DriverInput.PitLimiterActive);
         Assert.Null(sample.DriverInput.AbsActive);
         Assert.Null(sample.DriverInput.TcActive);
         Assert.Null(sample.Timing.DeltaToBestLap);
+        Assert.Null(sample.Timing.SessionTimeLeft);
+        Assert.Null(sample.Timing.SessionDuration);
         Assert.Null(sample.Participants);
+        Assert.Null(sample.WeatherForecast);
     }
 
     private static TPacket ReadPacket<TPacket>(

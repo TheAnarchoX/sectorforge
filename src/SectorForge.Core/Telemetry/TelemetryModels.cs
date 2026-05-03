@@ -52,6 +52,35 @@ public enum ErsDeployMode
     Overtake
 }
 
+public enum WeatherKind
+{
+    Unknown = 0,
+    Clear,
+    LightCloud,
+    Overcast,
+    LightRain,
+    HeavyRain,
+    Storm
+}
+
+public enum SafetyCarStatus
+{
+    Unknown = 0,
+    None,
+    Full,
+    Virtual
+}
+
+public enum ResultStatus
+{
+    Unknown = 0,
+    Active,
+    Finished,
+    Retired,
+    Disqualified,
+    NotClassified
+}
+
 public sealed record TelemetrySource(
     string AdapterId,
     GameId Game,
@@ -77,7 +106,8 @@ public sealed record TelemetrySample(
     TimingState Timing,
     IReadOnlyList<ParticipantState>? Participants = null,
     DamageState? Damage = null,
-    PowerUnitState? PowerUnit = null);
+    PowerUnitState? PowerUnit = null,
+    WeatherForecastState? WeatherForecast = null);
 
 public sealed record SessionState(
     Guid Id,
@@ -188,11 +218,27 @@ public sealed record PowerUnitState(
     double? ErsHarvestedThisLapMguh = null,
     ErsDeployMode? ErsDeployMode = null);
 
+public sealed record WeatherForecastState(
+    IReadOnlyList<WeatherForecastSample> Samples);
+
+public sealed record WeatherForecastSample(
+    int? MinutesAhead = null,
+    WeatherKind? Weather = null,
+    double? RainPercent = null,
+    double? TrackTemperatureC = null,
+    double? AirTemperatureC = null);
+
 public sealed record TrackState(
     string? TrackName,
     double? TrackTemperatureC,
     double? AirTemperatureC,
-    string? Weather);
+    string? Weather,
+    string? TrackId = null,
+    double? TrackLengthMeters = null,
+    double? RainPercent = null,
+    WeatherKind? WeatherEnum = null,
+    SafetyCarStatus? SafetyCarStatus = null,
+    bool? FormationLap = null);
 
 public sealed record DriverInputState(
     double? Throttle,
@@ -209,7 +255,9 @@ public sealed record TimingState(
     TimeSpan? SessionElapsed,
     TimeSpan? SessionRemaining,
     TimeSpan? DeltaToBestLap,
-    TimeSpan? SectorDelta);
+    TimeSpan? SectorDelta,
+    TimeSpan? SessionTimeLeft = null,
+    TimeSpan? SessionDuration = null);
 
 public sealed record ParticipantState(
     string DriverName,
@@ -223,7 +271,18 @@ public sealed record ParticipantState(
     TimeSpan? LastLapTime,
     TimeSpan? BestLapTime,
     TimeSpan? GapToLeader,
-    TimeSpan? IntervalToAhead = null);
+    TimeSpan? IntervalToAhead = null,
+    TimeSpan? Sector1 = null,
+    TimeSpan? Sector2 = null,
+    TimeSpan? BestSector1 = null,
+    TimeSpan? BestSector2 = null,
+    TimeSpan? BestSector3 = null,
+    TyreCompound? TyreCompound = null,
+    int? PitStopCount = null,
+    ResultStatus? ResultStatus = null,
+    int? GridPosition = null,
+    int? DriverNumber = null,
+    bool? IsAi = null);
 
 public sealed record TelemetryReceiverStatus(
     bool IsRunning,

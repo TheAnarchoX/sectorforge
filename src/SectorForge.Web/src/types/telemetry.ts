@@ -23,6 +23,25 @@ export type ErsDeployMode =
   | "Hotlap"
   | "Overtake";
 
+export type WeatherKind =
+  | "Unknown"
+  | "Clear"
+  | "LightCloud"
+  | "Overcast"
+  | "LightRain"
+  | "HeavyRain"
+  | "Storm";
+
+export type SafetyCarStatus = "Unknown" | "None" | "Full" | "Virtual";
+
+export type ResultStatus =
+  | "Unknown"
+  | "Active"
+  | "Finished"
+  | "Retired"
+  | "Disqualified"
+  | "NotClassified";
+
 export type TelemetrySource = {
   adapterId: string;
   game: string;
@@ -74,6 +93,18 @@ export type PowerUnitState = {
   ersHarvestedThisLapMguk?: number | null;
   ersHarvestedThisLapMguh?: number | null;
   ersDeployMode?: ErsDeployMode | null;
+};
+
+export type WeatherForecastSample = {
+  minutesAhead?: number | null;
+  weather?: WeatherKind | null;
+  rainPercent?: number | null;
+  trackTemperatureC?: number | null;
+  airTemperatureC?: number | null;
+};
+
+export type WeatherForecastState = {
+  samples: WeatherForecastSample[];
 };
 
 export type TelemetrySample = {
@@ -159,6 +190,12 @@ export type TelemetrySample = {
     trackTemperatureC?: number | null;
     airTemperatureC?: number | null;
     weather?: string | null;
+    trackId?: string | null;
+    trackLengthMeters?: number | null;
+    rainPercent?: number | null;
+    weatherEnum?: WeatherKind | null;
+    safetyCarStatus?: SafetyCarStatus | null;
+    formationLap?: boolean | null;
   };
   driverInput: {
     throttle?: number | null;
@@ -176,10 +213,13 @@ export type TelemetrySample = {
     sessionRemaining?: string | null;
     deltaToBestLap?: string | null;
     sectorDelta?: string | null;
+    sessionTimeLeft?: string | null;
+    sessionDuration?: string | null;
   };
   participants?: ParticipantState[] | null;
   damage?: DamageState | null;
   powerUnit?: PowerUnitState | null;
+  weatherForecast?: WeatherForecastState | null;
 };
 
 export type ParticipantState = {
@@ -195,6 +235,17 @@ export type ParticipantState = {
   bestLapTime?: string | null;
   gapToLeader?: string | null;
   intervalToAhead?: string | null;
+  sector1?: string | null;
+  sector2?: string | null;
+  bestSector1?: string | null;
+  bestSector2?: string | null;
+  bestSector3?: string | null;
+  tyreCompound?: TyreCompound | null;
+  pitStopCount?: number | null;
+  resultStatus?: ResultStatus | null;
+  gridPosition?: number | null;
+  driverNumber?: number | null;
+  isAi?: boolean | null;
 };
 
 export type CollectorStatus = {

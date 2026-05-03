@@ -465,9 +465,10 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-048: Extend TelemetrySample - Slice D (Weather Forecast, Safety Car, Multi-Participant Timing)
 
-- Status: `ready`
+- Status: `done`
 - Type: backend feature
 - Goal: Additively expand `TelemetrySample` with weather forecast, safety-car / session status, and richer per-participant fields so F1 25 timing-board parity is possible.
+- Notes: Added nullable Slice D weather forecast, track/session status, and per-participant timing fields on 2026-05-03 with JSON and SQLite blob round-trip coverage. F1 25 normalizer population remains deferred to the pre-SF-049 packet-reader plan; current adapters leave the fields `null`.
 - Suggested files: `src/SectorForge.Core/Telemetry/TelemetryModels.cs`, `src/SectorForge.Collector/Adapters/F125/F125Normalizer.cs`, `src/SectorForge.Web/src/types/*`, `tests/SectorForge.Core.Tests/*`, `docs/architecture.md`
 - Acceptance criteria:
   - New optional `WeatherForecastState? WeatherForecast` on `TelemetrySample` carrying a list of `WeatherForecastSample` (`MinutesAhead`, `Weather`, `RainPercent`, `TrackTemperatureC`, `AirTemperatureC`).
@@ -629,6 +630,28 @@ Note: Packaging the frontend as a WebView2 desktop app can make it more accessib
 ## Priority 10: Release Packaging, Publishing, and Versioning
 
 Note: this is very needed because now only people who know how to build and run the project from source can use it, and we want to make it available to a wider audience who may not be developers.
+
+## Priority 11: Hardware Display Integration
+
+Note: Integrating with hardware displays (e.g. Raspberry Pi dashboards, Arduino-based gauges) can be a great way to extend the project's reach and allow users to create custom physical telemetry displays. However, it requires additional hardware-specific code and testing, and may involve supporting multiple platforms and communication protocols (e.g. serial, I2C, MQTT). It should be considered after the core software features are stable and there is demand from the community for hardware integration.
+
+## Priority 12: Strategy Analysis Models
+
+Note: Adding strategy analysis models (e.g. pit stop optimization, fuel load calculations, tire wear predictions) can provide advanced insights for competitive racing and add significant value for users. However, it requires domain expertise in racing strategy, as well as careful design to ensure the models are accurate and useful without overwhelming users with complexity. It should be considered after the core telemetry features are solid and there is interest from the community in strategy analysis.
+
+## Priority 13: AI Coaching And Assistance
+
+Note: Building AI coaching features (e.g. real-time driving advice, post-session performance analysis, personalized training plans) can be a long-term vision for the project that leverages machine learning and data analysis to help users improve their racing skills. However, it requires significant development effort, access to large datasets for training, and careful consideration of user experience to ensure the AI provides actionable and relevant insights without being intrusive or overwhelming. It should be considered as a future direction once the core telemetry and analysis features are well-established and there is a strong user base to support it. This will not implement an LLM or integrate with an AI provider but instead be a completely custom-built solution using traditional ML techniques and domain-specific heuristics, at least in the initial implementation.
+
+## Priority 14: Community Contributions And Custom Adapters
+
+Note: Encouraging and supporting community contributions (e.g. new game adapters, UI features, bug fixes) can help grow the project and make it more sustainable in the long term. This can be facilitated by clear contribution guidelines, good documentation, and an active presence in relevant communities (e.g. racing sim forums, GitHub). However, it also requires time and effort to review and manage contributions, as well as maintain a welcoming and inclusive community culture. It should be an ongoing priority as the project grows. This should include things like:
+
+- Clear contribution guidelines in the README.
+- A CONTRIBUTING.md file with detailed instructions for setting up a development environment, running tests, and submitting pull requests.
+- Active engagement in relevant online communities to encourage contributions and gather feedback.
+- Regularly reviewing and merging pull requests, and providing constructive feedback to contributors.
+- A Discord server or other community hub for real-time discussion and support.
 
 ## Parking Lot
 

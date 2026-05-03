@@ -16,7 +16,7 @@ Game telemetry input
 
 `SectorForge.Core` owns the normalized model. Game-specific adapters should translate raw game data into that model and avoid leaking packet layouts into UI or storage code.
 
-`TelemetrySample` is intentionally additive. Vehicle dynamics, world position, sector splits, lap-valid and pit status, penalties, warnings, driver-aid flags, damage, power-unit state, and extended tyre details are nullable so adapters can publish only the channels their source exposes. Existing fake, replay, and stored samples remain valid when newer adapters add more detail.
+`TelemetrySample` is intentionally additive. Vehicle dynamics, world position, sector splits, lap-valid and pit status, penalties, warnings, driver-aid flags, damage, power-unit state, extended tyre details, weather forecasts, safety-car/session status, and richer per-participant timing are nullable so adapters can publish only the channels their source exposes. Existing fake, replay, and stored samples remain valid when newer adapters add more detail.
 
 ## Projects
 
