@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+    <title id="title">SectorForge monochrome mark</title>
+    <desc id="desc">Monochrome SectorForge telemetry-inspired S mark using currentColor for flexible
+        usage.</desc>
+    <path d="M14 18H44L33 30H20" fill="none" stroke="currentColor" stroke-width="5.5"
+        stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M50 46H20L31 34H44" fill="none" stroke="currentColor" stroke-width="5.5"
+        stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M31 28L35 32L31 36L27 32Z" fill="currentColor" />
+</svg>

@@ -29,6 +29,8 @@ Game telemetry input
 The dashboard now keeps a few explicit browser-side memory boundaries so long live runs and stored-session replays stay stable:
 
 - Live and replay traces stay windowed instead of growing without bound, and replay lap reconstruction only walks the active lap window instead of rescanning an entire stored capture on every replay step.
+- SignalR telemetry samples (60Hz from the fake adapter, higher in real games) write into mutable ring buffers held in refs and a single throttled commit publishes a snapshot to React state at ~20Hz, so the dashboard tree reconciles roughly three times less often than the wire feed and avoids per-sample array spread+slice allocations.
+- The high-frequency dashboard subtree (`MainTelemetryColumn`, `LapTelemetryChart`, `TraceLane`, `TelemetrySidebar`, `SessionBand`, `DashboardHeader`) is wrapped in `React.memo` so unrelated state changes (sessions polling, replay scrub, workspace switches) do not cascade into per-render SVG rebuilds, and the per-render `Math.max(..., ...arr)` argument-spreads on 180-element trace arrays were replaced with O(N) loops.
 - The Sessions workspace releases loaded capture detail payloads when it is hidden, unless replay is actively using that capture, so background polling does not keep refetching large sample arrays while the user is back on the live or driver views.
 - Development builds sample Chromium heap usage through `performance.memory` when the browser exposes it and surface a warning in the shared notice area when usage stays hot or grows quickly. This gives contributors a visible signal before a long-session regression reaches production.
 

@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import * as signalR from "@microsoft/signalr";
 import {
   getCollectorStatus,
@@ -24,6 +24,11 @@ const TRACE_HISTORY_LIMIT = 180;
 const MAX_LAP_TRACE_POINTS = 720;
 const SESSION_REFRESH_INTERVAL_MS = 5000;
 const CONNECTION_RETRY_INTERVAL_MS = 1500;
+// Coalesce SignalR samples (60Hz fake adapter, higher in real games) into a
+// single React commit at ~20Hz. Below the threshold for cockpit displays to
+// look "smooth" while drastically cutting reconciliation cost and array
+// allocations during long sessions.
+const COMMIT_INTERVAL_MS = 50;
 
 const EMPTY_LAP_TRACE: CurrentLapTelemetrySeries = {
   sessionId: null,
@@ -167,24 +172,63 @@ function createDashboardAlert(
 }
 
 function appendTraceValue(history: number[], nextValue: number) {
-  const nextHistory = [...history, nextValue];
-  return nextHistory.slice(Math.max(0, nextHistory.length - TRACE_HISTORY_LIMIT));
+  // Mutates history in place to keep allocations low on the 60Hz hot path.
+  history.push(nextValue);
+  if (history.length > TRACE_HISTORY_LIMIT) {
+    history.splice(0, history.length - TRACE_HISTORY_LIMIT);
+  }
 }
 
 function appendLapTracePoint(
   points: CurrentLapTelemetrySeries["points"],
   nextPoint: CurrentLapTelemetrySeries["points"][number],
 ) {
-  const lastPoint = points.at(-1) ?? null;
+  const lastPoint = points.length > 0 ? points[points.length - 1] : null;
 
   if (
     lastPoint !== null &&
     Math.abs(lastPoint.elapsedSeconds - nextPoint.elapsedSeconds) < 0.001
   ) {
-    return [...points.slice(0, -1), nextPoint];
+    points[points.length - 1] = nextPoint;
+    return;
   }
 
-  return [...points, nextPoint].slice(-MAX_LAP_TRACE_POINTS);
+  points.push(nextPoint);
+  if (points.length > MAX_LAP_TRACE_POINTS) {
+    points.splice(0, points.length - MAX_LAP_TRACE_POINTS);
+  }
+}
+
+type TraceBuffers = {
+  speed: number[];
+  rpm: number[];
+  throttle: number[];
+  brake: number[];
+  steering: number[];
+};
+
+function createTraceBuffers(): TraceBuffers {
+  return { speed: [], rpm: [], throttle: [], brake: [], steering: [] };
+}
+
+function snapshotTraceBuffers(buffers: TraceBuffers): TelemetryTraceSeries {
+  return {
+    speed: buffers.speed.slice(),
+    rpm: buffers.rpm.slice(),
+    throttle: buffers.throttle.slice(),
+    brake: buffers.brake.slice(),
+    steering: buffers.steering.slice(),
+  };
+}
+
+function snapshotLapTrace(
+  ref: CurrentLapTelemetrySeries,
+): CurrentLapTelemetrySeries {
+  return {
+    sessionId: ref.sessionId,
+    lapNumber: ref.lapNumber,
+    points: ref.points.slice(),
+  };
 }
 
 export function useTelemetryDashboard() {
@@ -208,6 +252,52 @@ export function useTelemetryDashboard() {
     useState<CurrentLapTelemetrySeries>(EMPTY_LAP_TRACE);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<DashboardAlert | null>(null);
+
+  // Hot-path refs: we mutate buffers per SignalR sample and only commit
+  // snapshots into React state at COMMIT_INTERVAL_MS so the dashboard tree
+  // reconciles ~20 times per second instead of 60+.
+  const latestSampleRef = useRef<TelemetrySample | null>(null);
+  const traceBuffersRef = useRef<TraceBuffers>(createTraceBuffers());
+  const lapTraceRef = useRef<CurrentLapTelemetrySeries>({
+    sessionId: null,
+    lapNumber: null,
+    points: [],
+  });
+  const sampleDirtyRef = useRef(false);
+  const traceDirtyRef = useRef(false);
+  const lapTraceDirtyRef = useRef(false);
+  const commitTimerRef = useRef<number | null>(null);
+
+  const flushPendingCommit = useEffectEvent(() => {
+    commitTimerRef.current = null;
+    if (sampleDirtyRef.current) {
+      sampleDirtyRef.current = false;
+      setSample(latestSampleRef.current);
+    }
+    if (traceDirtyRef.current) {
+      traceDirtyRef.current = false;
+      setTraceSeries(snapshotTraceBuffers(traceBuffersRef.current));
+    }
+    if (lapTraceDirtyRef.current) {
+      lapTraceDirtyRef.current = false;
+      setLapTrace(snapshotLapTrace(lapTraceRef.current));
+    }
+  });
+
+  const scheduleCommit = useEffectEvent(() => {
+    if (commitTimerRef.current !== null) {
+      return;
+    }
+    commitTimerRef.current = window.setTimeout(() => {
+      flushPendingCommit();
+    }, COMMIT_INTERVAL_MS);
+  });
+
+  const resetLapTrace = () => {
+    lapTraceRef.current = { sessionId: null, lapNumber: null, points: [] };
+    lapTraceDirtyRef.current = false;
+    setLapTrace(EMPTY_LAP_TRACE);
+  };
 
   const applyDashboardSnapshot = (snapshot: DashboardSnapshot) => {
     setCollectorStatus(snapshot.collectorStatus);
@@ -257,7 +347,7 @@ export function useTelemetryDashboard() {
     setApiAvailability("online");
 
     if (!status.isRunning || status.runMode === "Idle") {
-      setLapTrace(EMPTY_LAP_TRACE);
+      resetLapTrace();
     }
 
     if (status.lastError) {
@@ -269,53 +359,65 @@ export function useTelemetryDashboard() {
   });
 
   const handleTelemetrySample = useEffectEvent((nextSample: TelemetrySample) => {
-    setSample(nextSample);
-    setApiAvailability("online");
-    setError(null);
-    setTraceSeries((current) => ({
-      speed: appendTraceValue(current.speed, nextSample.vehicle.speedKph ?? 0),
-      rpm: appendTraceValue(current.rpm, nextSample.vehicle.rpm ?? 0),
-      throttle: appendTraceValue(
-        current.throttle,
-        (nextSample.driverInput.throttle ?? 0) * 100,
-      ),
-      brake: appendTraceValue(
-        current.brake,
-        (nextSample.driverInput.brake ?? 0) * 100,
-      ),
-      steering: appendTraceValue(
-        current.steering,
-        (nextSample.driverInput.steering ?? 0) * 100,
-      ),
-    }));
+    latestSampleRef.current = nextSample;
+    sampleDirtyRef.current = true;
+
+    const buffers = traceBuffersRef.current;
+    appendTraceValue(buffers.speed, nextSample.vehicle.speedKph ?? 0);
+    appendTraceValue(buffers.rpm, nextSample.vehicle.rpm ?? 0);
+    appendTraceValue(
+      buffers.throttle,
+      (nextSample.driverInput.throttle ?? 0) * 100,
+    );
+    appendTraceValue(
+      buffers.brake,
+      (nextSample.driverInput.brake ?? 0) * 100,
+    );
+    appendTraceValue(
+      buffers.steering,
+      (nextSample.driverInput.steering ?? 0) * 100,
+    );
+    traceDirtyRef.current = true;
 
     const elapsedSeconds = parseDurationSeconds(nextSample.lap.currentLapTime);
     const speedKph = nextSample.vehicle.speedKph;
 
-    if (elapsedSeconds === null || speedKph === null || speedKph === undefined) {
-      return;
-    }
-
-    setLapTrace((current) => {
-      const lastPoint = current.points.at(-1) ?? null;
+    if (
+      elapsedSeconds !== null &&
+      speedKph !== null &&
+      speedKph !== undefined
+    ) {
+      const lapRef = lapTraceRef.current;
+      const lastPoint =
+        lapRef.points.length > 0
+          ? lapRef.points[lapRef.points.length - 1]
+          : null;
       const nextLapNumber = nextSample.lap.lapNumber ?? null;
       const shouldReset =
-        current.sessionId !== nextSample.session.id ||
-        current.lapNumber !== nextLapNumber ||
+        lapRef.sessionId !== nextSample.session.id ||
+        lapRef.lapNumber !== nextLapNumber ||
         (lastPoint !== null && elapsedSeconds + 0.05 < lastPoint.elapsedSeconds);
-      const nextPoint = {
-        elapsedSeconds,
-        value: speedKph,
-      };
+      const nextPoint = { elapsedSeconds, value: speedKph };
 
-      return {
-        sessionId: nextSample.session.id,
-        lapNumber: nextLapNumber,
-        points: shouldReset
-          ? [nextPoint]
-          : appendLapTracePoint(current.points, nextPoint),
-      };
-    });
+      if (shouldReset) {
+        lapRef.sessionId = nextSample.session.id;
+        lapRef.lapNumber = nextLapNumber;
+        lapRef.points.length = 0;
+        lapRef.points.push(nextPoint);
+      } else {
+        appendLapTracePoint(lapRef.points, nextPoint);
+      }
+      lapTraceDirtyRef.current = true;
+    }
+
+    if (apiAvailability !== "online") {
+      setApiAvailability("online");
+    }
+    if (error !== null) {
+      setError(null);
+    }
+
+    scheduleCommit();
   });
 
   useEffect(() => {
@@ -415,6 +517,10 @@ export function useTelemetryDashboard() {
       window.clearTimeout(initialFetch);
       window.clearInterval(sessionRefresh);
       clearConnectionRetryTimeout();
+      if (commitTimerRef.current !== null) {
+        window.clearTimeout(commitTimerRef.current);
+        commitTimerRef.current = null;
+      }
       void connection.stop();
     };
   }, []);
@@ -446,7 +552,7 @@ export function useTelemetryDashboard() {
   const startCollector = async () => {
     setIsBusy(true);
     setError(null);
-    setLapTrace(EMPTY_LAP_TRACE);
+    resetLapTrace();
 
     try {
       const [nextStatus, nextGames] = await Promise.all([
@@ -468,7 +574,7 @@ export function useTelemetryDashboard() {
   const stopCollector = async () => {
     setIsBusy(true);
     setError(null);
-    setLapTrace(EMPTY_LAP_TRACE);
+    resetLapTrace();
 
     try {
       const nextStatus = await stopCollectorRequest(collectorStatus?.runMode);
@@ -493,7 +599,7 @@ export function useTelemetryDashboard() {
   const startReplay = async (sessionId: string) => {
     setIsBusy(true);
     setError(null);
-    setLapTrace(EMPTY_LAP_TRACE);
+    resetLapTrace();
 
     try {
       setCollectorStatus(await startReplayRequest(sessionId));

@@ -48,7 +48,7 @@ export function WorkspaceRail({
   return (
     <nav className="workspace-rail" aria-label="Workspaces">
       <div className="workspace-rail-brand" aria-hidden="true">
-        SF
+        <img className="workspace-rail-brand-mark" src="/favicon.svg" alt="" />
       </div>
       <ul className="workspace-rail-list">
         {WORKSPACES.map((item) => {

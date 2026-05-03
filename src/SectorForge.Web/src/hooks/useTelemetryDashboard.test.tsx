@@ -235,6 +235,13 @@ describe("useTelemetryDashboard", () => {
       signalRMock.emitTelemetrySample(sampleFour);
     });
 
+    // Sample, trace, and lap-trace updates are batched into a single React
+    // commit at COMMIT_INTERVAL_MS (50ms). Advance the throttled commit timer
+    // so the snapshot lands in state before assertions.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+
     expect(result.current.error).toBeNull();
     expect(result.current.sample?.sequence).toBe(4);
     expect(result.current.traceSeries.speed).toEqual([150, 151, 152, 160]);

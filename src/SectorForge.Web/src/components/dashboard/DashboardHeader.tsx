@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Pause, Play, RefreshCw } from "lucide-react";
 import type { ConnectionState, TelemetryRunMode } from "../../types/telemetry";
 
@@ -16,7 +17,9 @@ type DashboardHeaderProps = {
   onRefresh: () => void;
 };
 
-export function DashboardHeader({
+export const DashboardHeader = memo(DashboardHeaderImpl);
+
+function DashboardHeaderImpl({
   connectionState,
   runMode,
   isCollectorRunning,
@@ -46,12 +49,15 @@ export function DashboardHeader({
   return (
     <header className="topbar" aria-label="Race control header">
       <div className="topbar-brand">
-        <div className="brand-mark" aria-hidden="true">
-          SF
-        </div>
+        <img className="brand-mark" src="/favicon.svg" alt="" aria-hidden="true" />
         <div className="brand-stack">
-          <span className="brand-title">SECTORFORGE</span>
-          <span className="brand-subtitle">PITWALL // TELEMETRY BUS</span>
+          <img
+            className="brand-wordmark"
+            src="/sectorforge-wordmark.svg"
+            alt="SectorForge"
+            draggable={false}
+          />
+          <span className="brand-subtitle">LOCAL-FIRST SIM TELEMETRY PITWALL</span>
         </div>
       </div>
 

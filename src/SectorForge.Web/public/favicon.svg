@@ -1,5 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="12" fill="#11161c"/>
-  <path d="M12 40h18l6-16h16" fill="none" stroke="#68e1fd" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M16 24h18l-6 16h20" fill="none" stroke="#65f089" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">SectorForge mark</title>
+  <desc id="desc">SectorForge telemetry-inspired S mark in cyan and amber.</desc>
+  <defs>
+    <linearGradient id="cool" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8ef7ff" />
+      <stop offset="100%" stop-color="#4db7ff" />
+    </linearGradient>
+    <linearGradient id="warm" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffd27c" />
+      <stop offset="100%" stop-color="#ff7a18" />
+    </linearGradient>
+  </defs>
+
+  <rect width="64" height="64" rx="14" fill="#0a0f15" />
+  <rect x="3" y="3" width="58" height="58" rx="12" fill="#111b24" stroke="#233848" stroke-width="2" />
+  <path d="M14 18H44L33 30H20" fill="none" stroke="url(#cool)" stroke-width="5.5"
+    stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M50 46H20L31 34H44" fill="none" stroke="url(#warm)" stroke-width="5.5"
+    stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M31 28L35 32L31 36L27 32Z" fill="#fff0b0" />
 </svg>

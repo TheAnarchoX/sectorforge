@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { memo, type CSSProperties } from "react";
 import type { ConnectionState, TelemetryRunMode } from "../../types/telemetry";
 
 type StripCellTone = "neutral" | "accent" | "warning" | "success" | "danger";
@@ -102,7 +102,9 @@ export function StripCell({
   );
 }
 
-export function TraceLane({
+export const TraceLane = memo(TraceLaneImpl);
+
+function TraceLaneImpl({
   label,
   value,
   unit,
@@ -200,7 +202,9 @@ export function TraceLane({
 }
 
 /** Session band: FIA-timing-screen-style header strip across the pitwall. */
-export function SessionBand({
+export const SessionBand = memo(SessionBandImpl);
+
+function SessionBandImpl({
   sessionType,
   sessionName,
   trackName,

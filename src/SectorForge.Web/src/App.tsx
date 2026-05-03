@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { GitCompareArrows, Plug } from "lucide-react";
 import { DashboardHeader } from "./components/dashboard/DashboardHeader";
 import {
@@ -93,6 +93,19 @@ function App() {
   const stateNotices =
     memoryNotice === null ? runtimeNotices : [memoryNotice, ...runtimeNotices];
 
+  const handleStartCollector = useCallback(() => {
+    void startCollector();
+  }, [startCollector]);
+  const handleStopCollector = useCallback(() => {
+    void stopCollector();
+  }, [stopCollector]);
+  const handleRefresh = useCallback(() => {
+    void refreshDashboard();
+  }, [refreshDashboard]);
+  const handleSessionDeleted = useCallback(() => {
+    void refreshSessions();
+  }, [refreshSessions]);
+
   const liveWorkspace = (
     <section className="pitwall-console" aria-label="Pitwall console">
       <SessionBand
@@ -145,9 +158,9 @@ function App() {
           sessionName={displaySample?.session.name}
           sourceName={displaySource?.displayName}
           samplesPublished={collectorStatus?.samplesPublished ?? 0}
-          onStartCollector={() => void startCollector()}
-          onStopCollector={() => void stopCollector()}
-          onRefresh={() => void refreshDashboard()}
+          onStartCollector={handleStartCollector}
+          onStopCollector={handleStopCollector}
+          onRefresh={handleRefresh}
         />
 
         {error && (
@@ -220,7 +233,7 @@ function App() {
               onStartReplay={startReplay}
               onStopReplay={stopCollector}
               onReplayStateChange={setReplayState}
-              onSessionDeleted={() => void refreshSessions()}
+              onSessionDeleted={handleSessionDeleted}
             />
           </div>
         )}

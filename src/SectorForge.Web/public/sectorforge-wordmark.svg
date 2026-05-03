@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 140" role="img"
+    aria-labelledby="title desc">
+    <title id="title">SectorForge wordmark</title>
+    <desc id="desc">Transparent SectorForge wordmark with cyan sector label, bold forge title, and
+        telemetry accent lines.</desc>
+    <defs>
+        <linearGradient id="cool" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#8ef7ff" />
+            <stop offset="100%" stop-color="#4db7ff" />
+        </linearGradient>
+        <linearGradient id="warm" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#ffd27c" />
+            <stop offset="100%" stop-color="#ff7a18" />
+        </linearGradient>
+    </defs>
+
+    <path d="M0 116H208" fill="none" stroke="#243848" stroke-width="6" stroke-linecap="round" />
+    <path d="M0 116H118" fill="none" stroke="url(#cool)" stroke-width="6" stroke-linecap="round" />
+    <path d="M374 26H640" fill="none" stroke="#1f2d3a" stroke-width="3" stroke-linecap="round" />
+    <path d="M374 26H454" fill="none" stroke="url(#warm)" stroke-width="3" stroke-linecap="round" />
+    <text x="0" y="44" fill="#7ddcff" font-family="Segoe UI, Arial, sans-serif" font-size="34"
+        font-weight="700" letter-spacing="12">SECTOR</text>
+    <text x="0" y="106" fill="#f7fbff" font-family="Segoe UI, Arial, sans-serif" font-size="82"
+        font-weight="800" letter-spacing="2">FORGE</text>
+</svg>

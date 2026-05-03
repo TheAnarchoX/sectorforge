@@ -1,8 +1,27 @@
 # SectorForge
 
-SectorForge is a Windows-first, local-first telemetry and race analysis app for sim racing. The first vertical slice is a .NET local API with SignalR live telemetry, a fake 60 Hz collector, SQLite session storage, and a React/Vite dashboard.
+[![CI](https://github.com/TheAnarchoX/sectorforge/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TheAnarchoX/sectorforge/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-94.13%25%20overall-brightgreen)](tests/coverage/README.md)
+[![License](https://img.shields.io/badge/license-MIT-0f172a)](LICENSE)
 
-## Prerequisites
+![SectorForge wordmark](docs/assets/sectorforge-wordmark.svg)
+
+SectorForge is a Windows-first, local-first telemetry and race analysis app for sim racing. The current slice pairs a native .NET collector and local API with SignalR live telemetry, SQLite session storage, replay controls, and a React/Vite dashboard.
+
+Docker, WSL, admin rights, and a running sim are not required for the current MVP. The fake adapter starts automatically so contributors can work on the runtime, storage, and UI without needing real game telemetry.
+
+## Quick Look
+
+- Native collector and adapter boundary for UDP, shared memory, plugin, or replay inputs.
+- Normalized telemetry model in the backend so live, stored, and replay flows share the same data shape.
+- Local SignalR dashboard with live feed, session review, replay, and driving-focused views.
+- SQLite persistence with bounded raw sample retention for long local runs.
+
+![SectorForge live dashboard](docs/assets/dashboard-live.png)
+
+## Setup
+
+### Prerequisites
 
 - Windows 11 or Windows 10
 - .NET SDK 10.0.203 or newer 10.0 feature release
@@ -10,27 +29,38 @@ SectorForge is a Windows-first, local-first telemetry and race analysis app for 
 - `npx` from npm
 - Optional: global `pnpm`; scripts fall back to `npx pnpm@latest`
 
-Docker, WSL, admin rights, and a running sim are not required for the MVP.
+### Local Development
 
-## Run Locally
+1. Clone the repo and open it in PowerShell.
 
-```powershell
-cd C:\Users\jimdv\repositories\sectorforge
-.\tools\dev.ps1
-```
+   ```powershell
+   git clone https://github.com/TheAnarchoX/sectorforge.git
+   Set-Location .\sectorforge
+   ```
 
-Open `http://localhost:5173`. The API runs on `http://localhost:5221` and starts the fake telemetry adapter automatically.
-The Recent captures panel can replay a saved session back through the same live dashboard stream.
+2. Start the local API and dashboard.
 
-If the default ports are already in use, pass alternate ports before launching:
+   ```powershell
+   .\tools\dev.ps1
+   ```
 
-```powershell
-.\tools\dev.ps1 -ApiPort 5222 -WebPort 5174
-```
+   `tools\dev.ps1` installs frontend dependencies automatically when `src\SectorForge.Web\node_modules` is missing. Pass `-NoInstall` if dependencies are already present and you want to skip that check.
 
-The dev script checks both ports up front and reports whether to use `-ApiPort` or `-WebPort`.
+3. Open `http://localhost:5173`. The API listens on `http://localhost:5221` and autostarts the fake telemetry adapter.
 
-Useful commands:
+4. If either default port is occupied, rerun with explicit ports.
+
+   ```powershell
+   .\tools\dev.ps1 -ApiPort 5222 -WebPort 5174
+   ```
+
+5. Before opening a pull request, run the local quality gate.
+
+   ```powershell
+   .\tools\verify.ps1
+   ```
+
+Useful local commands:
 
 ```powershell
 .\tools\verify.ps1
@@ -42,111 +72,86 @@ dotnet test .\src\SectorForge.slnx
 .\tools\clean.ps1 -Full
 ```
 
-`tools\verify.ps1` runs the full local quality gate: backend tests, .NET format verification, frontend lint, and frontend build.
-`tests\coverage\Invoke-Coverage.ps1` generates merged Cobertura and HTML coverage reports under `artifacts\coverage\report` and enforces the baseline thresholds from `tests\coverage\coverage-thresholds.json`.
-`npx --yes pnpm@10.33.2 --dir .\src\SectorForge.Web test:coverage` runs the Vitest + React Testing Library frontend suite, writes HTML/Cobertura output to `artifacts\coverage\frontend`, and enforces the 90% line-coverage gate. The current frontend baseline is 92.31% line coverage.
+`tools\verify.ps1` runs the full local quality gate: backend tests, .NET format verification, frontend lint, and frontend build. `tests\coverage\Invoke-Coverage.ps1` generates merged Cobertura and HTML coverage reports under `artifacts\coverage\report` and enforces the backend thresholds from `tests\coverage\coverage-thresholds.json`. The frontend coverage command writes HTML/Cobertura output to `artifacts\coverage\frontend` and enforces the 90% frontend line gate. The current frontend baseline is 92.31% line coverage.
 
-SQLite raw sample storage keeps the newest 1,800 sample blobs per session by default so long fake telemetry runs do not grow without bound. Adjust `Storage:RetainedSampleBlobLimit` in `src/SectorForge.Api/appsettings.json` if you want a shorter or longer local trace.
+### Local Development Loop
 
-## Continuous Integration
-
-Pull requests and pushes to `main` run the baseline checks on Windows through GitHub Actions: merged .NET coverage with threshold enforcement, frontend Vitest coverage with a 90% line gate, .NET format verification, frontend lint, and frontend build. The workflow uploads both backend and frontend HTML/Cobertura coverage reports as an artifact and caches NuGet and pnpm dependencies to keep repeat runs quick.
-
-## VS Code
-
-The repository includes `.vscode` settings for a smoother local loop:
-
-- `SectorForge: API + Web` compound debug launch starts the API with fake telemetry and opens the Vite app in Chrome.
-- `API: Debug fake telemetry` debugs only the ASP.NET Core backend.
-- `Collector: Debug worker` runs the standalone fake collector worker.
-- Tasks are available for restore, build, test, verify, web install, web dev server, web build, lint, clean, and the full dev script.
-
-Install the recommended extensions when VS Code prompts. They are standard .NET, PowerShell, ESLint, Tailwind, EditorConfig, and Copilot extensions.
-
-## Agentic Work
-
-SectorForge includes repo-native files for coding agents:
-
-- `AGENTS.md` for repo-level operating rules.
-- `docs/agent-tasks.md` for scoped backlog tasks with acceptance criteria.
-- `.github/instructions/` for targeted backend, frontend, protocol, and docs guidance.
-- `.github/prompts/` for reusable task planning, implementation, review, backlog scaffolding, and adapter scaffolding prompts.
-- `.github/agents/` for specialized workspace agents.
-- `.github/skills/` for repeatable SectorForge task, backlog scaffolding, and adapter workflows.
-
-## Architecture
-
-```text
-Game telemetry input
-    -> .NET collector / protocol adapter
-    -> Normalized telemetry model
-    -> ASP.NET Core API + SignalR
-    -> React/Vite dashboard
-    -> SQLite local persistence
+```mermaid
+flowchart LR
+   Dev["./tools/dev.ps1"] --> Api["SectorForge.Api<br/>http://localhost:5221"]
+   Dev --> Web["Vite dashboard<br/>http://localhost:5173"]
+   Api --> Fake["Fake adapter<br/>autostart"]
+   Api --> Hub["SignalR<br/>/hubs/telemetry"]
+   Api --> Store["SQLite<br/>session store"]
+   Hub --> Browser["Live dashboard<br/>in the browser"]
+   Store --> Replay["Recent capture<br/>replay"]
+   Replay --> Hub
 ```
 
-The backend is the source of truth. The web UI renders live state, controls the local collector, and shows recent stored sessions.
+## Architecture Overview
 
-## Current Status
+```mermaid
+flowchart LR
+  Game["Game adapters"] --> Collector["SectorForge.Collector<br/>sample loop"]
+  Fake["Fake adapter"] --> Collector
+  Collector --> Core["SectorForge.Core<br/>normalized telemetry model"]
+  Core --> Api["SectorForge.Api<br/>REST + SignalR"]
+  Core --> Storage["SectorForge.Infrastructure<br/>SQLite session store"]
+  Storage --> Replay["Replay service"]
+  Replay --> Api
+  Api --> Web["SectorForge.Web<br/>live dashboard + controls"]
+```
+
+The backend is the source of truth. The web UI renders state, controls the local collector, and reuses the same live publish path for replay. Game-specific parsing stays isolated inside collector adapters so packet or shared-memory layouts do not leak into the normalized model.
+
+- `SectorForge.Core` owns the game-agnostic records, enums, and interfaces.
+- `SectorForge.Collector` owns adapters, the collector loop, and fake telemetry for local development.
+- `SectorForge.Api` exposes the local control plane, SignalR stream, and replay endpoints.
+- `SectorForge.Infrastructure` persists sessions, lap summaries, and retained sample blobs.
+- `SectorForge.Web` renders live telemetry, stored sessions, replay state, and the driver-facing views.
+
+For the deeper runtime breakdown, see [docs/architecture.md](docs/architecture.md) and [docs/game-adapters.md](docs/game-adapters.md).
+
+## Current Slice
 
 | Area | Status |
 | --- | --- |
 | Fake telemetry adapter | Working 60 Hz simulated stream |
-| ASP.NET Core API | Health, games, sessions, collector status/start/stop |
+| ASP.NET Core API | Health, games, sessions, collector control, replay control |
 | SignalR hub | Streams normalized telemetry samples |
-| React dashboard | Live metrics, input bars, temperatures, speed chart |
-| SQLite storage | Sessions, lap summaries, raw sample blobs |
-| Stored session replay | Replays saved telemetry samples through the live SignalR stream |
+| React dashboard | Live feed, session review, replay controls, driver HUD |
+| SQLite storage | Sessions, lap summaries, raw sample blobs with retention cap |
+| Compare workflow | Placeholder workspace for lap overlay work |
 | F1 25 UDP | Placeholder adapter |
 | ACC shared memory | Placeholder adapter |
 | AMS2 telemetry | Placeholder adapter |
 | LMU plugin/UDP | Placeholder adapter |
 
-## Open Source Notes
+The GitHub Actions workflow runs on Windows and checks merged .NET coverage thresholds, frontend Vitest coverage, .NET format verification, frontend lint, and frontend build. The coverage badge above reflects the current documented 94.13% overall line-coverage baseline from [tests/coverage/README.md](tests/coverage/README.md).
 
-- SectorForge is licensed under the MIT License. See `LICENSE`.
-- Game-specific packet parsing should stay isolated under collector/protocol adapters.
-- Do not copy proprietary protocol documents into the repository.
-- Keep local telemetry captures, databases, exports, and secrets out of source control.
-- See `CONTRIBUTING.md` for local checks and adapter contribution rules.
-- See `AGENTS.md` and `docs/agent-tasks.md` for coding-agent guidance and the current agent backlog.
+## Repository Map
+
+```mermaid
+flowchart TB
+    Repo["sectorforge repo"]
+    Repo --> ApiProj["src/SectorForge.Api<br/>Minimal API + SignalR"]
+    Repo --> CollectorProj["src/SectorForge.Collector<br/>adapters + collector"]
+    Repo --> CoreProj["src/SectorForge.Core<br/>shared telemetry model"]
+    Repo --> InfraProj["src/SectorForge.Infrastructure<br/>SQLite storage"]
+    Repo --> WebProj["src/SectorForge.Web<br/>React + Vite dashboard"]
+    Repo --> Tests["tests/*<br/>API, core, protocol coverage"]
+    Repo --> Docs["docs/*<br/>architecture, backlog, assets"]
+    Repo --> Tools["tools/*.ps1<br/>dev, verify, format, clean"]
+```
+
+## More Docs
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) for local checks and contribution rules.
+- [docs/architecture.md](docs/architecture.md) for runtime flow, storage, and frontend guardrails.
+- [docs/agent-tasks.md](docs/agent-tasks.md) for the scoped backlog.
+- [AGENTS.md](AGENTS.md) for repo-level coding-agent guidance.
+- [tests/coverage/README.md](tests/coverage/README.md) for baseline and threshold details.
 
 ## License
 
-MIT License. See `LICENSE`.
-
-## Project Layout
-
-```text
-src/
-  SectorForge.Api/             ASP.NET Core Minimal API and SignalR hub
-  SectorForge.Collector/       Telemetry adapters and collector service
-  SectorForge.Core/            Game-agnostic telemetry model and interfaces
-  SectorForge.Infrastructure/  SQLite persistence
-  SectorForge.Web/             React, Vite, TypeScript dashboard
-tests/
-  SectorForge.Core.Tests/
-  SectorForge.Protocol.Tests/
-  SectorForge.Api.Tests/
-docs/
-  architecture.md
-  game-adapters.md
-  protocol-notes.md
-tools/
-  dev.ps1
-  format.ps1
-  clean.ps1
-```
-
-## API Surface
-
-- `GET /api/health`
-- `GET /api/games`
-- `GET /api/sessions`
-- `GET /api/sessions/{id}`
-- `POST /api/collector/start`
-- `POST /api/collector/stop`
-- `GET /api/collector/status`
-- `POST /api/replay/start/{sessionId}`
-- `POST /api/replay/stop`
-- SignalR hub: `/hubs/telemetry`
+MIT License. See [LICENSE](LICENSE).

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Gauge, RadioTower } from "lucide-react";
 import type {
   CollectorStatus,
@@ -28,7 +29,9 @@ function brakeTone(v: number | null | undefined) {
   return "crit";
 }
 
-export function TelemetrySidebar({
+export const TelemetrySidebar = memo(TelemetrySidebarImpl);
+
+function TelemetrySidebarImpl({
   sample,
   games,
   collectorStatus,

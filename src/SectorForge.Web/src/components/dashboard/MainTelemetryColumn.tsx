@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type {
   CurrentLapTelemetrySeries,
   TelemetryRunMode,
@@ -24,7 +25,18 @@ type MainTelemetryColumnProps = {
 
 type SectorTone = "neutral" | "improving" | "losing";
 
-export function MainTelemetryColumn({
+function maxValue(values: readonly number[], floor: number) {
+  let max = floor;
+  for (let i = 0; i < values.length; i += 1) {
+    const value = values[i];
+    if (value > max) {
+      max = value;
+    }
+  }
+  return max;
+}
+
+function MainTelemetryColumnComponent({
   activeSource,
   runMode,
   sample,
@@ -79,8 +91,8 @@ export function MainTelemetryColumn({
     },
   ];
 
-  const speedMax = Math.max(320, ...traceSeries.speed, 1);
-  const rpmMax = Math.max(9000, ...traceSeries.rpm, 1);
+  const speedMax = maxValue(traceSeries.speed, 320);
+  const rpmMax = maxValue(traceSeries.rpm, 9000);
   const steeringValue =
     sample?.driverInput.steering === null ||
     sample?.driverInput.steering === undefined
@@ -224,3 +236,5 @@ export function MainTelemetryColumn({
     </section>
   );
 }
+
+export const MainTelemetryColumn = memo(MainTelemetryColumnComponent);

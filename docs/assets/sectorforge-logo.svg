@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 220" role="img"
+    aria-labelledby="title desc">
+    <title id="title">SectorForge logo</title>
+    <desc id="desc">SectorForge wordmark with a telemetry-inspired S mark in cyan and amber on a
+        dark rounded panel.</desc>
+    <defs>
+        <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#101821" />
+            <stop offset="100%" stop-color="#0a0f15" />
+        </linearGradient>
+        <linearGradient id="cool" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#8ef7ff" />
+            <stop offset="100%" stop-color="#4db7ff" />
+        </linearGradient>
+        <linearGradient id="warm" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#ffd27c" />
+            <stop offset="100%" stop-color="#ff7a18" />
+        </linearGradient>
+    </defs>
+
+    <rect x="10" y="10" width="820" height="200" rx="32" fill="url(#panel)" />
+    <rect x="24" y="24" width="176" height="172" rx="28" fill="#111b24" stroke="#233848"
+        stroke-width="2" />
+    <path d="M60 66H144L116 100H74" fill="none" stroke="url(#cool)" stroke-width="15"
+        stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M164 152H80L108 118H150" fill="none" stroke="url(#warm)" stroke-width="15"
+        stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M112 96L124 108L112 120L100 108Z" fill="#fff0b0" />
+    <path d="M232 62H804" fill="none" stroke="#1f2d3a" stroke-width="2" />
+    <text x="232" y="92" fill="#7ddcff" font-family="Segoe UI, Arial, sans-serif" font-size="28"
+        font-weight="700" letter-spacing="10">SECTOR</text>
+    <text x="232" y="150" fill="#f7fbff" font-family="Segoe UI, Arial, sans-serif" font-size="70"
+        font-weight="800" letter-spacing="2">FORGE</text>
+    <text x="234" y="182" fill="#7d8f9f" font-family="Segoe UI, Arial, sans-serif" font-size="18"
+        font-weight="600" letter-spacing="4">LOCAL-FIRST SIM TELEMETRY PITWALL</text>
+    <path d="M232 166H528" fill="none" stroke="#243848" stroke-width="4" stroke-linecap="round" />
+    <path d="M232 166H396" fill="none" stroke="url(#cool)" stroke-width="4" stroke-linecap="round" />
+</svg>

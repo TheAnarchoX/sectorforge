@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { formatNumber } from "../../utils/telemetryFormat";
 
 const CHART_WIDTH = 860;
@@ -62,7 +63,9 @@ function buildTicks(step: number) {
   );
 }
 
-export function LapTelemetryChart({
+export const LapTelemetryChart = memo(LapTelemetryChartImpl);
+
+function LapTelemetryChartImpl({
   points,
   lapNumber,
   currentValue,
@@ -97,14 +100,20 @@ export function LapTelemetryChart({
 
   const plotWidth = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
   const plotHeight = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
-  const maxElapsedSeconds = Math.max(points.at(-1)?.elapsedSeconds ?? 0, 5);
+  const lastPoint = points[points.length - 1];
+  const maxElapsedSeconds = Math.max(lastPoint?.elapsedSeconds ?? 0, 5);
   const xStep = getNiceStep(maxElapsedSeconds / GRID_TICK_COUNT);
   const maxX = Math.max(xStep * GRID_TICK_COUNT, maxElapsedSeconds);
-  const rawMaxY = Math.max(
-    currentValue ?? 0,
-    ...points.map((point) => point.value),
-    20,
-  );
+  let rawMaxY = currentValue ?? 0;
+  for (let i = 0; i < points.length; i += 1) {
+    const value = points[i].value;
+    if (value > rawMaxY) {
+      rawMaxY = value;
+    }
+  }
+  if (rawMaxY < 20) {
+    rawMaxY = 20;
+  }
   const yStep = getNiceStep(rawMaxY / GRID_TICK_COUNT);
   const maxY = Math.max(yStep * GRID_TICK_COUNT, 20);
   const xTicks = buildTicks(xStep);

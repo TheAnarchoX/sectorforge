@@ -291,7 +291,7 @@ This backlog is written for coding agents and human contributors. Each task is i
 - Type: frontend resilience
 - Goal: Implement memory usage monitoring in the frontend and optimize any identified leaks or inefficiencies. This will help ensure the dashboard remains responsive and stable during long driving sessions, especially when replaying stored sessions with large amounts of telemetry data.
 - Suggested files: `src/SectorForge.Web/src/*`, docs
-- Notes: Added a dev-only frontend heap monitor on 2026-05-03 that surfaces high-usage warnings when Chromium exposes `performance.memory`. The Sessions workspace now releases hidden capture detail payloads unless replay is actively using them, and replay/session trace derivation no longer rescans or spreads whole-session sample arrays on every update.
+- Notes: Added a dev-only frontend heap monitor on 2026-05-03 that surfaces high-usage warnings when Chromium exposes `performance.memory`. The Sessions workspace now releases hidden capture detail payloads unless replay is actively using them, and replay/session trace derivation no longer rescans or spreads whole-session sample arrays on every update. A follow-up perf pass on 2026-05-03 cut the live-telemetry hot path: SignalR samples now mutate ring buffers in refs and a single throttled commit at ~20Hz drives all React state, the dashboard subtree (`MainTelemetryColumn`, `LapTelemetryChart`, `TraceLane`, `TelemetrySidebar`, `SessionBand`, `DashboardHeader`) is wrapped in `React.memo`, and per-render `Math.max(..., ...arr)` spreads were replaced with O(N) loops to remove 60Hz argument-spreading on 180-element arrays. This brings the fake-adapter live workspace down from 60Hz reconciliation/allocation churn to ~20Hz commits with a single array clone per channel per commit.
 - Acceptance criteria:
   - Memory usage is monitored in development builds, with warnings for high usage.
   - Any identified memory leaks or inefficiencies are addressed and optimized.
@@ -302,9 +302,10 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SFI-001: Add Screenshots And GIFs To README
 
-- Status: `ready`
+- Status: `done`
 - Type: documentation
 - Goal: Add visual examples of the dashboard and features to the README to help users understand what the project does at a glance. This can include screenshots of the dashboard, charts, and session details, as well as short GIFs demonstrating live telemetry updates and replay mode.
+- Notes: Added a live dashboard screenshot and animated live-feed GIF under `docs/assets/` on 2026-05-03 and embedded both near the top of `README.md`.
 - Suggested files: `README.md`, `docs/assets/*`
 - Acceptance criteria:
   - README includes at least one screenshot of the dashboard showing live telemetry.
@@ -314,9 +315,10 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SFI-002: Add Setup Notes To README
 
-- Status: `ready`
+- Status: `done`
 - Type: documentation
 - Goal: Add a setup section to the README that provides clear instructions for getting the project up and running locally. This should include prerequisites, installation steps, and how to start the development environment. Clear setup instructions will help new contributors get started quickly and reduce friction.
+- Notes: Reworked `README.md` on 2026-05-03 with a dedicated Setup section covering prerequisites, clone/start steps, alternate ports, and the local verify command. Instructions were validated against the current `tools/dev.ps1` behavior.
 - Suggested files: `README.md`
 - Acceptance criteria:
   - README has a "Setup" section with clear, step-by-step instructions for local development.
@@ -325,9 +327,10 @@ This backlog is written for coding agents and human contributors. Each task is i
   
 ### SFI-003: Add Architecture Overview To README
 
-- Status: `ready`
+- Status: `done`
 - Type: documentation
 - Goal: Add an architecture overview section to the README that explains the high-level structure of the project, including the different components (collector, API, frontend, adapters) and how they interact. This will help new contributors understand the overall design and where to focus their efforts when working on different features.
+- Notes: Refreshed the README architecture section on 2026-05-03 with an explicit runtime flow diagram, component responsibilities, and links to the deeper architecture docs.
 - Suggested files: `README.md`, architecture diagrams if needed
 - Acceptance criteria:
   - README includes an "Architecture Overview" section that describes the main components of the project.
@@ -336,9 +339,10 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SFI-004: Add (CI) Badges To README
 
-- Status: `ready`
+- Status: `done`
 - Type: documentation
 - Goal: Add badges to the README for CI status, code coverage, and license to provide at-a-glance information about the project health and licensing. This is a common practice in open-source projects and can help build trust with potential contributors.
+- Notes: Added CI, coverage, and MIT license badges to the top of `README.md` on 2026-05-03.
 - Suggested files: `README.md`
 - Acceptance criteria:
   - README includes a badge for CI build status that reflects the current state of the default branch.
@@ -350,9 +354,10 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-040: Scaffold F1 25 UDP Adapter Project Area
 
-- Status: `needs-research`
+- Status: `in-progress`
 - Type: protocol adapter
 - Goal: Prepare adapter structure and tests without copying protocol spec text.
+- Notes: Research and follow-on tasks scaffolded on 2026-05-03. SF-043..SF-049 cover packet parser, player-car normalizer, collector wiring, three-slice `TelemetrySample` model expansion, and frontend surfacing. Source-code scaffold (Adapters/F125 project area) still pending under SF-043. F1 25 section in `docs/protocol-notes.md` expanded with the data-source plan and additive model-expansion strategy.
 - Suggested files: `src/SectorForge.Collector/Adapters/F125/*`, `tests/SectorForge.Protocol.Tests/*`, `docs/protocol-notes.md`
 - Acceptance criteria:
   - Adapter-specific DTOs and parser interfaces are isolated from `SectorForge.Core`.
@@ -384,6 +389,102 @@ This backlog is written for coding agents and human contributors. Each task is i
   - Fake adapter sample rate can be configured.
   - README documents common settings.
   - Tests cover default configuration binding where practical.
+
+### SF-043: Implement F1 25 Packet Header Parser And Dispatcher
+
+- Status: `ready`
+- Type: protocol adapter
+- Goal: Parse the F1 25 UDP packet header into an internal DTO and dispatch to per-packet readers, isolated from `SectorForge.Core`.
+- Suggested files: `src/SectorForge.Collector/Adapters/F125/F125PacketReader.cs`, `src/SectorForge.Collector/Adapters/F125/Packets/*`, `tests/SectorForge.Protocol.Tests/F125/*`
+- Acceptance criteria:
+  - Header reader uses `BinaryPrimitives` little-endian reads, no `unsafe` struct overlays.
+  - Unknown or unsupported packet IDs are skipped without throwing across the adapter boundary.
+  - Wrong format byte and truncated buffers return a typed failure (no exception escapes).
+  - Tests build synthetic byte arrays in C# (no recorded captures, no copied spec tables).
+  - Player car index is re-read from each header and never cached across packets.
+
+### SF-044: Implement F1 25 Player-Car Normalizer
+
+- Status: `ready`
+- Type: protocol adapter
+- Goal: Convert F1 25 motion + lap data + car telemetry packets into a normalized `TelemetrySample` for the player car, with unavailable fields set to `null`.
+- Suggested files: `src/SectorForge.Collector/Adapters/F125/F125Normalizer.cs`, `src/SectorForge.Collector/Adapters/F125/F125Adapter.cs`, `tests/SectorForge.Protocol.Tests/F125/*`
+- Acceptance criteria:
+  - Normalizer maps speed, rpm, gear, throttle, brake, steering, clutch, current/last/best lap time, sector index, and lap distance.
+  - Fields not yet mapped remain `null`; no invented values.
+  - Normalizer is a pure function over parsed DTOs (no I/O, no statics other than constants).
+  - Tests cover a synthetic motion+lap+telemetry trio producing the expected scalars and nulls.
+  - Adapter still reports `TelemetrySourceStatus.Offline` (or equivalent unavailable status) until SF-045 wires it in.
+
+### SF-045: Wire f1-25-udp Adapter Into Collector Selection
+
+- Status: `ready`
+- Type: protocol adapter
+- Goal: Allow the collector to select the F1 25 adapter via configuration, while keeping it disabled by default and surfacing errors through collector status.
+- Suggested files: `src/SectorForge.Collector/Program.cs`, `src/SectorForge.Collector/TelemetryCollectorService.cs`, `src/SectorForge.Api/appsettings*.json`, `tests/SectorForge.Protocol.Tests/*`, `docs/game-adapters.md`
+- Acceptance criteria:
+  - When the F1 25 adapter is enabled in configuration and `f1-25-udp` is selected, the collector runs `F125Adapter`; otherwise it falls back to the existing fake / unavailable path.
+  - Default configuration keeps `fake` selected and `f1-25-udp` disabled.
+  - Listener bind errors and parse errors are reported through `TelemetryReceiverStatus.LastError` without crashing the worker.
+  - Adapter status entry in `docs/game-adapters.md` flips to `Scaffolded` (or `Beta` once SF-044 lands), still gated by config.
+  - Cancellation of the host stops the adapter promptly in tests.
+
+### SF-046: Extend TelemetrySample - Slice A (Vehicle Dynamics, Sector Splits, Driver Flags)
+
+- Status: `ready`
+- Type: backend feature
+- Goal: Additively expand `TelemetrySample` so F1 25 (and future adapters) can publish g-forces, world position, sector split times, lap-distance, and driver-input flags without breaking existing adapters or stored blobs.
+- Suggested files: `src/SectorForge.Core/Telemetry/TelemetryModels.cs`, `src/SectorForge.Collector/Adapters/F125/F125Normalizer.cs`, `src/SectorForge.Web/src/types/*`, `tests/SectorForge.Core.Tests/*`, `docs/architecture.md`
+- Acceptance criteria:
+  - New nullable properties on `VehicleState` (`LateralG`, `LongitudinalG`, `VerticalG`, `WorldPositionX/Y/Z`, `Yaw`, `Pitch`, `Roll`, `OilTemperatureC`), on `LapState` (`Sector1Time`, `Sector2Time`, `Sector3Time`, `LastSector1Time`, `LastSector2Time`, `LastSector3Time`, `IsValid`, `LapDistanceMeters`, `TotalDistanceMeters`, `PitStatus`, `PitStopCount`, `PenaltiesSeconds`, `WarningsCount`, `CornersCut`), and on `DriverInputState` (`DrsAllowed`, `DrsActive`, `PitLimiterActive`, `AbsActive`, `TcActive`).
+  - New `PitStatus` enum with `Unknown = 0` so default-construction is safe.
+  - All additions default to `null`; existing adapters and tests compile and pass unchanged.
+  - JSON round-trip and Sqlite blob round-trip tests cover the new fields.
+  - F1 25 normalizer fills these fields where mapped; other adapters leave them `null`.
+  - Frontend TS types mirror the new optional fields; UI consumers guard with `value == null` checks.
+
+### SF-047: Extend TelemetrySample - Slice B+C (Damage, Power Unit, Extended Tyres)
+
+- Status: `ready`
+- Type: backend feature
+- Goal: Additively expand `TelemetrySample` with optional `DamageState`, `PowerUnitState`, and tyre compound/age/wear so F1-class data can flow end to end.
+- Suggested files: `src/SectorForge.Core/Telemetry/TelemetryModels.cs`, `src/SectorForge.Collector/Adapters/F125/F125Normalizer.cs`, `src/SectorForge.Web/src/types/*`, `tests/SectorForge.Core.Tests/*`, `docs/architecture.md`
+- Acceptance criteria:
+  - New optional sub-records on `TelemetrySample`: `DamageState? Damage` (front wing L/R %, rear wing %, floor/diffuser/sidepod %, gearbox %, engine %, tyre damage per corner %, brake damage per corner %) and `PowerUnitState? PowerUnit` (`ErsStoreJoules`, `ErsDeployedThisLapJoules`, `ErsHarvestedThisLapMguk`, `ErsHarvestedThisLapMguh`, `ErsDeployMode`).
+  - `TyreState` gains optional `Compound`, `AgeLaps`, and per-corner `WheelWearState` with `WearPercent`.
+  - New enums (`TyreCompound`, `ErsDeployMode`) include `Unknown = 0`.
+  - All new properties nullable / default-null; non-F1 adapters and existing snapshots remain valid.
+  - JSON and Sqlite blob round-trip tests cover the new sub-records.
+
+### SF-048: Extend TelemetrySample - Slice D (Weather Forecast, Safety Car, Multi-Participant Timing)
+
+- Status: `ready`
+- Type: backend feature
+- Goal: Additively expand `TelemetrySample` with weather forecast, safety-car / session status, and richer per-participant fields so F1 25 timing-board parity is possible.
+- Suggested files: `src/SectorForge.Core/Telemetry/TelemetryModels.cs`, `src/SectorForge.Collector/Adapters/F125/F125Normalizer.cs`, `src/SectorForge.Web/src/types/*`, `tests/SectorForge.Core.Tests/*`, `docs/architecture.md`
+- Acceptance criteria:
+  - New optional `WeatherForecastState? WeatherForecast` on `TelemetrySample` carrying a list of `WeatherForecastSample` (`MinutesAhead`, `Weather`, `RainPercent`, `TrackTemperatureC`, `AirTemperatureC`).
+  - `TrackState` gains optional `TrackId`, `TrackLengthMeters`, `RainPercent`, `WeatherEnum`, `SafetyCarStatus`, `FormationLap`.
+  - `TimingState` gains optional `SessionTimeLeft`, `SessionDuration`.
+  - `ParticipantState` gains optional `Sector1`, `Sector2`, `BestSector1`, `BestSector2`, `BestSector3`, `TyreCompound`, `PitStopCount`, `ResultStatus`, `GridPosition`, `DriverNumber`, `IsAi`.
+  - New enums (`SafetyCarStatus`, `WeatherKind`, `ResultStatus`) include `Unknown = 0`.
+  - F1 25 normalizer populates the multi-participant grid; non-F1 adapters leave fields `null`.
+  - Round-trip tests cover the new fields.
+
+### SF-049: Surface New F1 25 Channels In Dashboard And Lap Channels API
+
+- Status: `ready`
+- Type: frontend feature
+- Goal: Render the new SF-046/047/048 channels in the dashboard with strict null-guarding, and extend the SF-050 lap channel manifest to include them when available.
+- Suggested files: `src/SectorForge.Web/src/types/*`, `src/SectorForge.Web/src/components/dashboard/*`, `src/SectorForge.Api/Services/*`, `src/SectorForge.Api/Program.cs`, `tests/SectorForge.Api.Tests/*`, `docs/architecture.md`
+- Acceptance criteria:
+  - Live workspace shows DRS / pit limiter / ABS / TC indicator strip, sector 1/2/3 split tiles, and a lap-valid badge - each panel mounts only when its source field is non-null.
+  - New "Damage" and "ERS" panels mount only when `sample.damage` / `sample.powerUnit` are present and stay collapsed by default.
+  - Track/weather card shows a forecast strip when `sample.weatherForecast` is present.
+  - Sessions workspace surfaces tyre compound chip + age and a pit-stop count column when populated.
+  - SF-050 channel manifest gains entries for `lateralG`, `longitudinalG`, `lapDistance`, `drsActive`, and `ersStoreJoules`, gated by per-session availability.
+  - Fake adapter and existing tests keep working with all new fields rendered as hidden / absent.
+  - Lint and frontend build pass.
 
 ## Priority 5: Lap Comparison & Analysis
 

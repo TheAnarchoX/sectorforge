@@ -71,14 +71,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 36px;
-  margin: 0 4px 4px;
+  height: 42px;
+  margin: 0 4px 6px;
+  padding-bottom: 6px;
   border-bottom: 1px solid var(--line-soft);
-  color: var(--accent-cyan);
-  font-family: var(--font-label);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.18em;
+}
+
+.workspace-rail-brand-mark {
+  display: block;
+  width: 28px;
+  height: 28px;
 }
 
 .workspace-rail-list {
@@ -265,44 +267,39 @@
 .topbar-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 8px 14px;
+  min-width: 0;
 }
 
 .brand-mark {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  place-items: center;
-  border: 1px solid rgba(217, 176, 74, 0.55);
-  background: #000;
-  color: var(--accent-amber);
-  font-family: var(--font-label);
-  font-size: 0.95rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+  display: block;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
 }
 
 .brand-stack {
   display: flex;
   flex-direction: column;
+  gap: 3px;
   line-height: 1.05;
+  min-width: 0;
 }
 
-.brand-title {
-  color: var(--ink-strong);
-  font-family: var(--font-ui);
-  font-size: 1.05rem;
-  font-weight: 800;
-  letter-spacing: 0.18em;
+.brand-wordmark {
+  display: block;
+  width: min(246px, 100%);
+  height: auto;
 }
 
 .brand-subtitle {
   color: var(--ink-muted);
   font-family: var(--font-label);
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
 }
 
 .topbar-context {
@@ -1393,6 +1390,10 @@
   background: var(--canvas-1);
 }
 
+.side-column .dense-table {
+  min-width: 0;
+}
+
 .dense-table th,
 .dense-table td {
   padding: 6px 8px;
@@ -2432,6 +2433,12 @@
 }
 
 @media (max-width: 720px) {
+  .topbar-brand {
+    padding: 10px 12px;
+  }
+  .brand-wordmark {
+    width: min(220px, 100%);
+  }
   .topbar-context {
     grid-template-columns: 1fr;
   }

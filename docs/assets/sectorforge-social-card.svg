@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" role="img"
+    aria-labelledby="title desc">
+    <title id="title">SectorForge social card</title>
+    <desc id="desc">Square social card for SectorForge with the telemetry mark, wordmark, and
+        local-first sim telemetry tagline.</desc>
+    <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#0d141c" />
+            <stop offset="100%" stop-color="#090d12" />
+        </linearGradient>
+        <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#121c26" />
+            <stop offset="100%" stop-color="#0d1218" />
+        </linearGradient>
+        <linearGradient id="cool" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#8ef7ff" />
+            <stop offset="100%" stop-color="#4db7ff" />
+        </linearGradient>
+        <linearGradient id="warm" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#ffd27c" />
+            <stop offset="100%" stop-color="#ff7a18" />
+        </linearGradient>
+    </defs>
+
+    <rect width="1200" height="1200" fill="url(#bg)" />
+    <g opacity="0.14" stroke="#243848">
+        <path d="M0 180H1200" />
+        <path d="M0 420H1200" />
+        <path d="M0 660H1200" />
+        <path d="M0 900H1200" />
+        <path d="M180 0V1200" />
+        <path d="M420 0V1200" />
+        <path d="M660 0V1200" />
+        <path d="M900 0V1200" />
+    </g>
+    <rect x="72" y="72" width="1056" height="1056" rx="72" fill="url(#panel)" stroke="#233848"
+        stroke-width="4" />
+    <path d="M160 988H1040" fill="none" stroke="#1f2d3a" stroke-width="10" stroke-linecap="round" />
+    <path d="M160 988H576" fill="none" stroke="url(#cool)" stroke-width="10" stroke-linecap="round" />
+
+    <g transform="translate(156 192)">
+        <rect width="288" height="288" rx="44" fill="#0f1720" stroke="#254057" stroke-width="4" />
+        <path d="M58 82H208L164 136H82" fill="none" stroke="url(#cool)" stroke-width="24"
+            stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M230 206H80L124 152H208" fill="none" stroke="url(#warm)" stroke-width="24"
+            stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M144 128L164 148L144 168L124 148Z" fill="#fff0b0" />
+    </g>
+
+    <text x="502" y="344" fill="#7ddcff" font-family="Segoe UI, Arial, sans-serif" font-size="62"
+        font-weight="700" letter-spacing="18">SECTOR</text>
+    <text x="502" y="486" fill="#f7fbff" font-family="Segoe UI, Arial, sans-serif" font-size="182"
+        font-weight="800" letter-spacing="2">FORGE</text>
+    <text x="506" y="564" fill="#8c9cac" font-family="Segoe UI, Arial, sans-serif" font-size="34"
+        font-weight="700" letter-spacing="8">LOCAL-FIRST SIM TELEMETRY PITWALL</text>
+    <text x="160" y="738" fill="#d8e3ed" font-family="Segoe UI, Arial, sans-serif" font-size="52"
+        font-weight="700">Live telemetry, replay, and analysis for sim racing.</text>
+    <text x="160" y="816" fill="#8c9cac" font-family="Segoe UI, Arial, sans-serif" font-size="34"
+        font-weight="600">.NET collector + local API + SignalR dashboard + SQLite session storage</text>
+
+    <g opacity="0.2">
+        <path
+            d="M160 886C232 824 312 824 392 886C472 948 550 948 624 886C696 824 780 824 862 886C944 948 1010 948 1040 924"
+            fill="none" stroke="url(#warm)" stroke-width="10" stroke-linecap="round" />
+        <circle cx="392" cy="886" r="12" fill="#4db7ff" />
+        <circle cx="624" cy="886" r="12" fill="#fff0b0" />
+        <circle cx="862" cy="886" r="12" fill="#ff7a18" />
+    </g>
+</svg>
