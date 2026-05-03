@@ -221,7 +221,7 @@ This backlog is written for coding agents and human contributors. Each task is i
   - Empty and loading states are clear.
   - Frontend lint and build pass.
 
-### SF-034: Add Lap Telemetry Chart
+### SF-033: Add Lap Telemetry Chart
 
 - Status: `ready`
 - Type: frontend feature
@@ -233,7 +233,7 @@ This backlog is written for coding agents and human contributors. Each task is i
   - Chart has axes labels and a legend if needed.
   - Empty and loading states are handled gracefully.
 
-### SF-035: Add Replay Mode UI Controls
+### SF-034: Add Replay Mode UI Controls
 
 - Status: `ready`
 - Type: frontend feature
@@ -246,9 +246,9 @@ This backlog is written for coding agents and human contributors. Each task is i
   - Telemetry charts and values update according to the replayed data.
   - Frontend lint and build pass without errors.
 
-### SF-036: Add Session Overview
+### SF-035: Add Session Overview
 
-- Status: `ready`
+- Staus: `ready`
 - Type: frontend feature
 - Goal: Add a session overview panel that shows key metadata and lap summaries for the user and the other participants in the session. This will provide context for the telemetry data and allow users to quickly understand the session details at a glance. Give insight into the drivers, cars, teams, track, and lap performance without needing to dive into the raw telemetry.
 - Suggested files: `src/SectorForge.Web/src/*`, `src/SectorForge.Api/Program.cs` if API shape needs small additions
