@@ -74,6 +74,21 @@ dotnet test .\src\SectorForge.slnx
 
 `tools\verify.ps1` runs the full local quality gate: backend tests, .NET format verification, frontend lint, and frontend build. `tests\coverage\Invoke-Coverage.ps1` generates merged Cobertura and HTML coverage reports under `artifacts\coverage\report` and enforces the backend thresholds from `tests\coverage\coverage-thresholds.json`. The frontend coverage command writes HTML/Cobertura output to `artifacts\coverage\frontend` and enforces the 90% frontend line gate. The current frontend baseline is 92.31% line coverage.
 
+### Common Settings
+
+The API host reads its runtime configuration from `src\SectorForge.Api\appsettings.json` (and the matching `appsettings.Development.json`). All values can be overridden with environment variables (e.g. `Adapters__fake__SampleRateHz=30`) or `--Section:Key=value` command-line flags.
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `Collector:AutoStart` | `false` | Start the collector automatically with `Collector:AdapterId` when the API host boots. |
+| `Collector:AdapterId` | `fake` | Adapter id selected when autostart is enabled. |
+| `Storage:RetainedSampleBlobLimit` | `1800` | Per-session raw sample blob cap; older blobs are pruned, summaries are kept. |
+| `Adapters:<id>:Enabled` | `true` for `fake`, `false` for placeholders | Enable flag per adapter id (e.g. `fake`, `f1-25-udp`, `acc-shared-memory`, `ams2-project-cars`, `lmu-plugin-udp`). |
+| `Adapters:fake:SampleRateHz` | `60` | Fake adapter emit rate in Hertz. |
+| `Adapters:<id>:BindAddress` | `127.0.0.1` for UDP placeholders | UDP/socket bind address for adapters that bind a listener. |
+| `Adapters:<id>:Port` | adapter-specific (e.g. `20777` for `f1-25-udp`) | UDP/socket port for adapters that bind a listener. |
+| `Adapters:<id>:ReceiveBufferBytes` | OS default | Optional UDP socket receive buffer override. |
+
 ### Local Development Loop
 
 ```mermaid

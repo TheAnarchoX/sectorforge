@@ -28,7 +28,7 @@ const CONNECTION_RETRY_INTERVAL_MS = 1500;
 // single React commit at ~20Hz. Below the threshold for cockpit displays to
 // look "smooth" while drastically cutting reconciliation cost and array
 // allocations during long sessions.
-const COMMIT_INTERVAL_MS = 50;
+const COMMIT_INTERVAL_MS = 100;
 
 const EMPTY_LAP_TRACE: CurrentLapTelemetrySeries = {
   sessionId: null,
@@ -267,9 +267,10 @@ export function useTelemetryDashboard() {
   const traceDirtyRef = useRef(false);
   const lapTraceDirtyRef = useRef(false);
   const commitTimerRef = useRef<number | null>(null);
+  const commitFrameRef = useRef<number | null>(null);
 
   const flushPendingCommit = useEffectEvent(() => {
-    commitTimerRef.current = null;
+    commitFrameRef.current = null;
     if (sampleDirtyRef.current) {
       sampleDirtyRef.current = false;
       setSample(latestSampleRef.current);
@@ -288,8 +289,19 @@ export function useTelemetryDashboard() {
     if (commitTimerRef.current !== null) {
       return;
     }
+    // Throttle commits to ~10 Hz, then align the actual state update with the
+    // next animation frame so React renders, browser paint, and GPU raster
+    // happen on the same beat. This keeps the compositor cache warm instead of
+    // invalidating SVG layers between paints.
     commitTimerRef.current = window.setTimeout(() => {
-      flushPendingCommit();
+      commitTimerRef.current = null;
+      if (typeof window.requestAnimationFrame === "function") {
+        commitFrameRef.current = window.requestAnimationFrame(() => {
+          flushPendingCommit();
+        });
+      } else {
+        flushPendingCommit();
+      }
     }, COMMIT_INTERVAL_MS);
   });
 
@@ -520,6 +532,13 @@ export function useTelemetryDashboard() {
       if (commitTimerRef.current !== null) {
         window.clearTimeout(commitTimerRef.current);
         commitTimerRef.current = null;
+      }
+      if (
+        commitFrameRef.current !== null &&
+        typeof window.cancelAnimationFrame === "function"
+      ) {
+        window.cancelAnimationFrame(commitFrameRef.current);
+        commitFrameRef.current = null;
       }
       void connection.stop();
     };

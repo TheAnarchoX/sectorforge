@@ -1,7 +1,8 @@
 using SectorForge.Collector;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using SectorForge.Api.Services;
+using SectorForge.Core.Telemetry.Configuration;
 
 namespace SectorForge.Api.Tests;
 
@@ -43,17 +44,15 @@ public sealed class CollectorAutoStartServiceTests
 
     private static CollectorAutoStartService CreateService(TelemetryCollectorService collector, bool autoStart)
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Collector:AutoStart"] = autoStart.ToString(),
-                ["Collector:AdapterId"] = "fake"
-            })
-            .Build();
+        var options = Options.Create(new CollectorOptions
+        {
+            AutoStart = autoStart,
+            AdapterId = "fake"
+        });
 
         return new CollectorAutoStartService(
             collector,
-            configuration,
+            options,
             NullLogger<CollectorAutoStartService>.Instance);
     }
 }

@@ -1,7 +1,7 @@
 ---
 description: "Use when implementing one scoped SectorForge docs/agent-tasks.md task, including backend, frontend, tests, docs, scripts, Windows-first validation."
 name: "SectorForge Task Implementer"
-tools: [read, search, edit, execute, todo, agent]
+tools: [read, search, edit, execute, todo, agent, browser, web]
 argument-hint: "Task ID from docs/agent-tasks.md"
 ---
 # SectorForge Task Implementer

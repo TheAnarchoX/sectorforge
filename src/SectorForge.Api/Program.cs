@@ -1,15 +1,28 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Options;
 using SectorForge.Api.Hubs;
 using SectorForge.Api.Services;
 using SectorForge.Collector;
 using SectorForge.Collector.Adapters;
 using SectorForge.Core.Telemetry;
+using SectorForge.Core.Telemetry.Configuration;
 using SectorForge.Infrastructure.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
-var retainedSampleBlobLimit = builder.Configuration.GetValue<int?>("Storage:RetainedSampleBlobLimit")
-    ?? SqliteTelemetrySessionStore.DefaultRetainedSampleBlobLimit;
+
+builder.Services.Configure<CollectorOptions>(builder.Configuration.GetSection(CollectorOptions.SectionName));
+builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
+builder.Services.Configure<TelemetryAdaptersOptions>(options =>
+{
+    var section = builder.Configuration.GetSection(TelemetryAdaptersOptions.SectionName);
+    foreach (var child in section.GetChildren())
+    {
+        var entry = new TelemetryAdapterOptions();
+        child.Bind(entry);
+        options.Items[child.Key] = entry;
+    }
+});
 
 builder.Services.ConfigureHttpJsonOptions(options => ConfigureJson(options.SerializerOptions));
 builder.Services.AddSignalR().AddJsonProtocol(options => ConfigureJson(options.PayloadSerializerOptions));
@@ -27,11 +40,21 @@ builder.Services.AddCors(options =>
     });
 });
 
-builder.Services.AddSingleton<ITelemetrySessionStore>(_ => new SqliteTelemetrySessionStore(
-    builder.Configuration.GetConnectionString("SectorForge") ?? SqliteTelemetrySessionStore.CreateDefaultConnectionString(),
-    retainedSampleBlobLimit));
+builder.Services.AddSingleton<ITelemetrySessionStore>(services =>
+{
+    var storage = services.GetRequiredService<IOptions<StorageOptions>>().Value;
+    return new SqliteTelemetrySessionStore(
+        builder.Configuration.GetConnectionString("SectorForge") ?? SqliteTelemetrySessionStore.CreateDefaultConnectionString(),
+        storage.RetainedSampleBlobLimit);
+});
 builder.Services.AddSingleton<ILiveTelemetryPublisher, SignalRTelemetryPublisher>();
-builder.Services.AddSingleton<ITelemetryAdapter, FakeTelemetryAdapter>();
+builder.Services.AddSingleton<ITelemetryAdapter>(services =>
+{
+    var adapters = services.GetRequiredService<IOptions<TelemetryAdaptersOptions>>().Value;
+    var fake = adapters.For("fake");
+    var rateHz = fake.SampleRateHz is > 0 ? fake.SampleRateHz.Value : TelemetryAdapterOptions.DefaultFakeSampleRateHz;
+    return new FakeTelemetryAdapter(TimeSpan.FromSeconds(1d / rateHz));
+});
 builder.Services.AddSingleton<ITelemetryAdapter, F125UdpTelemetryAdapter>();
 builder.Services.AddSingleton<ITelemetryAdapter, AccSharedMemoryTelemetryAdapter>();
 builder.Services.AddSingleton<ITelemetryAdapter, Ams2TelemetryAdapter>();

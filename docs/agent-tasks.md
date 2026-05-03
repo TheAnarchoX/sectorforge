@@ -381,10 +381,11 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-042: Add Adapter Configuration Model
 
-- Status: `ready`
+- Status: `done`
 - Type: configuration
 - Goal: Centralize adapter configuration for fake, UDP, shared memory, and replay sources.
 - Suggested files: `SectorForge.Core`, `SectorForge.Api/appsettings*.json`, docs
+- Notes: Added `TelemetryAdapterOptions`, `TelemetryAdaptersOptions`, `CollectorOptions`, and `StorageOptions` POCOs in `SectorForge.Core/Telemetry/Configuration/` on 2026-05-03. The API host now binds the `Collector`, `Storage`, and per-adapter `Adapters:<id>` sections via `IOptions<T>`, the fake adapter's sample rate is sourced from `Adapters:fake:SampleRateHz` (default 60 Hz), `appsettings.json` ships defaults for `fake`, `f1-25-udp`, `acc-shared-memory`, `ams2-project-cars`, and `lmu-plugin-udp`, `CollectorAutoStartService` consumes `CollectorOptions`, and the README "Common Settings" table documents the supported keys. Binding tests in `SectorForge.Api.Tests` cover defaults plus per-adapter and section overrides.
 - Acceptance criteria:
   - Config supports adapter ID, enabled flag, ports, sample rate, and storage retention values.
   - Fake adapter sample rate can be configured.
@@ -422,6 +423,7 @@ This backlog is written for coding agents and human contributors. Each task is i
 - Status: `ready`
 - Type: protocol adapter
 - Goal: Allow the collector to select the F1 25 adapter via configuration, while keeping it disabled by default and surfacing errors through collector status.
+- Notes: SF-042 landed the shared `TelemetryAdaptersOptions` / `TelemetryAdapterOptions` model under `SectorForge.Core/Telemetry/Configuration/`. This task should consume `IOptions<TelemetryAdaptersOptions>` (and `CollectorOptions` for autostart) to honour `Adapters:f1-25-udp:Enabled`, `BindAddress`, `Port`, and `ReceiveBufferBytes` rather than reading raw configuration. Defaults already ship in `appsettings.json` with `f1-25-udp` disabled on `127.0.0.1:20777`.
 - Suggested files: `src/SectorForge.Collector/Program.cs`, `src/SectorForge.Collector/TelemetryCollectorService.cs`, `src/SectorForge.Api/appsettings*.json`, `tests/SectorForge.Protocol.Tests/*`, `docs/game-adapters.md`
 - Acceptance criteria:
   - When the F1 25 adapter is enabled in configuration and `f1-25-udp` is selected, the collector runs `F125Adapter`; otherwise it falls back to the existing fake / unavailable path.
