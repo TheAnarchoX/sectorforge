@@ -422,10 +422,11 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-045: Wire f1-25-udp Adapter Into Collector Selection
 
-- Status: `ready`
+- Status: `done`
 - Type: protocol adapter
 - Goal: Allow the collector to select the F1 25 adapter via configuration, while keeping it disabled by default and surfacing errors through collector status.
 - Notes: SF-042 landed the shared `TelemetryAdaptersOptions` / `TelemetryAdapterOptions` model under `SectorForge.Core/Telemetry/Configuration/`. This task should consume `IOptions<TelemetryAdaptersOptions>` (and `CollectorOptions` for autostart) to honour `Adapters:f1-25-udp:Enabled`, `BindAddress`, `Port`, and `ReceiveBufferBytes` rather than reading raw configuration. Defaults already ship in `appsettings.json` with `f1-25-udp` disabled on `127.0.0.1:20777`.
+- Completion: Wired the config-gated F1 25 UDP adapter on 2026-05-03. The adapter binds through the shared UDP listener abstraction only when `Adapters:f1-25-udp:Enabled` is true, publishes normalized player-car samples from the SF-044 parser/normalizer slice, reports listener and parse failures through collector status, and remains disabled by default while the fake adapter stays selected.
 - Suggested files: `src/SectorForge.Collector/Program.cs`, `src/SectorForge.Collector/TelemetryCollectorService.cs`, `src/SectorForge.Api/appsettings*.json`, `tests/SectorForge.Protocol.Tests/*`, `docs/game-adapters.md`
 - Acceptance criteria:
   - When the F1 25 adapter is enabled in configuration and `f1-25-udp` is selected, the collector runs `F125Adapter`; otherwise it falls back to the existing fake / unavailable path.
@@ -436,9 +437,10 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-046: Extend TelemetrySample - Slice A (Vehicle Dynamics, Sector Splits, Driver Flags)
 
-- Status: `ready`
+- Status: `done`
 - Type: backend feature
 - Goal: Additively expand `TelemetrySample` so F1 25 (and future adapters) can publish g-forces, world position, sector split times, lap-distance, and driver-input flags without breaking existing adapters or stored blobs.
+- Notes: Added nullable Slice A fields on 2026-05-03 with JSON and SQLite blob round-trip coverage. The F1 25 normalizer now publishes mapped motion, lap-distance/split, pit-status, penalty/warning, engine-temperature, and DRS-active values from the existing motion/lap/car-telemetry packet slice; fields not present in that slice remain `null`.
 - Suggested files: `src/SectorForge.Core/Telemetry/TelemetryModels.cs`, `src/SectorForge.Collector/Adapters/F125/F125Normalizer.cs`, `src/SectorForge.Web/src/types/*`, `tests/SectorForge.Core.Tests/*`, `docs/architecture.md`
 - Acceptance criteria:
   - New nullable properties on `VehicleState` (`LateralG`, `LongitudinalG`, `VerticalG`, `WorldPositionX/Y/Z`, `Yaw`, `Pitch`, `Roll`, `OilTemperatureC`), on `LapState` (`Sector1Time`, `Sector2Time`, `Sector3Time`, `LastSector1Time`, `LastSector2Time`, `LastSector3Time`, `IsValid`, `LapDistanceMeters`, `TotalDistanceMeters`, `PitStatus`, `PitStopCount`, `PenaltiesSeconds`, `WarningsCount`, `CornersCut`), and on `DriverInputState` (`DrsAllowed`, `DrsActive`, `PitLimiterActive`, `AbsActive`, `TcActive`).

@@ -45,10 +45,21 @@ public sealed class F125NormalizerTests
         Assert.Equal(213, sample.Vehicle.SpeedKph.GetValueOrDefault(), precision: 3);
         Assert.Equal(11_250, sample.Vehicle.Rpm.GetValueOrDefault(), precision: 3);
         Assert.Equal(6, sample.Vehicle.Gear);
+        Assert.Equal(102, sample.Vehicle.EngineTemperatureC.GetValueOrDefault(), precision: 3);
+        Assert.Equal(1.25, sample.Vehicle.LateralG.GetValueOrDefault(), precision: 3);
+        Assert.Equal(-0.5, sample.Vehicle.LongitudinalG.GetValueOrDefault(), precision: 3);
+        Assert.Equal(0.1, sample.Vehicle.VerticalG.GetValueOrDefault(), precision: 3);
+        Assert.Equal(12.5, sample.Vehicle.WorldPositionX.GetValueOrDefault(), precision: 3);
+        Assert.Equal(-3.25, sample.Vehicle.WorldPositionY.GetValueOrDefault(), precision: 3);
+        Assert.Equal(44.75, sample.Vehicle.WorldPositionZ.GetValueOrDefault(), precision: 3);
+        Assert.Equal(0.02, sample.Vehicle.Yaw.GetValueOrDefault(), precision: 3);
+        Assert.Equal(-0.01, sample.Vehicle.Pitch.GetValueOrDefault(), precision: 3);
+        Assert.Equal(0.04, sample.Vehicle.Roll.GetValueOrDefault(), precision: 3);
         Assert.Equal(0.72, sample.DriverInput.Throttle.GetValueOrDefault(), precision: 3);
         Assert.Equal(0.18, sample.DriverInput.Brake.GetValueOrDefault(), precision: 3);
         Assert.Equal(-0.34, sample.DriverInput.Steering.GetValueOrDefault(), precision: 3);
         Assert.Equal(0.64, sample.DriverInput.Clutch.GetValueOrDefault(), precision: 3);
+        Assert.True(sample.DriverInput.DrsActive);
 
         Assert.Equal(7, sample.Lap.LapNumber);
         Assert.Equal(TimeSpan.FromMilliseconds(12_345), sample.Lap.CurrentLapTime);
@@ -56,13 +67,30 @@ public sealed class F125NormalizerTests
         Assert.Null(sample.Lap.BestLapTime);
         Assert.Equal(2, sample.Lap.SectorIndex);
         Assert.Equal(1234.5, sample.Lap.LapDistanceMeters.GetValueOrDefault(), precision: 3);
+        Assert.Equal(TimeSpan.FromMilliseconds(83_456), sample.Lap.Sector1Time);
+        Assert.Equal(TimeSpan.FromMilliseconds(12_345), sample.Lap.Sector2Time);
+        Assert.Null(sample.Lap.Sector3Time);
+        Assert.Null(sample.Lap.LastSector1Time);
+        Assert.Null(sample.Lap.LastSector2Time);
+        Assert.Null(sample.Lap.LastSector3Time);
+        Assert.True(sample.Lap.IsValid);
+        Assert.Equal(5432.25, sample.Lap.TotalDistanceMeters.GetValueOrDefault(), precision: 3);
+        Assert.Equal(PitStatus.Pitting, sample.Lap.PitStatus);
+        Assert.Equal(2, sample.Lap.PitStopCount);
+        Assert.Equal(5, sample.Lap.PenaltiesSeconds);
+        Assert.Equal(4, sample.Lap.WarningsCount);
+        Assert.Equal(3, sample.Lap.CornersCut);
 
         Assert.Null(sample.Vehicle.CarName);
-        Assert.Null(sample.Vehicle.EngineTemperatureC);
+        Assert.Null(sample.Vehicle.OilTemperatureC);
         Assert.Null(sample.Tyres.FrontLeft);
         Assert.Null(sample.Brakes.FrontLeftTemperatureC);
         Assert.Null(sample.Fuel.RemainingLiters);
         Assert.Null(sample.Track.TrackName);
+        Assert.Null(sample.DriverInput.DrsAllowed);
+        Assert.Null(sample.DriverInput.PitLimiterActive);
+        Assert.Null(sample.DriverInput.AbsActive);
+        Assert.Null(sample.DriverInput.TcActive);
         Assert.Null(sample.Timing.DeltaToBestLap);
         Assert.Null(sample.Participants);
     }
@@ -127,9 +155,19 @@ public sealed class F125NormalizerTests
         var playerOffset = playerCarIndex * LapDataSize;
         BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(playerOffset, sizeof(uint)), 83_210);
         BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(playerOffset + 4, sizeof(uint)), 12_345);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 8, sizeof(ushort)), 23_456);
+        payload[playerOffset + 10] = 1;
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 11, sizeof(ushort)), 12_345);
         BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 18, sizeof(float)), 1234.5f);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 22, sizeof(float)), 5432.25f);
         payload[playerOffset + 31] = 7;
+        payload[playerOffset + 32] = 1;
+        payload[playerOffset + 33] = 2;
         payload[playerOffset + 34] = 2;
+        payload[playerOffset + 35] = 0;
+        payload[playerOffset + 36] = 5;
+        payload[playerOffset + 37] = 4;
+        payload[playerOffset + 38] = 3;
         return payload;
     }
 
@@ -146,6 +184,8 @@ public sealed class F125NormalizerTests
         payload[playerOffset + 14] = 64;
         payload[playerOffset + 15] = 6;
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 16, sizeof(ushort)), 11_250);
+        payload[playerOffset + 18] = 1;
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 38, sizeof(ushort)), 102);
         return payload;
     }
 }

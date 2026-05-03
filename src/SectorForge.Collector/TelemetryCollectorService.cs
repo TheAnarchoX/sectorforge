@@ -56,6 +56,11 @@ public sealed class TelemetryCollectorService : ITelemetryReceiver, IAsyncDispos
                 throw new InvalidOperationException($"{adapter.Source.DisplayName} is registered but not implemented yet.");
             }
 
+            if (adapter.Source.Status == TelemetrySourceStatus.Offline)
+            {
+                throw new InvalidOperationException($"{adapter.Source.DisplayName} is registered but unavailable. {adapter.Source.Notes}");
+            }
+
             if (_runTask is { IsCompleted: false } && string.Equals(_activeAdapter?.Source.AdapterId, adapterId, StringComparison.OrdinalIgnoreCase))
             {
                 return;

@@ -234,7 +234,7 @@ public sealed class CollectorEndpointsTests
             var sources = await response.Content.ReadFromJsonAsync<IReadOnlyList<TelemetrySource>>(JsonOptions);
             Assert.NotNull(sources);
             Assert.Contains(sources, source => source.AdapterId == "fake" && source.Status == TelemetrySourceStatus.Running);
-            Assert.Contains(sources, source => source.AdapterId == "f1-25-udp" && source.Status == TelemetrySourceStatus.NotImplemented);
+            Assert.Contains(sources, source => source.AdapterId == "f1-25-udp" && source.Status == TelemetrySourceStatus.Offline);
         }
         finally
         {

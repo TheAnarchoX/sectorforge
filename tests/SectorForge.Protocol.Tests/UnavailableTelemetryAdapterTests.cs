@@ -10,7 +10,6 @@ public sealed class UnavailableTelemetryAdapterTests
     {
         ITelemetryAdapter[] adapters =
         [
-            new F125UdpTelemetryAdapter(),
             new AccSharedMemoryTelemetryAdapter(),
             new Ams2TelemetryAdapter(),
             new LmuUdpTelemetryAdapter()

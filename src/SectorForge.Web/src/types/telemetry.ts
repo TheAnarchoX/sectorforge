@@ -6,6 +6,8 @@ export type TelemetrySourceStatus =
 
 export type TelemetryRunMode = "Idle" | "Live" | "Replay";
 
+export type PitStatus = "Unknown" | "None" | "Pitting" | "InPitArea";
+
 export type TelemetrySource = {
   adapterId: string;
   game: string;
@@ -42,6 +44,20 @@ export type TelemetrySample = {
     lastLapTime?: string | null;
     bestLapTime?: string | null;
     sectorIndex?: number | null;
+    lapDistanceMeters?: number | null;
+    sector1Time?: string | null;
+    sector2Time?: string | null;
+    sector3Time?: string | null;
+    lastSector1Time?: string | null;
+    lastSector2Time?: string | null;
+    lastSector3Time?: string | null;
+    isValid?: boolean | null;
+    totalDistanceMeters?: number | null;
+    pitStatus?: PitStatus | null;
+    pitStopCount?: number | null;
+    penaltiesSeconds?: number | null;
+    warningsCount?: number | null;
+    cornersCut?: number | null;
   };
   vehicle: {
     carName?: string | null;
@@ -49,6 +65,16 @@ export type TelemetrySample = {
     rpm?: number | null;
     gear?: number | null;
     engineTemperatureC?: number | null;
+    lateralG?: number | null;
+    longitudinalG?: number | null;
+    verticalG?: number | null;
+    worldPositionX?: number | null;
+    worldPositionY?: number | null;
+    worldPositionZ?: number | null;
+    yaw?: number | null;
+    pitch?: number | null;
+    roll?: number | null;
+    oilTemperatureC?: number | null;
   };
   tyres: {
     frontLeft?: WheelTemperatureState | null;
@@ -83,6 +109,11 @@ export type TelemetrySample = {
     brake?: number | null;
     steering?: number | null;
     clutch?: number | null;
+    drsAllowed?: boolean | null;
+    drsActive?: boolean | null;
+    pitLimiterActive?: boolean | null;
+    absActive?: boolean | null;
+    tcActive?: boolean | null;
   };
   timing: {
     sessionElapsed?: string | null;

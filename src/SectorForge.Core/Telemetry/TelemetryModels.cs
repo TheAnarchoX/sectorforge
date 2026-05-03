@@ -25,6 +25,14 @@ public enum TelemetryRunMode
     Replay
 }
 
+public enum PitStatus
+{
+    Unknown = 0,
+    None,
+    Pitting,
+    InPitArea
+}
+
 public sealed record TelemetrySource(
     string AdapterId,
     GameId Game,
@@ -63,14 +71,37 @@ public sealed record LapState(
     TimeSpan? LastLapTime,
     TimeSpan? BestLapTime,
     int? SectorIndex,
-    double? LapDistanceMeters = null);
+    double? LapDistanceMeters = null,
+    TimeSpan? Sector1Time = null,
+    TimeSpan? Sector2Time = null,
+    TimeSpan? Sector3Time = null,
+    TimeSpan? LastSector1Time = null,
+    TimeSpan? LastSector2Time = null,
+    TimeSpan? LastSector3Time = null,
+    bool? IsValid = null,
+    double? TotalDistanceMeters = null,
+    PitStatus? PitStatus = null,
+    int? PitStopCount = null,
+    int? PenaltiesSeconds = null,
+    int? WarningsCount = null,
+    int? CornersCut = null);
 
 public sealed record VehicleState(
     string? CarName,
     double? SpeedKph,
     double? Rpm,
     int? Gear,
-    double? EngineTemperatureC);
+    double? EngineTemperatureC,
+    double? LateralG = null,
+    double? LongitudinalG = null,
+    double? VerticalG = null,
+    double? WorldPositionX = null,
+    double? WorldPositionY = null,
+    double? WorldPositionZ = null,
+    double? Yaw = null,
+    double? Pitch = null,
+    double? Roll = null,
+    double? OilTemperatureC = null);
 
 public sealed record TyreState(
     WheelTemperatureState? FrontLeft,
@@ -111,7 +142,12 @@ public sealed record DriverInputState(
     double? Throttle,
     double? Brake,
     double? Steering,
-    double? Clutch);
+    double? Clutch,
+    bool? DrsAllowed = null,
+    bool? DrsActive = null,
+    bool? PitLimiterActive = null,
+    bool? AbsActive = null,
+    bool? TcActive = null);
 
 public sealed record TimingState(
     TimeSpan? SessionElapsed,

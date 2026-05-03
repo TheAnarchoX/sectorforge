@@ -34,6 +34,51 @@ public sealed class SqliteTelemetrySessionStoreTests
     }
 
     [Fact]
+    public async Task SaveSampleRoundTripsSliceAFieldsInRawBlob()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), "SectorForge.Tests", $"{Guid.NewGuid():N}.db");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath }.ToString();
+        var store = new SqliteTelemetrySessionStore(connectionString);
+        var sample = TelemetryModelTests.CreateSliceASample();
+
+        await store.SaveSampleAsync(sample);
+
+        var details = await store.GetSessionAsync(sample.SessionId);
+
+        Assert.NotNull(details);
+        var roundTripped = Assert.Single(details.Samples);
+        Assert.Equal(sample.Vehicle.LateralG, roundTripped.Vehicle.LateralG);
+        Assert.Equal(sample.Vehicle.LongitudinalG, roundTripped.Vehicle.LongitudinalG);
+        Assert.Equal(sample.Vehicle.VerticalG, roundTripped.Vehicle.VerticalG);
+        Assert.Equal(sample.Vehicle.WorldPositionX, roundTripped.Vehicle.WorldPositionX);
+        Assert.Equal(sample.Vehicle.WorldPositionY, roundTripped.Vehicle.WorldPositionY);
+        Assert.Equal(sample.Vehicle.WorldPositionZ, roundTripped.Vehicle.WorldPositionZ);
+        Assert.Equal(sample.Vehicle.Yaw, roundTripped.Vehicle.Yaw);
+        Assert.Equal(sample.Vehicle.Pitch, roundTripped.Vehicle.Pitch);
+        Assert.Equal(sample.Vehicle.Roll, roundTripped.Vehicle.Roll);
+        Assert.Equal(sample.Vehicle.OilTemperatureC, roundTripped.Vehicle.OilTemperatureC);
+        Assert.Equal(sample.Lap.Sector1Time, roundTripped.Lap.Sector1Time);
+        Assert.Equal(sample.Lap.Sector2Time, roundTripped.Lap.Sector2Time);
+        Assert.Equal(sample.Lap.Sector3Time, roundTripped.Lap.Sector3Time);
+        Assert.Equal(sample.Lap.LastSector1Time, roundTripped.Lap.LastSector1Time);
+        Assert.Equal(sample.Lap.LastSector2Time, roundTripped.Lap.LastSector2Time);
+        Assert.Equal(sample.Lap.LastSector3Time, roundTripped.Lap.LastSector3Time);
+        Assert.Equal(sample.Lap.IsValid, roundTripped.Lap.IsValid);
+        Assert.Equal(sample.Lap.LapDistanceMeters, roundTripped.Lap.LapDistanceMeters);
+        Assert.Equal(sample.Lap.TotalDistanceMeters, roundTripped.Lap.TotalDistanceMeters);
+        Assert.Equal(sample.Lap.PitStatus, roundTripped.Lap.PitStatus);
+        Assert.Equal(sample.Lap.PitStopCount, roundTripped.Lap.PitStopCount);
+        Assert.Equal(sample.Lap.PenaltiesSeconds, roundTripped.Lap.PenaltiesSeconds);
+        Assert.Equal(sample.Lap.WarningsCount, roundTripped.Lap.WarningsCount);
+        Assert.Equal(sample.Lap.CornersCut, roundTripped.Lap.CornersCut);
+        Assert.Equal(sample.DriverInput.DrsAllowed, roundTripped.DriverInput.DrsAllowed);
+        Assert.Equal(sample.DriverInput.DrsActive, roundTripped.DriverInput.DrsActive);
+        Assert.Equal(sample.DriverInput.PitLimiterActive, roundTripped.DriverInput.PitLimiterActive);
+        Assert.Equal(sample.DriverInput.AbsActive, roundTripped.DriverInput.AbsActive);
+        Assert.Equal(sample.DriverInput.TcActive, roundTripped.DriverInput.TcActive);
+    }
+
+    [Fact]
     public async Task SaveSamplePrunesOlderRawBlobsButKeepsSessionSummaryAndLaps()
     {
         var databasePath = Path.Combine(Path.GetTempPath(), "SectorForge.Tests", $"{Guid.NewGuid():N}.db");

@@ -47,13 +47,31 @@ public sealed class F125Normalizer
                 LastLapTime: lapData.PlayerCar.LastLapTime,
                 BestLapTime: lapData.PlayerCar.BestLapTime,
                 SectorIndex: lapData.PlayerCar.SectorIndex,
-                LapDistanceMeters: lapData.PlayerCar.LapDistanceMeters),
+                LapDistanceMeters: lapData.PlayerCar.LapDistanceMeters,
+                Sector1Time: lapData.PlayerCar.Sector1Time,
+                Sector2Time: lapData.PlayerCar.Sector2Time,
+                IsValid: lapData.PlayerCar.IsValid,
+                TotalDistanceMeters: lapData.PlayerCar.TotalDistanceMeters,
+                PitStatus: MapPitStatus(lapData.PlayerCar.PitStatusCode),
+                PitStopCount: lapData.PlayerCar.PitStopCount,
+                PenaltiesSeconds: lapData.PlayerCar.PenaltiesSeconds,
+                WarningsCount: lapData.PlayerCar.WarningsCount,
+                CornersCut: lapData.PlayerCar.CornersCut),
             Vehicle: new VehicleState(
                 CarName: null,
                 SpeedKph: carTelemetry.PlayerCar.SpeedKph,
                 Rpm: carTelemetry.PlayerCar.Rpm,
                 Gear: carTelemetry.PlayerCar.Gear,
-                EngineTemperatureC: null),
+                EngineTemperatureC: carTelemetry.PlayerCar.EngineTemperatureC,
+                LateralG: motion.PlayerCar.LateralG,
+                LongitudinalG: motion.PlayerCar.LongitudinalG,
+                VerticalG: motion.PlayerCar.VerticalG,
+                WorldPositionX: motion.PlayerCar.WorldPositionX,
+                WorldPositionY: motion.PlayerCar.WorldPositionY,
+                WorldPositionZ: motion.PlayerCar.WorldPositionZ,
+                Yaw: motion.PlayerCar.Yaw,
+                Pitch: motion.PlayerCar.Pitch,
+                Roll: motion.PlayerCar.Roll),
             Tyres: new TyreState(
                 FrontLeft: null,
                 FrontRight: null,
@@ -78,7 +96,8 @@ public sealed class F125Normalizer
                 Throttle: carTelemetry.PlayerCar.Throttle,
                 Brake: carTelemetry.PlayerCar.Brake,
                 Steering: carTelemetry.PlayerCar.Steering,
-                Clutch: carTelemetry.PlayerCar.Clutch),
+                Clutch: carTelemetry.PlayerCar.Clutch,
+                DrsActive: carTelemetry.PlayerCar.DrsActive),
             Timing: new TimingState(
                 SessionElapsed: sessionElapsed,
                 SessionRemaining: null,
@@ -94,4 +113,13 @@ public sealed class F125Normalizer
         BinaryPrimitives.WriteUInt64LittleEndian(bytes, sessionUid);
         return new Guid(bytes);
     }
+
+    private static PitStatus MapPitStatus(byte value)
+        => value switch
+        {
+            0 => PitStatus.None,
+            1 => PitStatus.Pitting,
+            2 => PitStatus.InPitArea,
+            _ => PitStatus.Unknown
+        };
 }

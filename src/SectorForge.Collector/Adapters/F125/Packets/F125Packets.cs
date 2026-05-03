@@ -37,7 +37,16 @@ public sealed record F125PlayerLapData(
     TimeSpan? LastLapTime,
     TimeSpan? BestLapTime,
     int SectorIndex,
-    double LapDistanceMeters);
+    double LapDistanceMeters,
+    TimeSpan? Sector1Time,
+    TimeSpan? Sector2Time,
+    double TotalDistanceMeters,
+    bool IsValid,
+    byte PitStatusCode,
+    int PitStopCount,
+    int PenaltiesSeconds,
+    int WarningsCount,
+    int CornersCut);
 
 public sealed record F125PlayerCarTelemetry(
     double SpeedKph,
@@ -46,4 +55,6 @@ public sealed record F125PlayerCarTelemetry(
     double Steering,
     double Clutch,
     int Gear,
-    double Rpm);
+    double Rpm,
+    bool DrsActive,
+    double EngineTemperatureC);

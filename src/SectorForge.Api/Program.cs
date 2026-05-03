@@ -5,8 +5,11 @@ using SectorForge.Api.Hubs;
 using SectorForge.Api.Services;
 using SectorForge.Collector;
 using SectorForge.Collector.Adapters;
+using SectorForge.Collector.Adapters.F125;
+using SectorForge.Collector.Adapters.Udp;
 using SectorForge.Core.Telemetry;
 using SectorForge.Core.Telemetry.Configuration;
+using SectorForge.Core.Telemetry.Udp;
 using SectorForge.Infrastructure.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -48,6 +51,9 @@ builder.Services.AddSingleton<ITelemetrySessionStore>(services =>
         storage.RetainedSampleBlobLimit);
 });
 builder.Services.AddSingleton<ILiveTelemetryPublisher, SignalRTelemetryPublisher>();
+builder.Services.AddSingleton<IUdpTelemetryListenerFactory, UdpTelemetryListenerFactory>();
+builder.Services.AddSingleton<F125PacketReader>();
+builder.Services.AddSingleton<F125Normalizer>();
 builder.Services.AddSingleton<ITelemetryAdapter>(services =>
 {
     var adapters = services.GetRequiredService<IOptions<TelemetryAdaptersOptions>>().Value;

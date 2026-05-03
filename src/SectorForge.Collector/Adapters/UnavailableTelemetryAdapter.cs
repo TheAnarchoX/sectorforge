@@ -19,21 +19,6 @@ public abstract class UnavailableTelemetryAdapter : ITelemetryAdapter
     }
 }
 
-public sealed class F125UdpTelemetryAdapter : UnavailableTelemetryAdapter
-{
-    public F125UdpTelemetryAdapter()
-        : base(new TelemetrySource(
-            AdapterId: "f1-25-udp",
-            Game: GameId.F125,
-            DisplayName: "F1 25 UDP",
-            InputKind: "UDP packets",
-            IsSimulated: false,
-            Status: TelemetrySourceStatus.NotImplemented,
-            Notes: "Planned first real adapter because EA publishes an official UDP packet spec."))
-    {
-    }
-}
-
 public sealed class AccSharedMemoryTelemetryAdapter : UnavailableTelemetryAdapter
 {
     public AccSharedMemoryTelemetryAdapter()

@@ -3,7 +3,10 @@ using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging.Abstractions;
 using SectorForge.Collector;
 using SectorForge.Collector.Adapters;
+using SectorForge.Collector.Adapters.F125;
 using SectorForge.Core.Telemetry;
+using SectorForge.Core.Telemetry.Configuration;
+using SectorForge.Core.Telemetry.Udp;
 
 namespace SectorForge.Protocol.Tests;
 
@@ -233,6 +236,77 @@ public sealed class TelemetryCollectorServiceTests
         Assert.True(publisher.StatusPublishCount >= 2);
     }
 
+    [Fact]
+    public async Task CollectorReportsF125ListenerBindFailuresInStatus()
+    {
+        const string failureMessage = "Simulated F1 UDP bind failure";
+        var adapter = new F125UdpTelemetryAdapter(
+            CreateEnabledF125Options(),
+            new ThrowingUdpTelemetryListenerFactory(new InvalidOperationException(failureMessage)));
+        var publisher = new RecordingTelemetryPublisher();
+
+        await using var collector = CreateCollector(
+            adapter,
+            publisher,
+            new TestTelemetrySessionStore(TimeSpan.Zero));
+
+        await collector.StartAsync(adapter.Source.AdapterId);
+        await WaitForConditionAsync(() => !collector.GetStatus().IsRunning, TimeSpan.FromSeconds(5));
+
+        var status = collector.GetStatus();
+        Assert.Equal(failureMessage, status.LastError);
+        Assert.Contains(publisher.StatusUpdates, update => update.LastError == failureMessage);
+    }
+
+    [Fact]
+    public async Task CollectorReportsF125ParseFailuresInStatus()
+    {
+        var listener = new TestUdpTelemetryListener([[0x01, 0x02, 0x03]]);
+        var adapter = new F125UdpTelemetryAdapter(
+            CreateEnabledF125Options(),
+            new TestUdpTelemetryListenerFactory(listener));
+        var publisher = new RecordingTelemetryPublisher();
+
+        await using var collector = CreateCollector(
+            adapter,
+            publisher,
+            new TestTelemetrySessionStore(TimeSpan.Zero));
+
+        await collector.StartAsync(adapter.Source.AdapterId);
+        await WaitForConditionAsync(() => !collector.GetStatus().IsRunning, TimeSpan.FromSeconds(5));
+
+        var status = collector.GetStatus();
+        Assert.NotNull(status.LastError);
+        Assert.Contains("F1 25 UDP packet failed to parse", status.LastError, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("header requires", status.LastError, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(publisher.StatusUpdates, update => update.LastError == status.LastError);
+    }
+
+    [Fact]
+    public async Task StopAsyncCancelsF125ListenerPromptly()
+    {
+        var listener = new TestUdpTelemetryListener([], waitForCancellation: true);
+        var adapter = new F125UdpTelemetryAdapter(
+            CreateEnabledF125Options(),
+            new TestUdpTelemetryListenerFactory(listener));
+
+        await using var collector = CreateCollector(
+            adapter,
+            new NoOpTelemetryPublisher(),
+            new TestTelemetrySessionStore(TimeSpan.Zero));
+
+        await collector.StartAsync(adapter.Source.AdapterId);
+        await WaitForConditionAsync(() => collector.GetStatus().IsRunning, TimeSpan.FromSeconds(1));
+
+        await collector.StopAsync();
+
+        var status = collector.GetStatus();
+        Assert.False(status.IsRunning);
+        Assert.Null(status.LastError);
+        Assert.True(listener.CancellationObserved);
+        Assert.True(listener.Disposed);
+    }
+
     private static TelemetryCollectorService CreateCollector(
         ITelemetryAdapter adapter,
         ILiveTelemetryPublisher publisher,
@@ -243,6 +317,16 @@ public sealed class TelemetryCollectorServiceTests
             publisher,
             sessionStore,
             NullLogger<TelemetryCollectorService>.Instance);
+    }
+
+    private static TelemetryAdapterOptions CreateEnabledF125Options()
+    {
+        return new TelemetryAdapterOptions
+        {
+            Enabled = true,
+            BindAddress = "127.0.0.1",
+            Port = 0
+        };
     }
 
     private static async Task WaitForConditionAsync(Func<bool> condition, TimeSpan timeout)
@@ -538,6 +622,64 @@ public sealed class TelemetryCollectorServiceTests
             }
 
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class ThrowingUdpTelemetryListenerFactory(Exception exception) : IUdpTelemetryListenerFactory
+    {
+        public IUdpTelemetryListener Bind(UdpTelemetryListenerOptions options)
+        {
+            throw exception;
+        }
+    }
+
+    private sealed class TestUdpTelemetryListenerFactory(IUdpTelemetryListener listener) : IUdpTelemetryListenerFactory
+    {
+        public IUdpTelemetryListener Bind(UdpTelemetryListenerOptions options)
+        {
+            return listener;
+        }
+    }
+
+    private sealed class TestUdpTelemetryListener(
+        IReadOnlyList<byte[]> payloads,
+        bool waitForCancellation = false) : IUdpTelemetryListener
+    {
+        public System.Net.IPEndPoint LocalEndPoint { get; } = new(System.Net.IPAddress.Loopback, 20777);
+
+        public bool CancellationObserved { get; private set; }
+
+        public bool Disposed { get; private set; }
+
+        public async IAsyncEnumerable<UdpTelemetryDatagram> ReceiveAsync(
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            foreach (var payload in payloads)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                yield return new UdpTelemetryDatagram(
+                    payload,
+                    new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 50000),
+                    DateTimeOffset.UtcNow);
+            }
+
+            if (waitForCancellation)
+            {
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    CancellationObserved = true;
+                }
+            }
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Disposed = true;
+            return ValueTask.CompletedTask;
         }
     }
 }
