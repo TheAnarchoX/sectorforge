@@ -6,6 +6,7 @@ import type {
   CollectorStatus,
   CurrentLapTelemetrySeries,
   DashboardReplayState,
+  ParticipantState,
   TelemetrySample,
   TelemetrySessionDetails,
   TelemetrySessionSummary,
@@ -151,6 +152,74 @@ function getReplayDelayMs(samples: TelemetrySample[], sampleIndex: number) {
     REPLAY_STEP_MS_MIN,
     REPLAY_STEP_MS_MAX,
   );
+}
+
+function buildFallbackParticipant(sample: TelemetrySample): ParticipantState {
+  return {
+    driverName: sample.source.displayName,
+    teamName: null,
+    carName: sample.vehicle.carName ?? null,
+    position: 1,
+    isPlayer: true,
+    isInPit: false,
+    lapNumber: sample.lap.lapNumber ?? null,
+    currentLapTime: sample.lap.currentLapTime ?? null,
+    lastLapTime: sample.lap.lastLapTime ?? null,
+    bestLapTime: sample.lap.bestLapTime ?? null,
+    gapToLeader: null,
+    intervalToAhead: null,
+  };
+}
+
+function getSessionParticipants(sample: TelemetrySample | null) {
+  const participants = sample?.participants ?? [];
+
+  return participants.length > 0
+    ? participants
+    : sample !== null
+      ? [buildFallbackParticipant(sample)]
+      : [];
+}
+
+function formatGapToLeader(participant: ParticipantState) {
+  if (participant.position <= 1 || !participant.gapToLeader) {
+    return "Leader";
+  }
+
+  return formatDelta(participant.gapToLeader);
+}
+
+function getParticipantNote(participant: ParticipantState) {
+  if (participant.position === 1) {
+    return participant.isPlayer
+      ? "Driver focus • Track leader"
+      : "Track leader";
+  }
+
+  if (participant.intervalToAhead) {
+    const intervalLabel = `${formatDelta(participant.intervalToAhead)} to car ahead`;
+    return participant.isPlayer
+      ? `Driver focus • ${intervalLabel}`
+      : intervalLabel;
+  }
+
+  if (participant.isInPit) {
+    return participant.isPlayer ? "Driver focus • Pit lane" : "Pit lane";
+  }
+
+  return participant.isPlayer ? "Driver focus" : "On track";
+}
+
+function getParticipantGapNote(participant: ParticipantState) {
+  if (participant.position === 1) {
+    return participant.isInPit ? "Leader • Pit lane" : "Track leader";
+  }
+
+  if (participant.intervalToAhead) {
+    return `${formatDelta(participant.intervalToAhead)} to car ahead`;
+  }
+
+  return participant.isInPit ? "Pit lane" : "On track";
 }
 
 export function TimingBoard({
@@ -327,19 +396,127 @@ export function TimingBoard({
     ) ?? [];
   const latestStoredSample = visibleSession?.samples.at(-1) ?? null;
   const sessionSpeedMax = Math.max(320, ...sessionSpeedValues, 1);
+  const overviewSample = isReplaySessionActive
+    ? visibleReplaySample
+    : visibleSession !== null
+      ? latestStoredSample
+      : sample;
+  const canShowOverview =
+    visibleSession !== null || (!hasSelectedSession && overviewSample !== null);
+  const overviewParticipants = getSessionParticipants(overviewSample);
+  const focusParticipant =
+    overviewParticipants.find((participant) => participant.isPlayer) ??
+    overviewParticipants[0] ??
+    null;
+  const overviewModeLabel = isReplaySessionActive
+    ? "Replay timeline"
+    : visibleSession !== null
+      ? "Stored capture"
+      : collectorStatus?.isRunning && collectorStatus.runMode === "Live"
+        ? "Live session"
+        : overviewSample !== null
+          ? "Recent live session"
+          : "Awaiting session";
+  const overviewSessionType =
+    overviewSample?.session.sessionType ??
+    (isReplaySessionActive
+      ? "Replay"
+      : visibleSession !== null
+        ? "Stored capture"
+        : collectorStatus?.isRunning
+          ? "Active run"
+          : "Recent session");
+  const overviewTrackName =
+    visibleSession?.session.trackName ??
+    overviewSample?.track.trackName ??
+    selectedSessionSummary?.trackName ??
+    "Unknown track";
+  const overviewGame =
+    visibleSession?.session.game ??
+    overviewSample?.source.game ??
+    activeSource?.game ??
+    "-";
+  const overviewSourceName =
+    visibleSession?.session.sourceName ??
+    overviewSample?.source.displayName ??
+    activeSource?.displayName ??
+    "Unknown source";
+  const overviewFocusName =
+    focusParticipant?.driverName ??
+    overviewSample?.source.displayName ??
+    overviewSourceName;
+  const overviewTeamName = focusParticipant?.teamName ?? "Team unknown";
+  const overviewCarName =
+    focusParticipant?.carName ??
+    visibleSession?.session.carName ??
+    overviewSample?.vehicle.carName ??
+    "Unknown car";
+  const overviewWeather = overviewSample?.track.weather ?? "-";
+  const overviewStartedAt =
+    visibleSession?.session.startedAt ??
+    overviewSample?.session.startedAt ??
+    null;
+  const overviewLastSeenAt =
+    visibleSession?.session.lastSeenAt ?? overviewSample?.timestamp ?? null;
+  const overviewBestLap =
+    focusParticipant?.bestLapTime ??
+    visibleSession?.session.bestLapTime ??
+    overviewSample?.lap.bestLapTime ??
+    null;
+  const overviewFieldCount =
+    overviewParticipants.length > 0
+      ? overviewParticipants.length
+      : overviewSample !== null
+        ? 1
+        : 0;
+  const overviewFieldLabel =
+    overviewFieldCount > 0 ? `${overviewFieldCount} cars` : "No field data";
+  const overviewLapNumber =
+    focusParticipant?.lapNumber ?? overviewSample?.lap.lapNumber ?? null;
+  const overviewMetadata = [
+    { label: "Mode", value: overviewModeLabel, mono: false },
+    { label: "Game", value: overviewGame, mono: false },
+    { label: "Source", value: overviewSourceName, mono: false },
+    { label: "Weather", value: overviewWeather, mono: false },
+    {
+      label: "Started",
+      value: formatShortTimestamp(overviewStartedAt),
+      mono: true,
+    },
+    {
+      label: "Last seen",
+      value: formatShortTimestamp(overviewLastSeenAt),
+      mono: true,
+    },
+    { label: "Best lap", value: formatTime(overviewBestLap), mono: true },
+    {
+      label: "Samples",
+      value: String(
+        visibleSession?.session.sampleCount ??
+          collectorStatus?.samplesPublished ??
+          0,
+      ),
+      mono: true,
+    },
+  ];
   const detailTitle =
+    overviewSample?.session.name ??
     visibleSession?.session.trackName ??
     selectedSessionSummary?.trackName ??
-    "Inspect a recent capture";
+    "Session overview";
   const detailStatus = isReplaySessionActive
     ? `${isReplayAdvancing ? "Replay" : "Paused"} ${replayProgressLabel}`
-    : visibleSession
+    : visibleSession !== null
       ? `${visibleSession.samples.length} samples`
-      : hasSelectedSession && isDetailLoading
-        ? "Loading"
-        : sessions.length > 0
-          ? "Select"
-          : "Empty";
+      : canShowOverview
+        ? collectorStatus?.isRunning && collectorStatus.runMode === "Live"
+          ? "Live"
+          : "Recent"
+        : hasSelectedSession && isDetailLoading
+          ? "Loading"
+          : sessions.length > 0
+            ? "Select"
+            : "Empty";
 
   const handleSelectSession = (sessionId: string) => {
     if (activeReplaySessionId !== null && activeReplaySessionId !== sessionId) {
@@ -514,125 +691,133 @@ export function TimingBoard({
     );
 
   const detailBody = (() => {
-    if (visibleSession !== null) {
+    if (canShowOverview) {
       return (
         <div className="panel-body session-detail-body">
-          {!isReplaySessionActive && replayControlsSection}
+          {visibleSession !== null &&
+            !isReplaySessionActive &&
+            replayControlsSection}
+
+          <div className="session-overview-strip">
+            <div className="session-overview-cell">
+              <div className="detail-label">Session</div>
+              <div className="detail-value">{detailTitle}</div>
+              <div className="table-subvalue muted">{overviewSessionType}</div>
+            </div>
+            <div className="session-overview-cell">
+              <div className="detail-label">Driver focus</div>
+              <div className="detail-value">{overviewFocusName}</div>
+              <div className="table-subvalue muted">
+                {overviewTeamName} • {overviewCarName}
+              </div>
+            </div>
+            <div className="session-overview-cell">
+              <div className="detail-label">Field snapshot</div>
+              <div className="detail-value mono">{overviewFieldLabel}</div>
+              <div className="table-subvalue muted">
+                {overviewTrackName}
+                {overviewLapNumber !== null
+                  ? ` • Lap ${overviewLapNumber}`
+                  : ""}
+              </div>
+            </div>
+          </div>
 
           <div className="detail-grid">
-            <div className="detail-cell">
-              <div className="detail-label">Game</div>
-              <div className="detail-value">{visibleSession.session.game}</div>
-            </div>
-            <div className="detail-cell">
-              <div className="detail-label">Source</div>
-              <div className="detail-value">
-                {visibleSession.session.sourceName ?? "Unknown source"}
+            {overviewMetadata.map((item) => (
+              <div className="detail-cell" key={item.label}>
+                <div className="detail-label">{item.label}</div>
+                <div
+                  className={item.mono ? "detail-value mono" : "detail-value"}
+                >
+                  {item.value}
+                </div>
               </div>
-            </div>
-            <div className="detail-cell">
-              <div className="detail-label">Track</div>
-              <div className="detail-value">
-                {visibleSession.session.trackName ?? "Unknown track"}
-              </div>
-            </div>
-            <div className="detail-cell">
-              <div className="detail-label">Car</div>
-              <div className="detail-value">
-                {visibleSession.session.carName ?? "Unknown car"}
-              </div>
-            </div>
-            <div className="detail-cell">
-              <div className="detail-label">Started</div>
-              <div className="detail-value mono">
-                {formatShortTimestamp(visibleSession.session.startedAt)}
-              </div>
-            </div>
-            <div className="detail-cell">
-              <div className="detail-label">Last seen</div>
-              <div className="detail-value mono">
-                {formatShortTimestamp(visibleSession.session.lastSeenAt)}
-              </div>
-            </div>
-            <div className="detail-cell">
-              <div className="detail-label">Best lap</div>
-              <div className="detail-value mono">
-                {formatTime(visibleSession.session.bestLapTime)}
-              </div>
-            </div>
-            <div className="detail-cell">
-              <div className="detail-label">Samples</div>
-              <div className="detail-value mono">
-                {visibleSession.session.sampleCount}
-              </div>
-            </div>
+            ))}
           </div>
 
           <div className="session-detail-section">
             <div className="session-detail-heading">
               <div>
-                <div className="panel-kicker">Recent speed trace</div>
-                <h3 className="panel-title">Stored speed envelope</h3>
+                <div className="panel-kicker">Lap snapshot</div>
+                <h3 className="panel-title">Driver, car, and gap board</h3>
               </div>
               <div className="session-detail-note mono">
-                {visibleSession.samples.length} recent samples
-              </div>
-            </div>
-            <div className="trace-stack">
-              <TraceLane
-                label="Speed"
-                value={formatNumber(latestStoredSample?.vehicle.speedKph, 0)}
-                unit="kph"
-                values={sessionSpeedValues}
-                min={0}
-                max={sessionSpeedMax}
-                color="var(--accent-cyan)"
-              />
-            </div>
-          </div>
-
-          <div className="session-detail-section">
-            <div className="session-detail-heading">
-              <div>
-                <div className="panel-kicker">Lap summaries</div>
-                <h3 className="panel-title">Recent recorded laps</h3>
-              </div>
-              <div className="session-detail-note mono">
-                {visibleSession.laps.length} laps
+                {isReplaySessionActive
+                  ? `Replay ${replayProgressLabel}`
+                  : overviewFieldCount > 0
+                    ? `${overviewFieldCount} participants`
+                    : "No participant data"}
               </div>
             </div>
 
             <div className="table-panel-body session-laps-body">
-              <table className="dense-table session-lap-table">
+              <table className="dense-table session-participant-table">
                 <thead>
                   <tr>
+                    <th>Pos</th>
+                    <th>Driver</th>
+                    <th>Team</th>
+                    <th>Car</th>
                     <th>Lap</th>
-                    <th>Lap time</th>
+                    <th>Last</th>
                     <th>Best</th>
-                    <th>Updated</th>
+                    <th>Gap</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleSession.laps.length === 0 ? (
+                  {overviewParticipants.length === 0 ? (
                     <tr className="table-row-empty">
-                      <td colSpan={4}>
+                      <td colSpan={8}>
                         <div className="table-empty-state">
-                          <span>No lap summaries yet</span>
+                          <span>No participant snapshot yet</span>
                           <span className="table-subvalue muted">
-                            This capture has stored samples, but no completed
-                            laps have been recorded yet.
+                            This session has summary metadata, but no stored
+                            participant field snapshot is available to render.
                           </span>
                         </div>
                       </td>
                     </tr>
                   ) : (
-                    visibleSession.laps.map((lap) => (
-                      <tr key={`${lap.sessionId}-${lap.lapNumber}`}>
-                        <td className="mono">{lap.lapNumber}</td>
-                        <td className="mono">{formatTime(lap.lapTime)}</td>
-                        <td className="mono">{formatTime(lap.bestLapTime)}</td>
+                    overviewParticipants.map((participant) => (
+                      <tr
+                        className={
+                          participant.isPlayer ? "table-row-active" : undefined
+                        }
+                        key={`${participant.driverName}-${participant.position}`}
+                      >
+                        <td className="mono">{participant.position}</td>
+                        <td>
+                          <div className="table-stack">
+                            <span>{participant.driverName}</span>
+                            <span className="table-subvalue muted">
+                              {getParticipantNote(participant)}
+                            </span>
+                          </div>
+                        </td>
+                        <td>{participant.teamName ?? "-"}</td>
+                        <td>{participant.carName ?? "-"}</td>
+                        <td>
+                          <div className="table-stack mono">
+                            <span>{participant.lapNumber ?? "-"}</span>
+                            <span className="table-subvalue muted">
+                              {formatTime(participant.currentLapTime)}
+                            </span>
+                          </div>
+                        </td>
                         <td className="mono">
-                          {formatShortTimestamp(lap.updatedAt)}
+                          {formatTime(participant.lastLapTime)}
+                        </td>
+                        <td className="mono">
+                          {formatTime(participant.bestLapTime)}
+                        </td>
+                        <td>
+                          <div className="table-stack mono">
+                            <span>{formatGapToLeader(participant)}</span>
+                            <span className="table-subvalue muted">
+                              {getParticipantGapNote(participant)}
+                            </span>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -640,7 +825,94 @@ export function TimingBoard({
                 </tbody>
               </table>
             </div>
+
+            {visibleSession === null && sessions.length > 0 && (
+              <div className="table-subvalue muted">
+                Select a capture from the timing board to load stored laps or
+                start a replay with the full participant field intact.
+              </div>
+            )}
           </div>
+
+          {visibleSession !== null && (
+            <div className="session-detail-section">
+              <div className="session-detail-heading">
+                <div>
+                  <div className="panel-kicker">Recent speed trace</div>
+                  <h3 className="panel-title">Stored speed envelope</h3>
+                </div>
+                <div className="session-detail-note mono">
+                  {visibleSession.samples.length} recent samples
+                </div>
+              </div>
+              <div className="trace-stack">
+                <TraceLane
+                  label="Speed"
+                  value={formatNumber(latestStoredSample?.vehicle.speedKph, 0)}
+                  unit="kph"
+                  values={sessionSpeedValues}
+                  min={0}
+                  max={sessionSpeedMax}
+                  color="var(--accent-cyan)"
+                />
+              </div>
+            </div>
+          )}
+
+          {visibleSession !== null && (
+            <div className="session-detail-section">
+              <div className="session-detail-heading">
+                <div>
+                  <div className="panel-kicker">Lap summaries</div>
+                  <h3 className="panel-title">Recent recorded laps</h3>
+                </div>
+                <div className="session-detail-note mono">
+                  {visibleSession.laps.length} laps
+                </div>
+              </div>
+
+              <div className="table-panel-body session-laps-body">
+                <table className="dense-table session-lap-table">
+                  <thead>
+                    <tr>
+                      <th>Lap</th>
+                      <th>Lap time</th>
+                      <th>Best</th>
+                      <th>Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleSession.laps.length === 0 ? (
+                      <tr className="table-row-empty">
+                        <td colSpan={4}>
+                          <div className="table-empty-state">
+                            <span>No lap summaries yet</span>
+                            <span className="table-subvalue muted">
+                              This capture has stored samples, but no completed
+                              laps have been recorded yet.
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      visibleSession.laps.map((lap) => (
+                        <tr key={`${lap.sessionId}-${lap.lapNumber}`}>
+                          <td className="mono">{lap.lapNumber}</td>
+                          <td className="mono">{formatTime(lap.lapTime)}</td>
+                          <td className="mono">
+                            {formatTime(lap.bestLapTime)}
+                          </td>
+                          <td className="mono">
+                            {formatShortTimestamp(lap.updatedAt)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -653,10 +925,10 @@ export function TimingBoard({
             role="status"
             aria-live="polite"
           >
-            <span>Loading capture detail</span>
+            <span>Loading session overview</span>
             <span className="table-subvalue muted">
-              Fetching metadata, lap summaries, and stored samples from the
-              local API.
+              Fetching metadata, lap summaries, participant snapshots, and
+              stored samples from the local API.
             </span>
           </div>
         </div>
@@ -670,7 +942,7 @@ export function TimingBoard({
             className="session-detail-state session-detail-state-error"
             role="alert"
           >
-            <span>Capture detail unavailable</span>
+            <span>Session overview unavailable</span>
             <span className="table-subvalue muted">{detailError}</span>
           </div>
         </div>
@@ -685,10 +957,10 @@ export function TimingBoard({
             role="status"
             aria-live="polite"
           >
-            <span>No captures selected</span>
+            <span>No session data yet</span>
             <span className="table-subvalue muted">
-              Stored session detail appears here after the first local capture
-              is saved.
+              Active or stored session overview appears here after the first
+              local capture is saved.
             </span>
           </div>
         </div>
@@ -701,7 +973,7 @@ export function TimingBoard({
           <span>Select a capture</span>
           <span className="table-subvalue muted">
             Choose a recent session from the timing board to inspect its
-            metadata, lap summaries, and speed trace.
+            metadata, participant field, lap summaries, and speed trace.
           </span>
         </div>
       </div>
@@ -711,7 +983,7 @@ export function TimingBoard({
   return (
     <section
       className="timing-board"
-      aria-label="Timing board and capture detail"
+      aria-label="Timing board and session overview"
     >
       <div className="timing-board-layout">
         <div className="panel timing-board-table-panel">
@@ -894,7 +1166,7 @@ export function TimingBoard({
         <aside className="panel session-detail-panel">
           <div className="panel-header">
             <div>
-              <div className="panel-kicker">Capture detail</div>
+              <div className="panel-kicker">Session overview</div>
               <h2 className="panel-title">{detailTitle}</h2>
             </div>
             <div className="status-pill mono">{detailStatus}</div>

@@ -90,6 +90,22 @@ export type TelemetrySample = {
     deltaToBestLap?: string | null;
     sectorDelta?: string | null;
   };
+  participants?: ParticipantState[] | null;
+};
+
+export type ParticipantState = {
+  driverName: string;
+  teamName?: string | null;
+  carName?: string | null;
+  position: number;
+  isPlayer: boolean;
+  isInPit: boolean;
+  lapNumber?: number | null;
+  currentLapTime?: string | null;
+  lastLapTime?: string | null;
+  bestLapTime?: string | null;
+  gapToLeader?: string | null;
+  intervalToAhead?: string | null;
 };
 
 export type CollectorStatus = {

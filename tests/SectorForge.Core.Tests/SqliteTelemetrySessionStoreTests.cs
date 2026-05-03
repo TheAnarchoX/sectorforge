@@ -26,6 +26,11 @@ public sealed class SqliteTelemetrySessionStoreTests
         Assert.Equal(sessionId, details.Session.Id);
         Assert.Single(details.Samples);
         Assert.Equal("Silverstone GP", details.Session.TrackName);
+        Assert.NotNull(details.Samples[0].Participants);
+        Assert.Equal(6, details.Samples[0].Participants?.Count);
+        Assert.Contains(
+            details.Samples[0].Participants ?? [],
+            participant => participant.IsPlayer && participant.TeamName == "SectorForge Works");
     }
 
     [Fact]

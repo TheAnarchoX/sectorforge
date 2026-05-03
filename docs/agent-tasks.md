@@ -235,7 +235,7 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-034: Add Replay Mode UI Controls
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend feature
 - Goal: Add UI controls to start and stop replaying a stored session through the dashboard. Also add controls for scrolling through the replay timeline and an indicator for when replay mode is active. This will allow users to review past sessions and analyze their telemetry in a familiar interface.
 - Suggested files: `src/SectorForge.Web/src/*`, `src/SectorForge.Api/Program.cs` if API shape needs small additions
@@ -248,10 +248,11 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-035: Add Session Overview
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend feature
 - Goal: Add a session overview panel that shows key metadata and lap summaries for the user and the other participants in the current active/loaded session. This will provide context for the telemetry data and allow users to quickly understand the session details at a glance. Give insight into the drivers, cars, teams, track, and lap performance without needing to dive into the raw telemetry.
 - Suggested files: `src/SectorForge.Web/src/*`, `src/SectorForge.Api/Program.cs` if API shape needs small additions
+- Notes: Added a replay-aware session overview on 2026-05-03 that renders current live or loaded session metadata, participant/team/car lap snapshots, stored lap summaries, and persisted participant snapshots from replayed captures.
 - Acceptance criteria:
   - Overview panel shows session metadata like game, track, car, and participants.
   - Lap summaries show key performance metrics for each lap and driver.

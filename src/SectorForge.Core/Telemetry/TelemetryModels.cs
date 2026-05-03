@@ -47,7 +47,8 @@ public sealed record TelemetrySample(
     FuelState Fuel,
     TrackState Track,
     DriverInputState DriverInput,
-    TimingState Timing);
+    TimingState Timing,
+    IReadOnlyList<ParticipantState>? Participants = null);
 
 public sealed record SessionState(
     Guid Id,
@@ -116,6 +117,20 @@ public sealed record TimingState(
     TimeSpan? SessionRemaining,
     TimeSpan? DeltaToBestLap,
     TimeSpan? SectorDelta);
+
+public sealed record ParticipantState(
+    string DriverName,
+    string? TeamName,
+    string? CarName,
+    int Position,
+    bool IsPlayer,
+    bool IsInPit,
+    int? LapNumber,
+    TimeSpan? CurrentLapTime,
+    TimeSpan? LastLapTime,
+    TimeSpan? BestLapTime,
+    TimeSpan? GapToLeader,
+    TimeSpan? IntervalToAhead = null);
 
 public sealed record TelemetryReceiverStatus(
     bool IsRunning,

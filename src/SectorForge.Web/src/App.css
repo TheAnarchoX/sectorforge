@@ -819,10 +819,33 @@
   gap: 10px;
 }
 
+.session-overview-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid var(--line-soft);
+  background: var(--line-soft);
+}
+
+.session-overview-cell {
+  min-height: 72px;
+  padding: 8px 10px;
+  background: #000;
+}
+
+.session-overview-cell .table-subvalue {
+  display: block;
+  margin-top: 6px;
+}
+
 .session-detail-section {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.session-participant-table {
+  min-width: 760px;
 }
 
 .session-detail-heading {
@@ -1114,6 +1137,10 @@
 
 @media (max-width: 900px) {
   .command-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .session-overview-strip {
     grid-template-columns: 1fr;
   }
 

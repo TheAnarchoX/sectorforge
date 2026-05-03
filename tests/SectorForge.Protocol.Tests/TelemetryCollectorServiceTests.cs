@@ -111,6 +111,9 @@ public sealed class TelemetryCollectorServiceTests
         Assert.Equal(TelemetryRunMode.Idle, status.RunMode);
         Assert.Equal(3, status.SamplesPublished);
         Assert.Equal([1L, 2L, 3L], publisher.PublishedSamples.Select(sample => sample.Sequence).ToArray());
+        Assert.All(
+            publisher.PublishedSamples,
+            sample => Assert.Contains(sample.Participants ?? [], participant => participant.DriverName == "Avery Cole"));
         Assert.Contains(publisher.StatusUpdates, update => update.IsRunning && update.RunMode == TelemetryRunMode.Replay);
     }
 
