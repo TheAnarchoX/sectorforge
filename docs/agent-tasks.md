@@ -611,6 +611,64 @@ The dashboard already has a `Compare` workspace placeholder driven by the worksp
   - README links to the compare workflow once the UI ships.
   - Docs note current limitations (single-channel overlay at a time, retained sample blob constraints).
 
+### SF-058: Add Multi-Channel Compare Views
+
+- Status: `ready`
+- Type: frontend feature
+- Goal: Allow users to add multiple overlay charts for different channels (e.g. speed, rpm, throttle) so they can analyze how different aspects of the lap interact with each other.
+- Suggested files: `src/SectorForge.Web/src/components/dashboard/CompareWorkspace.tsx`, `src/SectorForge.Web/src/components/dashboard/LapTelemetryChart.tsx`
+- Acceptance criteria:
+  - Compare workspace allows users to add multiple `LapTelemetryChart` components, each with its own channel selector.
+  - Charts are synchronized to the same distance cursor when hovering or focusing.
+  - Users can remove individual charts without affecting the lap basket or other charts.
+  - Lint and frontend build pass.
+
+### SF-059: Add Compare Workspace To Frontend Routing
+- Status: `ready`
+- Type: frontend feature
+- Goal: Ensure the Compare workspace is accessible via the frontend routing system (e.g. `/compare`) and that it can be navigated to from the workspace rail, so users can easily find and use the new comparison features.
+- Suggested files: `src/SectorForge.Web/src/App.tsx`, `src/SectorForge.Web/src/components/dashboard/CompareWorkspace.tsx`
+- Acceptance criteria:
+  - Compare workspace is registered in the routing system and can be accessed via a URL (e.g. `/compare`).
+  - Workspace rail includes a `Compare` item that navigates to the Compare workspace when clicked.
+  - Navigating to the Compare workspace does not disrupt the state of other workspaces (e.g. Live, Sessions).
+  - Lint and frontend build pass.
+
+### SF-05A: Add Lap Comparison To Session History View
+
+- Status: `ready`
+- Type: frontend feature
+- Goal: In the Session History view for a completed session, allow users to select multiple laps and trigger a comparison view that overlays those laps without needing to pin them first, so they can quickly analyze differences between laps from the same session.
+- Suggested files: `src/SectorForge.Web/src/components/dashboard/SessionHistoryView.tsx`, `src/SectorForge.Web/src/components/dashboard/LapTelemetryChart.tsx`
+- Acceptance criteria:
+  - Session History view allows users to select multiple laps (e.g. with checkboxes) and includes a "Compare Selected" button.
+  - Clicking "Compare Selected" navigates to the Compare workspace with the selected laps pinned in the basket.
+  - The Compare workspace shows the selected laps in the overlay charts and delta plots as per the existing compare functionality.
+  - Lint and frontend build pass.
+
+### SF-05B: Import/Export Lap Comparison Sets
+
+- Status: `ready`
+- Type: frontend feature
+- Goal: Allow users to export their pinned lap sets and reference selections as a JSON file that can be shared or re-imported later, so they can save interesting comparisons or share them with friends without relying on the persistence of `localStorage`.
+- Suggested files: `src/SectorForge.Web/src/components/dashboard/CompareWorkspace.tsx`, `src/SectorForge.Web/src/utils/*`
+- Acceptance criteria:
+  - Compare workspace includes "Export" and "Import" buttons that trigger file download and upload dialogs.
+  - Exported JSON includes the session ID, lap numbers, labels, colors, and reference selection for each pinned lap.
+  - Importing a valid JSON file populates the lap basket and reference selection accordingly, with error handling for invalid formats.
+  - Lint and frontend build pass.
+
+### SF-05C: External Export Of Comparison Data
+- Status: `ready`
+- Type: backend feature
+- Goal: Add an API endpoint that allows users to export the telemetry data for a set of laps in a format compatible with external analysis tools (e.g. CSV, MoTeC i2 format), so they can perform more advanced analysis or visualization outside of the dashboard.
+- Suggested files: `src/SectorForge.Api/Program.cs`, `src/SectorForge.Api/Services/*`, `src/SectorForge.Infrastructure/Storage/*`, `src/SectorForge.Core/Telemetry/*`, `tests/SectorForge.Api.Tests/*`
+- Acceptance criteria:
+  - `POST /api/compare/export` accepts a payload with session ID, lap numbers, and desired export format.
+  - Endpoint retrieves the telemetry data for the specified laps and returns it in the requested format (e.g. CSV with aligned channels, or a MoTeC i2-compatible file).
+  - Endpoint includes error handling for unknown sessions/laps and unsupported formats.
+  - Tests cover valid export requests, error cases, and format correctness.
+
 ## Priority 6: LMU Plugin Adapter
 
 Note: LMU's UDP plugin is a popular community adapter for Assetto Corsa and Assetto Corsa Competizione, so it can be a good next step after F1 25 to expand the user base. However, it's a third-party plugin with its own release cadence and support model, so it may require more maintenance work to keep up with changes. The adapter should be designed to handle potential protocol changes gracefully and minimize breakage when the plugin updates.
@@ -629,7 +687,7 @@ Note: Packaging the frontend as a WebView2 desktop app can make it more accessib
 
 ## Priority 10: Release Packaging, Publishing, and Versioning
 
-Note: this is very needed because now only people who know how to build and run the project from source can use it, and we want to make it available to a wider audience who may not be developers.
+Note: this is very needed because now only people who know how to build and run the project from source can use it, and we want to make it available to a wider audience who may not be developers. This will include creating release builds for the collector and frontend, packaging them in a user-friendly way (e.g. an installer or portable zip), and publishing them on GitHub Releases or a similar platform. It will also involve setting up a versioning strategy (e.g. semantic versioning) and possibly automating the release process with CI/CD pipelines. However, it requires additional work to set up and maintain the build and release infrastructure, and may involve troubleshooting issues that arise in the packaging process. It should be considered after the core features are stable and there is demand from users for easier access to releases.
 
 ## Priority 11: Hardware Display Integration
 
