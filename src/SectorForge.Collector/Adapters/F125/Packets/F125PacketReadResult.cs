@@ -15,7 +15,9 @@ public enum F125PacketSkipReason
 public enum F125PacketReadFailureKind
 {
     TruncatedHeader,
+    TruncatedPayload,
     InvalidPacketFormat,
+    InvalidPlayerCarIndex,
     PacketReaderFailure
 }
 

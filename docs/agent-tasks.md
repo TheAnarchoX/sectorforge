@@ -408,9 +408,10 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-044: Implement F1 25 Player-Car Normalizer
 
-- Status: `ready`
+- Status: `done`
 - Type: protocol adapter
 - Goal: Convert F1 25 motion + lap data + car telemetry packets into a normalized `TelemetrySample` for the player car, with unavailable fields set to `null`.
+- Notes: Added player-car payload DTO parsing and a pure `F125Normalizer` on 2026-05-03. Speed, rpm, gear, throttle, brake, steering, clutch, current/last lap time, sector index, and lap distance now flow into `TelemetrySample`; best lap remains `null` for this three-packet slice until a session-history source exists, avoiding invented values. The placeholder F1 25 adapter remains unavailable until SF-045 wires it in.
 - Suggested files: `src/SectorForge.Collector/Adapters/F125/F125Normalizer.cs`, `src/SectorForge.Collector/Adapters/F125/F125Adapter.cs`, `tests/SectorForge.Protocol.Tests/F125/*`
 - Acceptance criteria:
   - Normalizer maps speed, rpm, gear, throttle, brake, steering, clutch, current/last/best lap time, sector index, and lap distance.

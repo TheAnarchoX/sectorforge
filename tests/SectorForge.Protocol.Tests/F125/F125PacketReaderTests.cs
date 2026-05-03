@@ -6,11 +6,16 @@ namespace SectorForge.Protocol.Tests.F125;
 
 public sealed class F125PacketReaderTests
 {
+    private const int CarCount = 22;
+    private const int MotionDataSize = 60;
+    private const int LapDataSize = 50;
+    private const int CarTelemetryDataSize = 60;
+
     [Fact]
     public void ReadsHeaderWithLittleEndianFieldsAndDispatchesKnownPacket()
     {
         var reader = new F125PacketReader();
-        var payload = new byte[] { 0x10, 0x20, 0x30 };
+        var payload = BuildMotionPayload(playerCarIndex: 7);
         var buffer = BuildPacket(F125PacketIds.Motion, playerCarIndex: 7, payload);
 
         var result = reader.Read(buffer);
@@ -31,6 +36,8 @@ public sealed class F125PacketReaderTests
         Assert.Equal(5678U, result.Header.OverallFrameIdentifier);
         Assert.Equal(7, result.Header.PlayerCarIndex);
         Assert.Equal(255, result.Header.SecondaryPlayerCarIndex);
+        Assert.Equal(12.5, packet.PlayerCar.WorldPositionX, precision: 3);
+        Assert.Equal(1.25, packet.PlayerCar.LateralG, precision: 3);
         Assert.Null(result.Failure);
     }
 
@@ -89,8 +96,14 @@ public sealed class F125PacketReaderTests
     {
         var reader = new F125PacketReader();
 
-        var firstResult = reader.Read(BuildPacket(F125PacketIds.LapData, playerCarIndex: 2));
-        var secondResult = reader.Read(BuildPacket(F125PacketIds.CarTelemetry, playerCarIndex: 12));
+        var firstResult = reader.Read(BuildPacket(
+            F125PacketIds.LapData,
+            playerCarIndex: 2,
+            BuildLapDataPayload(playerCarIndex: 2)));
+        var secondResult = reader.Read(BuildPacket(
+            F125PacketIds.CarTelemetry,
+            playerCarIndex: 12,
+            BuildCarTelemetryPayload(playerCarIndex: 12)));
 
         Assert.Equal(F125PacketReadStatus.Parsed, firstResult.Status);
         Assert.Equal(F125PacketReadStatus.Parsed, secondResult.Status);
@@ -100,6 +113,42 @@ public sealed class F125PacketReaderTests
         Assert.Equal((byte)12, secondResult.Header.PlayerCarIndex);
         Assert.IsType<F125LapDataPacket>(firstResult.Packet);
         Assert.IsType<F125CarTelemetryPacket>(secondResult.Packet);
+    }
+
+    [Fact]
+    public void TruncatedPlayerPayloadReturnsTypedFailure()
+    {
+        var reader = new F125PacketReader();
+
+        var result = reader.Read(BuildPacket(
+            F125PacketIds.CarTelemetry,
+            playerCarIndex: 3,
+            payload: [0x01, 0x02]));
+
+        Assert.Equal(F125PacketReadStatus.Failed, result.Status);
+        Assert.NotNull(result.Header);
+        Assert.NotNull(result.Failure);
+        Assert.Equal(F125PacketReadFailureKind.TruncatedPayload, result.Failure.Kind);
+        Assert.Equal(F125PacketIds.CarTelemetry, result.Failure.PacketId.GetValueOrDefault());
+        Assert.Equal(2, result.Failure.ActualBytes);
+        Assert.True(result.Failure.RequiredBytes.GetValueOrDefault() > result.Failure.ActualBytes);
+    }
+
+    [Fact]
+    public void InvalidPlayerCarIndexReturnsTypedFailure()
+    {
+        var reader = new F125PacketReader();
+
+        var result = reader.Read(BuildPacket(
+            F125PacketIds.LapData,
+            playerCarIndex: 255,
+            BuildLapDataPayload(playerCarIndex: 0)));
+
+        Assert.Equal(F125PacketReadStatus.Failed, result.Status);
+        Assert.NotNull(result.Header);
+        Assert.NotNull(result.Failure);
+        Assert.Equal(F125PacketReadFailureKind.InvalidPlayerCarIndex, result.Failure.Kind);
+        Assert.Equal(F125PacketIds.LapData, result.Failure.PacketId.GetValueOrDefault());
     }
 
     [Fact]
@@ -135,6 +184,41 @@ public sealed class F125PacketReaderTests
         payload.CopyTo(buffer.AsSpan(F125PacketHeader.Size));
 
         return buffer;
+    }
+
+    private static byte[] BuildMotionPayload(byte playerCarIndex)
+    {
+        var payload = new byte[CarCount * MotionDataSize];
+        var playerOffset = playerCarIndex * MotionDataSize;
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset, sizeof(float)), 12.5f);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 36, sizeof(float)), 1.25f);
+        return payload;
+    }
+
+    private static byte[] BuildLapDataPayload(byte playerCarIndex)
+    {
+        var payload = new byte[CarCount * LapDataSize];
+        var playerOffset = playerCarIndex * LapDataSize;
+        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(playerOffset, sizeof(uint)), 83_210);
+        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(playerOffset + 4, sizeof(uint)), 12_345);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 18, sizeof(float)), 1234.5f);
+        payload[playerOffset + 31] = 7;
+        payload[playerOffset + 34] = 2;
+        return payload;
+    }
+
+    private static byte[] BuildCarTelemetryPayload(byte playerCarIndex)
+    {
+        var payload = new byte[CarCount * CarTelemetryDataSize];
+        var playerOffset = playerCarIndex * CarTelemetryDataSize;
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset, sizeof(ushort)), 213);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 2, sizeof(float)), 0.72f);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 6, sizeof(float)), -0.34f);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 10, sizeof(float)), 0.18f);
+        payload[playerOffset + 14] = 64;
+        payload[playerOffset + 15] = 6;
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 16, sizeof(ushort)), 11_250);
+        return payload;
     }
 
     private sealed class FailingPayloadReader(byte packetId) : IF125PacketPayloadReader

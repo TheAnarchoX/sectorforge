@@ -62,7 +62,8 @@ public sealed record LapState(
     TimeSpan? CurrentLapTime,
     TimeSpan? LastLapTime,
     TimeSpan? BestLapTime,
-    int? SectorIndex);
+    int? SectorIndex,
+    double? LapDistanceMeters = null);
 
 public sealed record VehicleState(
     string? CarName,
