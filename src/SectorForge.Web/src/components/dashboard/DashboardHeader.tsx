@@ -1,27 +1,16 @@
-import {
-  Flag,
-  Gauge,
-  Pause,
-  Play,
-  RadioTower,
-  RefreshCw,
-  TimerReset,
-} from "lucide-react";
+import { Pause, Play, RefreshCw } from "lucide-react";
 import type { ConnectionState, TelemetryRunMode } from "../../types/telemetry";
-import { ModePill, StatusPill } from "./DashboardPrimitives";
 
 type DashboardHeaderProps = {
   connectionState: ConnectionState;
   runMode: TelemetryRunMode;
   isCollectorRunning: boolean;
   isReplayRunning: boolean;
-  isSimplifiedView: boolean;
   isBusy: boolean;
   trackName?: string | null;
   sessionName?: string | null;
   sourceName?: string | null;
   samplesPublished: number;
-  onToggleSimplifiedView: () => void;
   onStartCollector: () => void;
   onStopCollector: () => void;
   onRefresh: () => void;
@@ -32,136 +21,146 @@ export function DashboardHeader({
   runMode,
   isCollectorRunning,
   isReplayRunning,
-  isSimplifiedView,
   isBusy,
   trackName,
   sessionName,
   sourceName,
   samplesPublished,
-  onToggleSimplifiedView,
   onStartCollector,
   onStopCollector,
   onRefresh,
 }: DashboardHeaderProps) {
-  const collectorState: ConnectionState = isCollectorRunning
-    ? "connected"
-    : "disconnected";
+  const modeLabel = isCollectorRunning ? runMode.toUpperCase() : "IDLE";
+  const modeTone: ChipTone = !isCollectorRunning
+    ? "stop"
+    : runMode === "Replay"
+      ? "warn"
+      : "live";
+  const signalTone: ChipTone =
+    connectionState === "connected"
+      ? "live"
+      : connectionState === "reconnecting" || connectionState === "connecting"
+        ? "warn"
+        : "stop";
 
   return (
-    <header className="topbar">
-      <div className="topbar-row">
-        <div className="brand-cluster">
-          <div className="brand-mark">SF</div>
-          <div>
-            <div className="brand-subtitle">Race control // telemetry bus</div>
-            <h1 className="brand-title">SectorForge</h1>
-          </div>
+    <header className="topbar" aria-label="Race control header">
+      <div className="topbar-brand">
+        <div className="brand-mark" aria-hidden="true">
+          SF
         </div>
-
-        <div className="status-rack">
-          <StatusPill label="SignalR" state={connectionState} />
-          <StatusPill label="Collector" state={collectorState} />
-          <ModePill mode={runMode} isRunning={isCollectorRunning} />
+        <div className="brand-stack">
+          <span className="brand-title">SECTORFORGE</span>
+          <span className="brand-subtitle">PITWALL // TELEMETRY BUS</span>
         </div>
       </div>
 
-      <div className="topbar-row">
-        <div className="command-strip">
-          <div className="command-cell">
-            <div className="command-label">
-              <Flag size={14} />
-              Circuit
-            </div>
-            <div className="command-value">
-              {trackName ?? "Awaiting circuit lock"}
-            </div>
-          </div>
+      <div className="topbar-context" role="group" aria-label="Active session">
+        <ContextBlock label="Circuit" value={trackName ?? "—"} />
+        <ContextBlock label="Session" value={sessionName ?? "—"} />
+        <ContextBlock
+          label="Feed"
+          value={sourceName ?? "—"}
+          meta={`${samplesPublished.toLocaleString()} samples`}
+        />
+      </div>
 
-          <div className="command-cell">
-            <div className="command-label">
-              <TimerReset size={14} />
-              Session
-            </div>
-            <div className="command-value">
-              {sessionName ?? "No active stint"}
-            </div>
-          </div>
+      <div className="topbar-status" role="group" aria-label="System status">
+        <StatusChip label="MODE" value={modeLabel} tone={modeTone} primary />
+        <StatusChip
+          label="SIGNAL"
+          value={connectionState.toUpperCase()}
+          tone={signalTone}
+        />
+        <StatusChip
+          label="COLLECT"
+          value={isCollectorRunning ? "ONLINE" : "OFFLINE"}
+          tone={isCollectorRunning ? "live" : "stop"}
+        />
+      </div>
 
-          <div className="command-cell command-cell-emphasis">
-            <div className="command-label">
-              <RadioTower size={14} />
-              Feed
-            </div>
-            <div className="command-value">
-              {sourceName ?? "Telemetry bus offline"}
-            </div>
-            <div className="command-meta mono">
-              {samplesPublished.toLocaleString()} samples
-            </div>
-          </div>
-        </div>
-
-        <div
-          className="button-row"
-          role="group"
-          aria-label="Dashboard controls"
+      <div
+        className="topbar-actions"
+        role="group"
+        aria-label="Dashboard controls"
+      >
+        <button
+          className="icon-button primary"
+          type="button"
+          onClick={onStartCollector}
+          disabled={isBusy || isCollectorRunning}
+          aria-label="Start fake telemetry"
+          title="Start fake telemetry"
         >
-          <button
-            className={`icon-button${isSimplifiedView ? " active" : ""}`}
-            type="button"
-            onClick={onToggleSimplifiedView}
-            aria-pressed={isSimplifiedView}
-            aria-label={
-              isSimplifiedView
-                ? "Switch to full dashboard view"
-                : "Switch to simplified drive view"
-            }
-            title={
-              isSimplifiedView
-                ? "Switch to full dashboard view"
-                : "Switch to simplified drive view"
-            }
-          >
-            <Gauge size={17} />
-            {isSimplifiedView ? "Full view" : "Drive view"}
-          </button>
-
-          <button
-            className="icon-button primary"
-            type="button"
-            onClick={onStartCollector}
-            disabled={isBusy || isCollectorRunning}
-            aria-label="Start fake telemetry"
-            title="Start fake telemetry"
-          >
-            <Play size={17} />
-            Start fake
-          </button>
-
-          <button
-            className="icon-button danger"
-            type="button"
-            onClick={onStopCollector}
-            disabled={isBusy || !isCollectorRunning}
-            aria-label={isReplayRunning ? "Stop replay" : "Stop collector"}
-            title={isReplayRunning ? "Stop replay" : "Stop collector"}
-          >
-            <Pause size={17} />
-            Stop
-          </button>
-
-          <button
-            className="icon-button"
-            type="button"
-            onClick={onRefresh}
-            aria-label="Refresh dashboard state"
-            title="Refresh API state"
-          >
-            <RefreshCw size={17} />
-            Refresh
-          </button>
-        </div>
+          <Play size={15} />
+          Start
+        </button>
+        <button
+          className="icon-button danger"
+          type="button"
+          onClick={onStopCollector}
+          disabled={isBusy || !isCollectorRunning}
+          aria-label={isReplayRunning ? "Stop replay" : "Stop collector"}
+          title={isReplayRunning ? "Stop replay" : "Stop collector"}
+        >
+          <Pause size={15} />
+          Stop
+        </button>
+        <button
+          className="icon-button"
+          type="button"
+          onClick={onRefresh}
+          aria-label="Refresh dashboard state"
+          title="Refresh API state"
+        >
+          <RefreshCw size={15} />
+          Sync
+        </button>
       </div>
     </header>
+  );
+}
+
+type ChipTone = "live" | "warn" | "stop";
+
+function ContextBlock({
+  label,
+  value,
+  meta,
+}: {
+  label: string;
+  value: string;
+  meta?: string;
+}) {
+  return (
+    <div className="context-block">
+      <span className="context-label">{label}</span>
+      <span className="context-value" title={value}>
+        {value}
+      </span>
+      {meta && <span className="context-meta mono">{meta}</span>}
+    </div>
+  );
+}
+
+function StatusChip({
+  label,
+  value,
+  tone,
+  primary = false,
+}: {
+  label: string;
+  value: string;
+  tone: ChipTone;
+  primary?: boolean;
+}) {
+  return (
+    <div
+      className={`status-chip-block status-chip-${tone}${primary ? " status-chip-primary" : ""}`}
+    >
+      <span className={`status-dot ${tone}`} aria-hidden="true" />
+      <span className="status-chip-label">{label}</span>
+      <span className="status-chip-value mono">{value}</span>
+    </div>
   );
 }

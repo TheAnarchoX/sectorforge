@@ -198,3 +198,106 @@ export function TraceLane({
     </div>
   );
 }
+
+/** Session band: FIA-timing-screen-style header strip across the pitwall. */
+export function SessionBand({
+  sessionType,
+  sessionName,
+  trackName,
+  weather,
+  trackTempC,
+  airTempC,
+  elapsed,
+  remaining,
+  lapNumber,
+  lapTotal,
+  flag = "green",
+}: {
+  sessionType?: string | null;
+  sessionName?: string | null;
+  trackName?: string | null;
+  weather?: string | null;
+  trackTempC?: number | null;
+  airTempC?: number | null;
+  elapsed?: string | null;
+  remaining?: string | null;
+  lapNumber?: number | null;
+  lapTotal?: number | null;
+  flag?: "green" | "yellow" | "red" | "checkered";
+}) {
+  const segments: Array<{ label: string; value: string }> = [
+    {
+      label: "Session",
+      value: sessionType ?? sessionName ?? "—",
+    },
+    { label: "Circuit", value: trackName ?? "—" },
+    {
+      label: "Lap",
+      value:
+        lapNumber === null || lapNumber === undefined
+          ? "—"
+          : lapTotal
+            ? `${lapNumber} / ${lapTotal}`
+            : `${lapNumber}`,
+    },
+    {
+      label: "Track °C",
+      value:
+        trackTempC === null || trackTempC === undefined
+          ? "—"
+          : trackTempC.toFixed(1),
+    },
+    {
+      label: "Air °C",
+      value:
+        airTempC === null || airTempC === undefined ? "—" : airTempC.toFixed(1),
+    },
+    { label: "Weather", value: weather ?? "—" },
+    { label: "Elapsed", value: elapsed ?? "—" },
+    { label: "Remaining", value: remaining ?? "—" },
+  ];
+
+  return (
+    <div className="session-band" role="group" aria-label="Session conditions">
+      <div className={`session-band-flag flag-${flag}`} aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+      {segments.map((seg) => (
+        <div className="session-band-cell" key={seg.label}>
+          <span className="session-band-label">{seg.label}</span>
+          <span className="session-band-value mono">{seg.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type SectorTone = "neutral" | "improving" | "losing" | "best" | "personal";
+
+/** Sector bar: S1 / S2 / S3 with PB/SB/Best coloring, sized to fit a strip cell. */
+export function SectorBar({
+  activeIndex,
+  sectorTones = ["neutral", "neutral", "neutral"],
+}: {
+  activeIndex: number | null | undefined;
+  sectorTones?: [SectorTone, SectorTone, SectorTone];
+}) {
+  return (
+    <div className="sector-bar">
+      {[0, 1, 2].map((i) => {
+        const tone = sectorTones[i] ?? "neutral";
+        const isActive = activeIndex === i;
+        return (
+          <span
+            key={i}
+            className={`sector-bar-pip sector-tone-${tone}${isActive ? " active" : ""}`}
+          >
+            S{i + 1}
+          </span>
+        );
+      })}
+    </div>
+  );
+}

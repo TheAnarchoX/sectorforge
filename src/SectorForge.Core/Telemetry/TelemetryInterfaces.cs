@@ -32,6 +32,8 @@ public interface ITelemetrySessionStore
     Task<IReadOnlyList<TelemetrySessionSummary>> ListSessionsAsync(CancellationToken cancellationToken = default);
 
     Task<TelemetrySessionDetails?> GetSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
+
+    Task<bool> DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
 }
 
 public interface ILiveTelemetryPublisher

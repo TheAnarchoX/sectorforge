@@ -309,6 +309,66 @@ public sealed class CollectorEndpointsTests
         }
     }
 
+    [Fact]
+    public async Task DeleteSessionRemovesSessionFromList()
+    {
+        var testDataDirectory = Path.Combine(Path.GetTempPath(), "SectorForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(testDataDirectory);
+        WebApplicationFactory<Program>? factory = null;
+        HttpClient? client = null;
+
+        try
+        {
+            var connectionString = new SqliteConnectionStringBuilder
+            {
+                DataSource = Path.Combine(testDataDirectory, "sectorforge.db"),
+                Mode = SqliteOpenMode.ReadWriteCreate
+            }.ToString();
+
+            factory = CreateFactory(connectionString);
+            client = factory.CreateClient();
+
+            var startResponse = await client.PostAsJsonAsync("/api/collector/start", new { adapterId = "fake" });
+            startResponse.EnsureSuccessStatusCode();
+
+            var session = await WaitForSavedSessionAsync(client, TimeSpan.FromSeconds(2));
+
+            var stopResponse = await client.PostAsync("/api/collector/stop", content: null);
+            stopResponse.EnsureSuccessStatusCode();
+
+            var deleteResponse = await client.DeleteAsync($"/api/sessions/{session.Id}");
+            Assert.Equal(System.Net.HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+            var detailResponse = await client.GetAsync($"/api/sessions/{session.Id}");
+            Assert.Equal(System.Net.HttpStatusCode.NotFound, detailResponse.StatusCode);
+
+            var listResponse = await client.GetAsync("/api/sessions");
+            listResponse.EnsureSuccessStatusCode();
+            var sessions = await listResponse.Content.ReadFromJsonAsync<IReadOnlyList<TelemetrySessionSummary>>(JsonOptions);
+            Assert.NotNull(sessions);
+            Assert.DoesNotContain(sessions, candidate => candidate.Id == session.Id);
+
+            var missing = await client.DeleteAsync($"/api/sessions/{Guid.NewGuid()}");
+            Assert.Equal(System.Net.HttpStatusCode.NotFound, missing.StatusCode);
+        }
+        finally
+        {
+            client?.Dispose();
+            factory?.Dispose();
+
+            if (Directory.Exists(testDataDirectory))
+            {
+                try
+                {
+                    Directory.Delete(testDataDirectory, recursive: true);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(string connectionString)
     {
         return new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>

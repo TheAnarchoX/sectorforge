@@ -1,7 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, Dispatch, SetStateAction } from "react";
-import { Activity, Pause, Play, Square } from "lucide-react";
-import { getSessionDetails } from "../../api/telemetryApi";
+import {
+  Activity,
+  AlertTriangle,
+  Pause,
+  Play,
+  Search,
+  Square,
+  Trash2,
+} from "lucide-react";
+import { deleteSession, getSessionDetails } from "../../api/telemetryApi";
 import type {
   CollectorStatus,
   CurrentLapTelemetrySeries,
@@ -34,6 +42,7 @@ type TimingBoardProps = {
   onStartReplay: (sessionId: string) => Promise<boolean>;
   onStopReplay: () => Promise<void> | void;
   onReplayStateChange: Dispatch<SetStateAction<DashboardReplayState | null>>;
+  onSessionDeleted?: () => void | Promise<void>;
 };
 
 function isAbortError(error: unknown) {
@@ -233,6 +242,7 @@ export function TimingBoard({
   onStartReplay,
   onStopReplay,
   onReplayStateChange,
+  onSessionDeleted,
 }: TimingBoardProps) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null,
@@ -246,6 +256,12 @@ export function TimingBoard({
   const [requestedReplaySessionId, setRequestedReplaySessionId] = useState<
     string | null
   >(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortMode, setSortMode] = useState<"recent" | "best" | "samples">(
+    "recent",
+  );
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const effectiveSelectedSessionId = activeReplaySessionId ?? selectedSessionId;
 
@@ -576,115 +592,163 @@ export function TimingBoard({
     setReplayIndex(Number(event.target.value));
   };
 
-  const replayControlsSection =
+  const handleDeleteSession = async (sessionId: string) => {
+    if (pendingDeleteId !== null) {
+      return;
+    }
+
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        "Delete this capture? Stored samples and lap summaries will be removed.",
+      )
+    ) {
+      return;
+    }
+
+    setPendingDeleteId(sessionId);
+    setDeleteError(null);
+
+    try {
+      const removed = await deleteSession(sessionId);
+      if (selectedSessionId === sessionId) {
+        setSelectedSessionId(null);
+        setSelectedSession(null);
+        setReplayIndex(0);
+      }
+      if (!removed) {
+        setDeleteError("Capture was already removed from storage.");
+      }
+      await onSessionDeleted?.();
+    } catch (deletionError: unknown) {
+      const message =
+        deletionError instanceof Error
+          ? deletionError.message
+          : "Capture could not be deleted.";
+      setDeleteError(message);
+    } finally {
+      setPendingDeleteId(null);
+    }
+  };
+
+  const filteredSessions = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const filtered =
+      query.length === 0
+        ? sessions
+        : sessions.filter((session) => {
+            const haystack = [
+              session.trackName,
+              session.game,
+              session.carName,
+              session.sourceName,
+            ]
+              .filter((field): field is string => Boolean(field))
+              .map((field) => field.toLowerCase());
+            return haystack.some((field) => field.includes(query));
+          });
+
+    const lapSeconds = (value: string | null | undefined) =>
+      parseDurationSeconds(value ?? null) ?? Number.POSITIVE_INFINITY;
+
+    const sorted = [...filtered];
+    if (sortMode === "best") {
+      sorted.sort(
+        (a, b) => lapSeconds(a.bestLapTime) - lapSeconds(b.bestLapTime),
+      );
+    } else if (sortMode === "samples") {
+      sorted.sort((a, b) => b.sampleCount - a.sampleCount);
+    } else {
+      sorted.sort(
+        (a, b) =>
+          new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime(),
+      );
+    }
+    return sorted;
+  }, [sessions, searchQuery, sortMode]);
+
+  const replayTransport =
     visibleSession === null ? null : (
-      <div className="session-detail-section">
-        <div className="session-detail-heading">
-          <div>
-            <div className="panel-kicker">Replay controls</div>
-            <h3 className="panel-title">Timeline transport</h3>
-          </div>
-          <div className="session-detail-note mono">
+      <div
+        className="sessions-transport"
+        role="group"
+        aria-label="Replay transport"
+      >
+        <div className="sessions-transport-row">
+          <span className="status-pill mono">
             {requestedReplaySessionId === visibleSession.session.id &&
             activeReplaySessionId === null
-              ? "Starting"
+              ? "Starting replay"
               : isReplaySessionActive
                 ? isReplayAdvancing
-                  ? "Replay active"
+                  ? "Replay live"
                   : "Replay paused"
-                : "Ready"}
+                : "Replay ready"}
+          </span>
+          <div className="sessions-transport-actions">
+            {isReplaySessionActive ? (
+              <button
+                className="icon-button primary"
+                type="button"
+                onClick={
+                  isReplayAdvancing ? handlePauseReplay : handleResumeReplay
+                }
+                disabled={replaySampleCount === 0}
+              >
+                {isReplayAdvancing ? <Pause size={16} /> : <Play size={16} />}
+                {isReplayAdvancing ? "Pause" : "Resume"}
+              </button>
+            ) : (
+              <button
+                className="icon-button primary"
+                type="button"
+                onClick={() =>
+                  void handleStartReplay(visibleSession.session.id)
+                }
+                disabled={isBusy || visibleSession.samples.length === 0}
+              >
+                <Play size={16} />
+                Start replay
+              </button>
+            )}
+
+            <button
+              className="icon-button danger"
+              type="button"
+              onClick={() => void handleStopReplay()}
+              disabled={!isReplaySessionActive || isBusy}
+            >
+              <Square size={16} />
+              Stop
+            </button>
           </div>
         </div>
 
-        <div className="replay-controls">
-          <div className="replay-controls-row">
-            <div className="status-pill mono">
-              {requestedReplaySessionId === visibleSession.session.id &&
-              activeReplaySessionId === null
-                ? "Starting replay"
-                : isReplaySessionActive
-                  ? isReplayAdvancing
-                    ? "Replay live"
-                    : "Replay paused"
-                  : "Replay ready"}
-            </div>
-
-            <div
-              className="replay-controls-actions"
-              role="group"
-              aria-label="Replay transport controls"
-            >
-              {isReplaySessionActive ? (
-                <button
-                  className="icon-button primary"
-                  type="button"
-                  onClick={
-                    isReplayAdvancing ? handlePauseReplay : handleResumeReplay
-                  }
-                  disabled={replaySampleCount === 0}
-                >
-                  {isReplayAdvancing ? <Pause size={16} /> : <Play size={16} />}
-                  {isReplayAdvancing ? "Pause" : "Resume"}
-                </button>
-              ) : (
-                <button
-                  className="icon-button primary"
-                  type="button"
-                  onClick={() =>
-                    void handleStartReplay(visibleSession.session.id)
-                  }
-                  disabled={isBusy || visibleSession.samples.length === 0}
-                >
-                  <Play size={16} />
-                  Start replay
-                </button>
-              )}
-
-              <button
-                className="icon-button danger"
-                type="button"
-                onClick={() => void handleStopReplay()}
-                disabled={!isReplaySessionActive || isBusy}
-              >
-                <Square size={16} />
-                Stop replay
-              </button>
-            </div>
-          </div>
-
-          <div className="replay-slider-group">
-            <label
-              className="detail-label"
-              htmlFor={`replay-timeline-${visibleSession.session.id}`}
-            >
-              Replay timeline
-            </label>
-            <input
-              id={`replay-timeline-${visibleSession.session.id}`}
-              className="replay-slider"
-              type="range"
-              min={0}
-              max={Math.max(0, visibleSession.samples.length - 1)}
-              value={visibleReplayIndex}
-              onChange={handleReplayTimelineChange}
-              disabled={
-                !isReplaySessionActive || visibleSession.samples.length === 0
-              }
-            />
-            <div className="replay-timeline-meta mono">
-              <span>Sample {replayProgressLabel}</span>
-              <span>
-                {formatTime(visibleReplaySample?.timing.sessionElapsed)}
-              </span>
-              <span>
-                {formatShortTimestamp(visibleReplaySample?.timestamp)}
-              </span>
-            </div>
-            <div className="table-subvalue muted">
-              {isReplaySessionActive
-                ? "Drag to scrub the stored capture. Scrubbing pauses playback until you resume."
-                : "Start replay to drive the dashboard from this stored capture, then scrub through the timeline here."}
-            </div>
+        <div className="sessions-transport-slider">
+          <label
+            className="detail-label"
+            htmlFor={`replay-timeline-${visibleSession.session.id}`}
+          >
+            Timeline
+          </label>
+          <input
+            id={`replay-timeline-${visibleSession.session.id}`}
+            className="replay-slider"
+            type="range"
+            min={0}
+            max={Math.max(0, visibleSession.samples.length - 1)}
+            value={visibleReplayIndex}
+            onChange={handleReplayTimelineChange}
+            disabled={
+              !isReplaySessionActive || visibleSession.samples.length === 0
+            }
+          />
+          <div className="replay-timeline-meta mono">
+            <span>Sample {replayProgressLabel}</span>
+            <span>
+              {formatTime(visibleReplaySample?.timing.sessionElapsed)}
+            </span>
+            <span>{formatShortTimestamp(visibleReplaySample?.timestamp)}</span>
           </div>
         </div>
       </div>
@@ -693,25 +757,23 @@ export function TimingBoard({
   const detailBody = (() => {
     if (canShowOverview) {
       return (
-        <div className="panel-body session-detail-body">
-          {visibleSession !== null &&
-            !isReplaySessionActive &&
-            replayControlsSection}
+        <div className="panel-body sessions-detail-body">
+          {visibleSession !== null && replayTransport}
 
-          <div className="session-overview-strip">
-            <div className="session-overview-cell">
+          <div className="sessions-overview-strip">
+            <div className="sessions-overview-cell">
               <div className="detail-label">Session</div>
               <div className="detail-value">{detailTitle}</div>
               <div className="table-subvalue muted">{overviewSessionType}</div>
             </div>
-            <div className="session-overview-cell">
+            <div className="sessions-overview-cell">
               <div className="detail-label">Driver focus</div>
               <div className="detail-value">{overviewFocusName}</div>
               <div className="table-subvalue muted">
                 {overviewTeamName} • {overviewCarName}
               </div>
             </div>
-            <div className="session-overview-cell">
+            <div className="sessions-overview-cell">
               <div className="detail-label">Field snapshot</div>
               <div className="detail-value mono">{overviewFieldLabel}</div>
               <div className="table-subvalue muted">
@@ -723,7 +785,7 @@ export function TimingBoard({
             </div>
           </div>
 
-          <div className="detail-grid">
+          <div className="detail-grid sessions-overview-grid">
             {overviewMetadata.map((item) => (
               <div className="detail-cell" key={item.label}>
                 <div className="detail-label">{item.label}</div>
@@ -736,17 +798,139 @@ export function TimingBoard({
             ))}
           </div>
 
+          {visibleSession !== null && (
+            <div className="session-detail-section">
+              <div className="session-detail-heading">
+                <div>
+                  <div className="panel-kicker">Lap board</div>
+                  <h3 className="panel-title">
+                    {visibleSession.laps.length} recorded laps
+                  </h3>
+                </div>
+                <div className="session-detail-note mono">
+                  Best {formatTime(visibleSession.session.bestLapTime)}
+                </div>
+              </div>
+
+              <div className="table-panel-body session-laps-body">
+                <table className="dense-table session-lap-table">
+                  <thead>
+                    <tr>
+                      <th>Lap</th>
+                      <th>Lap time</th>
+                      <th>Δ best</th>
+                      <th>Trace</th>
+                      <th>Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleSession.laps.length === 0 ? (
+                      <tr className="table-row-empty">
+                        <td colSpan={5}>
+                          <div className="table-empty-state">
+                            <span>No lap summaries yet</span>
+                            <span className="table-subvalue muted">
+                              This capture has stored samples, but no completed
+                              laps have been recorded yet.
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      visibleSession.laps.map((lap) => {
+                        const lapSeconds = parseDurationSeconds(lap.lapTime);
+                        const bestSeconds = parseDurationSeconds(
+                          visibleSession.session.bestLapTime,
+                        );
+                        const delta =
+                          lapSeconds !== null && bestSeconds !== null
+                            ? lapSeconds - bestSeconds
+                            : null;
+                        const isBest =
+                          delta !== null && Math.abs(delta) < 0.001;
+                        const barWidth =
+                          lapSeconds !== null &&
+                          bestSeconds !== null &&
+                          bestSeconds > 0
+                            ? clamp(
+                                ((lapSeconds - bestSeconds) /
+                                  Math.max(0.001, bestSeconds)) *
+                                  400,
+                                0,
+                                100,
+                              )
+                            : 0;
+                        return (
+                          <tr
+                            className={isBest ? "table-row-active" : undefined}
+                            key={`${lap.sessionId}-${lap.lapNumber}`}
+                          >
+                            <td className="mono">{lap.lapNumber}</td>
+                            <td className="mono">{formatTime(lap.lapTime)}</td>
+                            <td className="mono">
+                              {delta === null
+                                ? "-"
+                                : isBest
+                                  ? "Fastest"
+                                  : `+${delta.toFixed(3)}s`}
+                            </td>
+                            <td>
+                              <div className="lap-delta-bar" aria-hidden>
+                                <div
+                                  className="lap-delta-bar-fill"
+                                  style={{ width: `${barWidth}%` }}
+                                />
+                              </div>
+                            </td>
+                            <td className="mono">
+                              {formatShortTimestamp(lap.updatedAt)}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {visibleSession !== null && (
+            <div className="session-detail-section">
+              <div className="session-detail-heading">
+                <div>
+                  <div className="panel-kicker">Speed envelope</div>
+                  <h3 className="panel-title">Stored speed trace</h3>
+                </div>
+                <div className="session-detail-note mono">
+                  {visibleSession.samples.length} samples
+                </div>
+              </div>
+              <div className="trace-stack">
+                <TraceLane
+                  label="Speed"
+                  value={formatNumber(latestStoredSample?.vehicle.speedKph, 0)}
+                  unit="kph"
+                  values={sessionSpeedValues}
+                  min={0}
+                  max={sessionSpeedMax}
+                  color="var(--accent-cyan)"
+                />
+              </div>
+            </div>
+          )}
+
           <div className="session-detail-section">
             <div className="session-detail-heading">
               <div>
-                <div className="panel-kicker">Lap snapshot</div>
+                <div className="panel-kicker">Field</div>
                 <h3 className="panel-title">Driver, car, and gap board</h3>
               </div>
               <div className="session-detail-note mono">
                 {isReplaySessionActive
                   ? `Replay ${replayProgressLabel}`
                   : overviewFieldCount > 0
-                    ? `${overviewFieldCount} participants`
+                    ? `${overviewFieldCount} cars`
                     : "No participant data"}
               </div>
             </div>
@@ -825,107 +1009,20 @@ export function TimingBoard({
                 </tbody>
               </table>
             </div>
-
-            {visibleSession === null && sessions.length > 0 && (
-              <div className="table-subvalue muted">
-                Select a capture from the timing board to load stored laps or
-                start a replay with the full participant field intact.
-              </div>
-            )}
           </div>
-
-          {visibleSession !== null && (
-            <div className="session-detail-section">
-              <div className="session-detail-heading">
-                <div>
-                  <div className="panel-kicker">Recent speed trace</div>
-                  <h3 className="panel-title">Stored speed envelope</h3>
-                </div>
-                <div className="session-detail-note mono">
-                  {visibleSession.samples.length} recent samples
-                </div>
-              </div>
-              <div className="trace-stack">
-                <TraceLane
-                  label="Speed"
-                  value={formatNumber(latestStoredSample?.vehicle.speedKph, 0)}
-                  unit="kph"
-                  values={sessionSpeedValues}
-                  min={0}
-                  max={sessionSpeedMax}
-                  color="var(--accent-cyan)"
-                />
-              </div>
-            </div>
-          )}
-
-          {visibleSession !== null && (
-            <div className="session-detail-section">
-              <div className="session-detail-heading">
-                <div>
-                  <div className="panel-kicker">Lap summaries</div>
-                  <h3 className="panel-title">Recent recorded laps</h3>
-                </div>
-                <div className="session-detail-note mono">
-                  {visibleSession.laps.length} laps
-                </div>
-              </div>
-
-              <div className="table-panel-body session-laps-body">
-                <table className="dense-table session-lap-table">
-                  <thead>
-                    <tr>
-                      <th>Lap</th>
-                      <th>Lap time</th>
-                      <th>Best</th>
-                      <th>Updated</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleSession.laps.length === 0 ? (
-                      <tr className="table-row-empty">
-                        <td colSpan={4}>
-                          <div className="table-empty-state">
-                            <span>No lap summaries yet</span>
-                            <span className="table-subvalue muted">
-                              This capture has stored samples, but no completed
-                              laps have been recorded yet.
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      visibleSession.laps.map((lap) => (
-                        <tr key={`${lap.sessionId}-${lap.lapNumber}`}>
-                          <td className="mono">{lap.lapNumber}</td>
-                          <td className="mono">{formatTime(lap.lapTime)}</td>
-                          <td className="mono">
-                            {formatTime(lap.bestLapTime)}
-                          </td>
-                          <td className="mono">
-                            {formatShortTimestamp(lap.updatedAt)}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
         </div>
       );
     }
 
     if (isDetailLoading) {
       return (
-        <div className="panel-body session-detail-body">
+        <div className="panel-body sessions-detail-body">
           <div
             className="session-detail-state"
             role="status"
             aria-live="polite"
           >
-            <span>Loading session overview</span>
+            <span>Loading capture overview</span>
             <span className="table-subvalue muted">
               Fetching metadata, lap summaries, participant snapshots, and
               stored samples from the local API.
@@ -937,12 +1034,12 @@ export function TimingBoard({
 
     if (detailError !== null) {
       return (
-        <div className="panel-body session-detail-body">
+        <div className="panel-body sessions-detail-body">
           <div
             className="session-detail-state session-detail-state-error"
             role="alert"
           >
-            <span>Session overview unavailable</span>
+            <span>Capture overview unavailable</span>
             <span className="table-subvalue muted">{detailError}</span>
           </div>
         </div>
@@ -951,16 +1048,17 @@ export function TimingBoard({
 
     if (sessions.length === 0) {
       return (
-        <div className="panel-body session-detail-body">
+        <div className="panel-body sessions-detail-body">
           <div
             className="session-detail-state"
             role="status"
             aria-live="polite"
           >
-            <span>No session data yet</span>
+            <span>No captures yet</span>
             <span className="table-subvalue muted">
-              Active or stored session overview appears here after the first
-              local capture is saved.
+              Stored captures appear here after the first run saves telemetry.
+              Start fake telemetry from the Live workspace to populate this
+              view.
             </span>
           </div>
         </div>
@@ -968,222 +1066,230 @@ export function TimingBoard({
     }
 
     return (
-      <div className="panel-body session-detail-body">
+      <div className="panel-body sessions-detail-body">
         <div className="session-detail-state" role="status" aria-live="polite">
-          <span>Select a capture</span>
+          <span>Pick a capture</span>
           <span className="table-subvalue muted">
-            Choose a recent session from the timing board to inspect its
-            metadata, participant field, lap summaries, and speed trace.
+            Select a stored session from the list on the left to inspect its
+            metadata, lap board, participant field, and replay timeline.
           </span>
         </div>
       </div>
     );
   })();
 
+  const liveSamplesCount = collectorStatus?.samplesPublished ?? 0;
+  const totalSamples = sessions.reduce(
+    (sum, item) => sum + item.sampleCount,
+    0,
+  );
+  const selectedSummary = effectiveSelectedSessionId
+    ? (sessions.find((item) => item.id === effectiveSelectedSessionId) ?? null)
+    : null;
+  const canDeleteSelected =
+    selectedSummary !== null &&
+    !isApiOffline &&
+    pendingDeleteId === null &&
+    activeReplaySessionId !== selectedSummary.id;
+
   return (
     <section
-      className="timing-board"
-      aria-label="Timing board and session overview"
+      className="sessions-workspace"
+      aria-label="Sessions browser and capture detail"
     >
-      <div className="timing-board-layout">
-        <div className="panel timing-board-table-panel">
-          <div className="panel-header">
-            <div>
-              <div className="panel-kicker">Timing board</div>
-              <h2 className="panel-title">Live stream and recent captures</h2>
-            </div>
-            <div className="status-pill mono">
-              <Activity size={16} />
-              {collectorStatus?.samplesPublished ?? 0}
-            </div>
-          </div>
-
-          <div className="table-panel-body">
-            <table className="dense-table timing-table">
-              <thead>
-                <tr>
-                  <th>Feed</th>
-                  <th>Track</th>
-                  <th>Source</th>
-                  <th>Current</th>
-                  <th>Best</th>
-                  <th>Stamp</th>
-                  <th>Samples</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="table-row-live">
-                  <td>
-                    <span
-                      className={`table-badge ${isApiOffline ? "table-badge-offline" : "table-badge-live"}`}
-                    >
-                      {isApiOffline
-                        ? "Offline"
-                        : collectorStatus?.isRunning
-                          ? collectorStatus.runMode
-                          : "Idle"}
-                    </span>
-                  </td>
-                  <td>{sample?.track.trackName ?? "-"}</td>
-                  <td>
-                    <div className="table-stack">
-                      <span>
-                        {sample?.vehicle.carName ??
-                          activeSource?.displayName ??
-                          "-"}
-                      </span>
-                      <span className="table-subvalue muted">
-                        {isApiOffline
-                          ? "API unavailable"
-                          : (activeSource?.inputKind ??
-                            sample?.source.game ??
-                            "No source")}
-                      </span>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="table-stack mono">
-                      <span>{formatTime(sample?.lap.currentLapTime)}</span>
-                      <span className="table-subvalue">
-                        {formatDelta(sample?.timing.deltaToBestLap)}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="mono">
-                    {formatTime(sample?.lap.bestLapTime)}
-                  </td>
-                  <td className="mono">
-                    {formatTime(sample?.timing.sessionElapsed)}
-                  </td>
-                  <td className="mono">
-                    {collectorStatus?.samplesPublished ?? 0}
-                  </td>
-                  <td>
-                    <span
-                      className={`table-badge ${isApiOffline ? "table-badge-offline" : "table-badge-live"}`}
-                    >
-                      {isApiOffline ? "Unavailable" : "Stream"}
-                    </span>
-                  </td>
-                </tr>
-
-                {!isApiOffline && sessions.length === 0 && (
-                  <tr className="table-row-empty">
-                    <td colSpan={8}>
-                      <div className="table-empty-state">
-                        <span>No recent captures yet</span>
-                        <span className="table-subvalue muted">
-                          {collectorStatus?.isRunning
-                            ? "This board fills in after the current run saves its first telemetry samples."
-                            : "Start fake telemetry and let it run for a few moments to create the first capture."}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-
-                {sessions.slice(0, 10).map((session) => {
-                  const isActiveReplay = activeReplaySessionId === session.id;
-                  const isReplayRequested =
-                    requestedReplaySessionId === session.id;
-                  const isSelected = effectiveSelectedSessionId === session.id;
-                  const rowClassName = [
-                    isActiveReplay ? "table-row-active" : null,
-                    isSelected ? "table-row-selected" : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" ");
-
-                  return (
-                    <tr className={rowClassName || undefined} key={session.id}>
-                      <td>
-                        <span className="table-badge">Capture</span>
-                      </td>
-                      <td>{session.trackName ?? "Unknown track"}</td>
-                      <td>
-                        <button
-                          className={`session-select ${isSelected ? "active" : ""}`}
-                          type="button"
-                          onClick={() => handleSelectSession(session.id)}
-                          disabled={
-                            activeReplaySessionId !== null && !isActiveReplay
-                          }
-                          aria-pressed={isSelected}
-                          title={
-                            activeReplaySessionId !== null && !isActiveReplay
-                              ? "Stop the active replay before inspecting another capture"
-                              : "Inspect capture detail"
-                          }
-                        >
-                          <span className="table-stack">
-                            <span>
-                              {session.carName ??
-                                session.sourceName ??
-                                session.game}
-                            </span>
-                            <span className="table-subvalue muted">
-                              {session.game}
-                            </span>
-                          </span>
-                        </button>
-                      </td>
-                      <td className="mono">-</td>
-                      <td className="mono">
-                        {formatTime(session.bestLapTime)}
-                      </td>
-                      <td className="mono">
-                        {formatShortTimestamp(session.lastSeenAt)}
-                      </td>
-                      <td className="mono">{session.sampleCount}</td>
-                      <td>
-                        <button
-                          className={`session-action ${isActiveReplay ? "active" : ""}`}
-                          type="button"
-                          onClick={() => void handleStartReplay(session.id)}
-                          disabled={
-                            isBusy ||
-                            isActiveReplay ||
-                            isReplayRequested ||
-                            (activeReplaySessionId !== null && !isActiveReplay)
-                          }
-                        >
-                          {isActiveReplay
-                            ? "Active"
-                            : isReplayRequested
-                              ? "Starting"
-                              : "Replay"}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+      <div className="sessions-toolbar">
+        <div className="sessions-toolbar-search">
+          <Search size={16} aria-hidden />
+          <input
+            type="search"
+            placeholder="Search captures by track, car, game, or source"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            aria-label="Search captures"
+          />
         </div>
 
-        <aside className="panel session-detail-panel">
+        <div
+          className="sessions-toolbar-sort"
+          role="group"
+          aria-label="Sort captures"
+        >
+          <button
+            type="button"
+            className={`chip${sortMode === "recent" ? " chip-active" : ""}`}
+            onClick={() => setSortMode("recent")}
+          >
+            Recent
+          </button>
+          <button
+            type="button"
+            className={`chip${sortMode === "best" ? " chip-active" : ""}`}
+            onClick={() => setSortMode("best")}
+          >
+            Best lap
+          </button>
+          <button
+            type="button"
+            className={`chip${sortMode === "samples" ? " chip-active" : ""}`}
+            onClick={() => setSortMode("samples")}
+          >
+            Samples
+          </button>
+        </div>
+
+        <div className="sessions-toolbar-meta mono">
+          <span>
+            {filteredSessions.length} / {sessions.length} captures
+          </span>
+          <span className="muted">
+            <Activity size={14} aria-hidden /> {liveSamplesCount} live ·{" "}
+            {totalSamples} stored
+          </span>
+        </div>
+
+        <button
+          type="button"
+          className="icon-button danger sessions-toolbar-delete"
+          onClick={() =>
+            selectedSummary && void handleDeleteSession(selectedSummary.id)
+          }
+          disabled={!canDeleteSelected}
+          aria-label="Delete selected capture"
+          title={
+            selectedSummary === null
+              ? "Select a capture to delete"
+              : activeReplaySessionId === selectedSummary.id
+                ? "Stop the active replay before deleting"
+                : "Delete selected capture"
+          }
+        >
+          <Trash2 size={16} />
+          {pendingDeleteId !== null ? "Deleting" : "Delete"}
+        </button>
+      </div>
+
+      {deleteError !== null && (
+        <div className="sessions-toolbar-error" role="alert">
+          <AlertTriangle size={14} aria-hidden /> {deleteError}
+        </div>
+      )}
+
+      <div className="sessions-layout">
+        <aside
+          className="panel sessions-list-panel"
+          aria-label="Stored captures"
+        >
           <div className="panel-header">
             <div>
-              <div className="panel-kicker">Session overview</div>
+              <div className="panel-kicker">Captures</div>
+              <h2 className="panel-title">Stored sessions</h2>
+            </div>
+            <div className="status-pill mono">{filteredSessions.length}</div>
+          </div>
+
+          <div className="sessions-list">
+            {sessions.length === 0 ? (
+              <div className="sessions-list-empty">
+                <span>No captures yet</span>
+                <span className="table-subvalue muted">
+                  Start fake telemetry from the Live workspace to create the
+                  first stored capture.
+                </span>
+              </div>
+            ) : filteredSessions.length === 0 ? (
+              <div className="sessions-list-empty">
+                <span>No matches</span>
+                <span className="table-subvalue muted">
+                  No captures match the current search. Adjust the query or sort
+                  to widen the view.
+                </span>
+              </div>
+            ) : (
+              filteredSessions.map((session) => {
+                const isActiveReplay = activeReplaySessionId === session.id;
+                const isReplayRequested =
+                  requestedReplaySessionId === session.id;
+                const isSelected = effectiveSelectedSessionId === session.id;
+                const isPending = pendingDeleteId === session.id;
+                const itemClass = [
+                  "sessions-list-item",
+                  isSelected ? "sessions-list-item-active" : null,
+                  isActiveReplay ? "sessions-list-item-replaying" : null,
+                  isPending ? "sessions-list-item-pending" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" ");
+                return (
+                  <button
+                    key={session.id}
+                    type="button"
+                    className={itemClass}
+                    onClick={() => handleSelectSession(session.id)}
+                    disabled={activeReplaySessionId !== null && !isActiveReplay}
+                    aria-pressed={isSelected}
+                  >
+                    <div className="sessions-list-row">
+                      <span className="sessions-list-title">
+                        {session.trackName ?? "Unknown track"}
+                      </span>
+                      <span className="mono">
+                        {formatTime(session.bestLapTime)}
+                      </span>
+                    </div>
+                    <div className="sessions-list-row sessions-list-sub">
+                      <span className="muted">
+                        {session.carName ?? session.sourceName ?? session.game}
+                      </span>
+                      <span className="muted mono">
+                        {formatShortTimestamp(session.lastSeenAt)}
+                      </span>
+                    </div>
+                    <div className="sessions-list-row sessions-list-foot">
+                      <span className="muted mono">
+                        {session.sampleCount} samples · {session.game}
+                      </span>
+                      {isActiveReplay ? (
+                        <span className="badge badge-replay">Replaying</span>
+                      ) : isReplayRequested ? (
+                        <span className="badge">Starting</span>
+                      ) : (
+                        <span
+                          className="sessions-list-replay"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleStartReplay(session.id);
+                          }}
+                          role="button"
+                          tabIndex={-1}
+                          aria-label={`Replay ${
+                            session.trackName ?? "capture"
+                          }`}
+                        >
+                          <Play size={12} /> Replay
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </aside>
+
+        <article
+          className="panel sessions-detail-panel"
+          aria-label="Capture detail"
+        >
+          <div className="panel-header">
+            <div>
+              <div className="panel-kicker">Capture overview</div>
               <h2 className="panel-title">{detailTitle}</h2>
             </div>
             <div className="status-pill mono">{detailStatus}</div>
           </div>
           {detailBody}
-        </aside>
+        </article>
       </div>
-
-      {isReplaySessionActive && replayControlsSection !== null && (
-        <div
-          className="replay-dock"
-          role="complementary"
-          aria-label="Active replay controls"
-        >
-          {replayControlsSection}
-        </div>
-      )}
     </section>
   );
 }

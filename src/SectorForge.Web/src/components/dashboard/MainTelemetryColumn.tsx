@@ -1,4 +1,3 @@
-import { Activity, RadioTower } from "lucide-react";
 import type {
   CurrentLapTelemetrySeries,
   TelemetryRunMode,
@@ -13,7 +12,7 @@ import {
   formatTime,
 } from "../../utils/telemetryFormat";
 import { LapTelemetryChart } from "./LapTelemetryChart";
-import { StripCell, TraceLane } from "./DashboardPrimitives";
+import { SectorBar, StripCell, TraceLane } from "./DashboardPrimitives";
 
 type MainTelemetryColumnProps = {
   activeSource: TelemetrySource | null;
@@ -22,6 +21,8 @@ type MainTelemetryColumnProps = {
   traceSeries: TelemetryTraceSeries;
   lapTrace: CurrentLapTelemetrySeries;
 };
+
+type SectorTone = "neutral" | "improving" | "losing";
 
 export function MainTelemetryColumn({
   activeSource,
@@ -51,16 +52,6 @@ export function MainTelemetryColumn({
         sample?.timing.deltaToBestLap?.startsWith("-") === true
           ? ("success" as const)
           : ("warning" as const),
-    },
-    {
-      label: "Sector",
-      value:
-        sample?.lap.sectorIndex === null ||
-        sample?.lap.sectorIndex === undefined
-          ? "-"
-          : String(sample.lap.sectorIndex + 1),
-      unit: "active",
-      tone: "neutral" as const,
     },
     {
       label: "Speed",
@@ -99,29 +90,44 @@ export function MainTelemetryColumn({
   const activeLapNumber = lapTrace.lapNumber ?? sample?.lap.lapNumber ?? null;
   const lapTraceStatusLabel =
     lapTracePointCount > 0
-      ? `${lapTracePointCount} points`
+      ? `${lapTracePointCount} pts`
       : runMode === "Idle"
         ? "Standby"
         : "Priming";
 
+  const sourceLabel =
+    activeSource?.displayName ??
+    sample?.source.displayName ??
+    "Telemetry bus idle";
+
+  const sectorIndex = sample?.lap.sectorIndex ?? null;
+  const sectorDelta = sample?.timing.sectorDelta;
+  const liveSectorTone: SectorTone =
+    sectorDelta && sectorDelta.startsWith("-")
+      ? "improving"
+      : sectorDelta && sectorDelta !== "0:00.000" && sectorDelta !== "+0:00.000"
+        ? "losing"
+        : "neutral";
+  const sectorTones: [SectorTone, SectorTone, SectorTone] = [
+    sectorIndex === 0 ? liveSectorTone : "neutral",
+    sectorIndex === 1 ? liveSectorTone : "neutral",
+    sectorIndex === 2 ? liveSectorTone : "neutral",
+  ];
+
   return (
-    <section className="main-column">
-      <div className="panel telemetry-stage">
-        <div className="panel-header">
-          <div>
-            <div className="panel-kicker">
-              {runMode === "Replay"
-                ? "Replay command feed"
-                : "Pitwall live feed"}
-            </div>
-            <h2 className="panel-title">
-              {activeSource?.displayName ?? "Telemetry bus idle"}
-            </h2>
+    <section className="main-column" aria-label="Live telemetry">
+      <div className="zone zone-live">
+        <div className="zone-bar">
+          <div className="zone-bar-title">
+            <span className="zone-kicker">
+              {runMode === "Replay" ? "Replay feed" : "Live feed"}
+            </span>
+            <span className="zone-source">{sourceLabel}</span>
           </div>
-          <div className="status-pill">
-            <RadioTower size={16} />
-            <span className="status-pill-value">
-              {activeSource?.inputKind ?? "Awaiting signal"}
+          <div className="zone-bar-meta mono">
+            <SectorBar activeIndex={sectorIndex} sectorTones={sectorTones} />
+            <span className="zone-bar-input">
+              {activeSource?.inputKind ?? "—"}
             </span>
           </div>
         </div>
@@ -133,20 +139,17 @@ export function MainTelemetryColumn({
         </div>
       </div>
 
-      <div className="panel lap-chart-panel">
-        <div className="panel-header">
-          <div>
-            <div className="panel-kicker">Lap telemetry</div>
-            <h2 className="panel-title">Current lap speed</h2>
+      <div className="zone zone-lap">
+        <div className="zone-bar">
+          <div className="zone-bar-title">
+            <span className="zone-kicker">Lap telemetry</span>
+            <span className="zone-source">Current lap speed trace</span>
           </div>
-          <div className="status-pill mono">
-            <Activity size={16} />
-            <span className="status-pill-value">
-              lap {activeLapNumber ?? "-"} // {lapTraceStatusLabel}
-            </span>
+          <div className="zone-bar-meta mono">
+            lap {activeLapNumber ?? "-"} · {lapTraceStatusLabel}
           </div>
         </div>
-        <div className="panel-body">
+        <div className="zone-body">
           <LapTelemetryChart
             points={lapTrace.points}
             lapNumber={activeLapNumber}
@@ -156,18 +159,20 @@ export function MainTelemetryColumn({
         </div>
       </div>
 
-      <div className="panel trace-panel">
-        <div className="panel-header">
-          <div>
-            <div className="panel-kicker">Analysis workspace</div>
-            <h2 className="panel-title">Synchronized live channels</h2>
+      <div className="zone zone-traces">
+        <div className="zone-bar">
+          <div className="zone-bar-title">
+            <span className="zone-kicker">Channel scope</span>
+            <span className="zone-source">
+              Synchronized live channels — speed · rpm · throttle · brake ·
+              steer
+            </span>
           </div>
-          <div className="status-pill mono">
-            <Activity size={16} />
+          <div className="zone-bar-meta mono">
             {traceSeries.speed.length} samples
           </div>
         </div>
-        <div className="panel-body trace-stack">
+        <div className="zone-body trace-stack">
           <TraceLane
             label="Speed"
             value={formatNumber(sample?.vehicle.speedKph, 0)}
@@ -214,37 +219,6 @@ export function MainTelemetryColumn({
             centerValue={0}
             color="var(--accent-magenta)"
           />
-        </div>
-      </div>
-
-      <div className="panel operator-context-panel">
-        <div className="panel-header">
-          <div>
-            <div className="panel-kicker">Operator context</div>
-            <h2 className="panel-title">Current feed envelope</h2>
-          </div>
-        </div>
-        <div className="panel-body operator-context-grid">
-          <div className="context-line">
-            <span className="panel-kicker">Track</span>
-            <span>{sample?.track.trackName ?? "No circuit lock"}</span>
-          </div>
-          <div className="context-line">
-            <span className="panel-kicker">Weather</span>
-            <span>{sample?.track.weather ?? "No weather feed"}</span>
-          </div>
-          <div className="context-line">
-            <span className="panel-kicker">Elapsed</span>
-            <span className="mono">
-              {formatTime(sample?.timing.sessionElapsed)}
-            </span>
-          </div>
-          <div className="context-line">
-            <span className="panel-kicker">Remaining</span>
-            <span className="mono">
-              {formatTime(sample?.timing.sessionRemaining)}
-            </span>
-          </div>
         </div>
       </div>
     </section>

@@ -140,6 +140,37 @@ public sealed class SqliteTelemetrySessionStore : ITelemetrySessionStore
         return new TelemetrySessionDetails(session, laps, samples);
     }
 
+    public async Task<bool> DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        await EnsureDatabaseAsync(cancellationToken);
+
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        await using var deleteSamples = connection.CreateCommand();
+        deleteSamples.Transaction = transaction;
+        deleteSamples.CommandText = "DELETE FROM telemetry_sample_blobs WHERE session_id = $sessionId;";
+        Add(deleteSamples, "$sessionId", sessionId.ToString());
+        await deleteSamples.ExecuteNonQueryAsync(cancellationToken);
+
+        await using var deleteLaps = connection.CreateCommand();
+        deleteLaps.Transaction = transaction;
+        deleteLaps.CommandText = "DELETE FROM lap_summaries WHERE session_id = $sessionId;";
+        Add(deleteLaps, "$sessionId", sessionId.ToString());
+        await deleteLaps.ExecuteNonQueryAsync(cancellationToken);
+
+        await using var deleteSession = connection.CreateCommand();
+        deleteSession.Transaction = transaction;
+        deleteSession.CommandText = "DELETE FROM sessions WHERE id = $sessionId;";
+        Add(deleteSession, "$sessionId", sessionId.ToString());
+        var deleted = await deleteSession.ExecuteNonQueryAsync(cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return deleted > 0;
+    }
+
     private async Task EnsureDatabaseAsync(CancellationToken cancellationToken)
     {
         if (_schemaReady)

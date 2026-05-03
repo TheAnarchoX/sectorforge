@@ -355,6 +355,11 @@ public sealed class TelemetryCollectorServiceTests
         {
             return Task.FromResult<TelemetrySessionDetails?>(null);
         }
+
+        public Task<bool> DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(false);
+        }
     }
 
     private sealed class ReplayTelemetrySessionStore(IReadOnlyList<TelemetrySample> samples) : ITelemetrySessionStore
@@ -407,6 +412,11 @@ public sealed class TelemetryCollectorServiceTests
 
             return Task.FromResult<TelemetrySessionDetails?>(new TelemetrySessionDetails(summary, [], sessionSamples));
         }
+
+        public Task<bool> DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(false);
+        }
     }
 
     private sealed class PreloadedReplayTelemetrySessionStore(
@@ -454,6 +464,11 @@ public sealed class TelemetryCollectorServiceTests
         public Task<TelemetrySessionDetails?> GetSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             return Task.FromResult<TelemetrySessionDetails?>(session.Session.Id == sessionId ? session : null);
+        }
+
+        public Task<bool> DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(false);
         }
     }
 

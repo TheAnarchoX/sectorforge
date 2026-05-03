@@ -383,6 +383,108 @@ This backlog is written for coding agents and human contributors. Each task is i
   - README documents common settings.
   - Tests cover default configuration binding where practical.
 
+## Priority 5: Lap Comparison & Analysis
+
+The dashboard already has a `Compare` workspace placeholder driven by the workspace rail. This priority fills it in: pick laps from one or more stored sessions, overlay their channels, and inspect deltas the way drivers and engineers expect from tools like MoTeC i2, AiM Race Studio, and SimHub. Each task is scoped so it can ship independently behind the existing `Compare` route without disturbing live or replay flows.
+
+### SF-050: Add Lap Channel Retrieval API
+
+- Status: `ready`
+- Type: backend feature
+- Goal: Expose a per-lap channel endpoint that returns aligned arrays (distance, time, speed, rpm, throttle, brake, steering) for one stored lap so the frontend can overlay laps without re-streaming through replay.
+- Suggested files: `src/SectorForge.Api/Program.cs`, `src/SectorForge.Api/Services/*`, `src/SectorForge.Infrastructure/Storage/*`, `src/SectorForge.Core/Telemetry/*`, `tests/SectorForge.Api.Tests/*`, `tests/SectorForge.Core.Tests/*`
+- Acceptance criteria:
+  - `GET /api/sessions/{sessionId}/laps/{lapNumber}/channels` returns aligned arrays plus lap metadata (number, lap time, sector splits) as JSON.
+  - Endpoint reads from existing stored sample blobs and respects `Storage:RetainedSampleBlobLimit` pruning by surfacing a clear "lap not retained" error when blobs are gone.
+  - Response includes a stable channel manifest so additional channels can be added without breaking existing clients.
+  - Tests cover unknown session, unknown lap, pruned lap, and a happy-path lap shape.
+  - Endpoint shape is documented in `docs/architecture.md` or a new compare docs section.
+
+### SF-051: Add Lap Compare Selection State And API Client
+
+- Status: `ready`
+- Type: frontend state
+- Goal: Track a small "lap basket" (reference + up to N comparison laps) in the dashboard so users can pin laps from the Sessions workspace and have them ready in the Compare workspace.
+- Suggested files: `src/SectorForge.Web/src/hooks/*`, `src/SectorForge.Web/src/api/*`, `src/SectorForge.Web/src/types/*`, `src/SectorForge.Web/src/App.tsx`
+- Acceptance criteria:
+  - A new hook (e.g. `useLapBasket`) exposes pinned laps with `{ sessionId, lapNumber, label, color }` entries and add/remove/clear actions.
+  - The basket persists to `localStorage` so users can switch workspaces or reload without losing their pinned laps.
+  - An API client function fetches lap channels for a basket entry and caches the response in memory keyed by session+lap.
+  - Lint and frontend build pass; no regression in live or replay flows.
+
+### SF-052: Add Pin-To-Compare Action In Sessions Workspace
+
+- Status: `ready`
+- Type: frontend feature
+- Goal: Let users pin individual laps from the existing Timing Board / Session Overview into the lap basket without leaving the Sessions workspace.
+- Suggested files: `src/SectorForge.Web/src/components/dashboard/TimingBoard.tsx`, `src/SectorForge.Web/src/components/dashboard/SessionOverview.tsx`, `src/SectorForge.Web/src/App.tsx`, `src/SectorForge.Web/src/App.css`
+- Acceptance criteria:
+  - Each lap row in the Sessions workspace exposes a pin/unpin control with clear pinned vs unpinned states.
+  - The workspace rail's `Compare` item shows a small badge or count when the basket has at least one lap.
+  - Pinned laps survive workspace switches and reloads (uses the basket from SF-051).
+  - Lint and frontend build pass.
+
+### SF-053: Add Compare Workspace Overlay Chart
+
+- Status: `ready`
+- Type: frontend feature
+- Goal: Replace the Compare workspace placeholder with a real overlay chart that draws the pinned laps for one channel (start with speed) aligned by distance, plus a legend keyed to lap colors.
+- Suggested files: `src/SectorForge.Web/src/components/dashboard/CompareWorkspace.tsx` (new), `src/SectorForge.Web/src/components/dashboard/LapTelemetryChart.tsx`, `src/SectorForge.Web/src/App.tsx`, `src/SectorForge.Web/src/App.css`
+- Acceptance criteria:
+  - Compare workspace renders an SVG overlay chart with one trace per pinned lap, using the lap basket colors.
+  - Empty state guides the user back to Sessions when no laps are pinned.
+  - Loading and error states are handled per-lap so a single failed fetch does not blank the whole chart.
+  - Channel selector lets the user switch the overlay between speed, rpm, throttle, brake, and steering.
+  - Lint and frontend build pass.
+
+### SF-054: Add Delta Time Plot Between Reference And Comparison Laps
+
+- Status: `ready`
+- Type: frontend feature
+- Goal: Add a delta-time view (time variance plot) that shows where each comparison lap gains or loses time against the reference lap across the lap distance.
+- Suggested files: `src/SectorForge.Web/src/components/dashboard/CompareWorkspace.tsx`, `src/SectorForge.Web/src/utils/*`
+- Acceptance criteria:
+  - First pinned lap is treated as the reference; remaining laps are plotted as cumulative time delta vs. reference along distance.
+  - Positive delta is rendered as losing time (warning tone), negative as gaining (success tone), zero baseline is visually obvious.
+  - Reference lap can be reassigned from the legend without losing the basket.
+  - Plot handles laps of different lengths gracefully (clip to shortest distance, show a notice).
+  - Lint and frontend build pass.
+
+### SF-055: Add Sector Split Compare Table
+
+- Status: `ready`
+- Type: frontend feature
+- Goal: Add a compact sector split table below the overlay so engineers can scan per-sector deltas without reading the chart pixel-by-pixel.
+- Suggested files: `src/SectorForge.Web/src/components/dashboard/CompareWorkspace.tsx`, `src/SectorForge.Web/src/utils/telemetryFormat.ts`
+- Acceptance criteria:
+  - Table shows lap number, lap time, S1/S2/S3 times and per-sector deltas vs. the reference lap.
+  - Best sector across the basket is highlighted with the existing best-lap accent color.
+  - Table is keyboard-navigable and screen-reader friendly.
+  - Lint and frontend build pass.
+
+### SF-056: Sync Cursor Across Compare Panels
+
+- Status: `ready`
+- Type: frontend interaction
+- Goal: When the user hovers over the overlay chart or the delta plot, all compare panels track the same distance cursor so values line up across views.
+- Suggested files: `src/SectorForge.Web/src/components/dashboard/CompareWorkspace.tsx`, `src/SectorForge.Web/src/components/dashboard/LapTelemetryChart.tsx`
+- Acceptance criteria:
+  - Hovering or focusing one chart moves a vertical cursor on every compare panel at the same distance.
+  - Active cursor surfaces lap value, delta value, and sector for each pinned lap.
+  - Cursor state stays local to the Compare workspace and does not affect Live or Driver views.
+  - Lint and frontend build pass.
+
+### SF-057: Document Compare Workflow
+
+- Status: `ready`
+- Type: documentation
+- Goal: Document how to pin laps, switch reference laps, read deltas, and the limits of the comparison (pruned blobs, lap length mismatch).
+- Suggested files: `docs/architecture.md`, `README.md`, `docs/agent-tasks.md`
+- Acceptance criteria:
+  - Architecture doc covers the lap channel API contract from SF-050 and the basket model from SF-051.
+  - README links to the compare workflow once the UI ships.
+  - Docs note current limitations (single-channel overlay at a time, retained sample blob constraints).
+
 ## Parking Lot
 
 - Add screenshots or short GIFs to README after the UI stabilizes.

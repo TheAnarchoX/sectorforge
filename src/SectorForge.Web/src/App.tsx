@@ -1,19 +1,25 @@
 import { useState } from "react";
+import { GitCompareArrows, Plug } from "lucide-react";
 import { DashboardHeader } from "./components/dashboard/DashboardHeader";
 import {
   ErrorBanner,
+  SessionBand,
   StateNotice,
 } from "./components/dashboard/DashboardPrimitives";
 import { MainTelemetryColumn } from "./components/dashboard/MainTelemetryColumn";
 import { SimplifiedDriveView } from "./components/dashboard/SimplifiedDriveView";
 import { TelemetrySidebar } from "./components/dashboard/TelemetrySidebar";
 import { TimingBoard } from "./components/dashboard/TimingBoard";
+import {
+  WorkspaceRail,
+  type Workspace,
+} from "./components/dashboard/WorkspaceRail";
 import { useTelemetryDashboard } from "./hooks/useTelemetryDashboard";
-import type { DashboardReplayState } from "./types/telemetry";
+import type { DashboardReplayState, TelemetrySource } from "./types/telemetry";
 import "./App.css";
 
 function App() {
-  const [isSimplifiedView, setIsSimplifiedView] = useState(false);
+  const [workspace, setWorkspace] = useState<Workspace>("live");
   const [replayState, setReplayState] = useState<DashboardReplayState | null>(
     null,
   );
@@ -29,6 +35,7 @@ function App() {
     isBusy,
     error,
     refreshDashboard,
+    refreshSessions,
     startCollector,
     stopCollector,
     startReplay,
@@ -58,21 +65,14 @@ function App() {
             : "Replay paused",
           message:
             activeReplayState === null
-              ? "A stored capture is driving the dashboard. Load the replay timeline below to scrub, pause, or resume the session."
-              : `${activeReplayState.sessionName ?? "Stored capture"} is driving the dashboard at sample ${activeReplayState.sampleIndex + 1} of ${activeReplayState.sampleCount}. Use the timing board controls below to scrub or resume playback.`,
+              ? "A stored capture is driving the dashboard. Open the Sessions workspace to scrub, pause, or resume the timeline."
+              : `${activeReplayState.sessionName ?? "Stored capture"} is driving the dashboard at sample ${activeReplayState.sampleIndex + 1} of ${activeReplayState.sampleCount}. Open the Sessions workspace to scrub or resume playback.`,
           tone: "warning" as const,
         },
       ]
     : [];
   const stateNotices = isApiOffline
-    ? [
-        {
-          title: "API offline",
-          message:
-            "The dashboard cannot reach the local SectorForge API. Restore the local service, then press Refresh to recover live state.",
-          tone: "danger" as const,
-        },
-      ]
+    ? []
     : replayNotice.length > 0
       ? replayNotice
       : !isCollectorRunning
@@ -81,98 +81,253 @@ function App() {
               title: "Collector idle",
               message:
                 sessions.length > 0
-                  ? "Live telemetry is stopped. Press Start fake to resume streaming, or replay one of the stored captures below."
+                  ? "Live telemetry is stopped. Press Start fake to resume streaming, or open Sessions to replay a stored capture."
                   : "Live telemetry is stopped. Press Start fake to begin streaming and create the first local capture.",
               tone: "warning" as const,
             },
           ]
         : [];
 
-  return (
-    <main
-      className={`app-shell${isReplayRunning && !isSimplifiedView ? " app-shell-replay-active" : ""}`}
-    >
-      <DashboardHeader
-        connectionState={connectionState}
-        runMode={runMode}
-        isCollectorRunning={isCollectorRunning}
-        isReplayRunning={isReplayRunning}
-        isSimplifiedView={isSimplifiedView}
-        isBusy={isBusy}
-        trackName={displaySample?.track.trackName}
-        sessionName={displaySample?.session.name}
-        sourceName={displaySource?.displayName}
-        samplesPublished={collectorStatus?.samplesPublished ?? 0}
-        onToggleSimplifiedView={() =>
-          setIsSimplifiedView((currentValue) => !currentValue)
-        }
-        onStartCollector={() => void startCollector()}
-        onStopCollector={() => void stopCollector()}
-        onRefresh={() => void refreshDashboard()}
+  const liveWorkspace = (
+    <section className="pitwall-console" aria-label="Pitwall console">
+      <SessionBand
+        sessionType={displaySample?.session.sessionType ?? null}
+        sessionName={displaySample?.session.name ?? null}
+        trackName={displaySample?.track.trackName ?? null}
+        weather={displaySample?.track.weather ?? null}
+        trackTempC={displaySample?.track.trackTemperatureC ?? null}
+        airTempC={displaySample?.track.airTemperatureC ?? null}
+        elapsed={displaySample?.timing.sessionElapsed ?? null}
+        remaining={displaySample?.timing.sessionRemaining ?? null}
+        lapNumber={displaySample?.lap.lapNumber ?? null}
+        flag={isReplayRunning ? "yellow" : "green"}
       />
-
-      {error && (
-        <ErrorBanner
-          title={error.title}
-          message={error.message}
-          tone={error.tone}
-        />
-      )}
-
-      {stateNotices.length > 0 && (
-        <section className="state-notice-grid" aria-label="Dashboard state">
-          {stateNotices.map((notice) => (
-            <StateNotice
-              key={notice.title}
-              title={notice.title}
-              message={notice.message}
-              tone={notice.tone}
-            />
-          ))}
-        </section>
-      )}
-
-      {isSimplifiedView ? (
-        <SimplifiedDriveView
+      <div className="pitwall-grid">
+        <MainTelemetryColumn
           activeSource={displaySource}
           runMode={runMode}
           sample={displaySample}
+          traceSeries={displayTraceSeries}
+          lapTrace={displayLapTrace}
         />
-      ) : (
-        <div className="dashboard-grid">
-          <MainTelemetryColumn
+        <TelemetrySidebar
+          sample={displaySample}
+          games={games}
+          collectorStatus={collectorStatus}
+        />
+      </div>
+    </section>
+  );
+
+  return (
+    <main
+      className={`app-shell app-shell-rail${isReplayRunning && workspace === "live" ? " app-shell-replay-active" : ""}`}
+    >
+      <WorkspaceRail
+        active={workspace}
+        onSelect={setWorkspace}
+        isReplayRunning={isReplayRunning}
+      />
+
+      <div className="app-shell-content">
+        <DashboardHeader
+          connectionState={connectionState}
+          runMode={runMode}
+          isCollectorRunning={isCollectorRunning}
+          isReplayRunning={isReplayRunning}
+          isBusy={isBusy}
+          trackName={displaySample?.track.trackName}
+          sessionName={displaySample?.session.name}
+          sourceName={displaySource?.displayName}
+          samplesPublished={collectorStatus?.samplesPublished ?? 0}
+          onStartCollector={() => void startCollector()}
+          onStopCollector={() => void stopCollector()}
+          onRefresh={() => void refreshDashboard()}
+        />
+
+        {error && (
+          <ErrorBanner
+            title={error.title}
+            message={error.message}
+            tone={error.tone}
+          />
+        )}
+
+        {stateNotices.length > 0 && (
+          <section className="state-notice-grid" aria-label="Dashboard state">
+            {stateNotices.map((notice) => (
+              <StateNotice
+                key={notice.title}
+                title={notice.title}
+                message={notice.message}
+                tone={notice.tone}
+              />
+            ))}
+          </section>
+        )}
+
+        {workspace === "live" && liveWorkspace}
+
+        {workspace === "driver" && (
+          <SimplifiedDriveView
             activeSource={displaySource}
             runMode={runMode}
             sample={displaySample}
-            traceSeries={displayTraceSeries}
-            lapTrace={displayLapTrace}
           />
-          <TelemetrySidebar
-            sample={displaySample}
+        )}
+
+        {workspace === "compare" && (
+          <WorkspacePlaceholder
+            kicker="Compare"
+            title="Lap overlays — coming soon"
+            body="Pin two or more laps from the Sessions workspace to compare deltas, traces, and sector splits side-by-side. Pick a session first."
+            icon={<GitCompareArrows size={20} />}
+            actionLabel="Open Sessions"
+            onAction={() => setWorkspace("sessions")}
+          />
+        )}
+
+        {workspace === "adapters" && (
+          <AdaptersWorkspace
             games={games}
+            activeSource={displaySource}
+            collectorRunMode={runMode}
+            samplesPublished={collectorStatus?.samplesPublished ?? 0}
+            isCollectorRunning={isCollectorRunning}
+          />
+        )}
+
+        {/* TimingBoard remains mounted so replay state survives workspace
+            switches; only displayed when Sessions workspace is active. */}
+        <div
+          className={
+            workspace === "sessions" ? undefined : "timing-board-hidden"
+          }
+          aria-hidden={workspace !== "sessions"}
+        >
+          <TimingBoard
             collectorStatus={collectorStatus}
+            sample={displaySample}
+            activeSource={displaySource}
+            sessions={sessions}
+            isApiOffline={isApiOffline}
+            isBusy={isBusy}
+            activeReplaySessionId={activeReplaySessionId}
+            onStartReplay={startReplay}
+            onStopReplay={stopCollector}
+            onReplayStateChange={setReplayState}
+            onSessionDeleted={() => void refreshSessions()}
           />
         </div>
-      )}
-
-      <div
-        className={isSimplifiedView ? "timing-board-hidden" : undefined}
-        aria-hidden={isSimplifiedView}
-      >
-        <TimingBoard
-          collectorStatus={collectorStatus}
-          sample={displaySample}
-          activeSource={displaySource}
-          sessions={sessions}
-          isApiOffline={isApiOffline}
-          isBusy={isBusy}
-          activeReplaySessionId={activeReplaySessionId}
-          onStartReplay={startReplay}
-          onStopReplay={stopCollector}
-          onReplayStateChange={setReplayState}
-        />
       </div>
     </main>
+  );
+}
+
+type WorkspacePlaceholderProps = {
+  kicker: string;
+  title: string;
+  body: string;
+  icon: React.ReactNode;
+  actionLabel?: string;
+  onAction?: () => void;
+};
+
+function WorkspacePlaceholder({
+  kicker,
+  title,
+  body,
+  icon,
+  actionLabel,
+  onAction,
+}: WorkspacePlaceholderProps) {
+  return (
+    <section className="workspace-empty" aria-label={title}>
+      <div className="workspace-empty-icon" aria-hidden="true">
+        {icon}
+      </div>
+      <span className="workspace-empty-kicker">{kicker}</span>
+      <h2 className="workspace-empty-title">{title}</h2>
+      <p className="workspace-empty-body">{body}</p>
+      {actionLabel && onAction && (
+        <button
+          type="button"
+          className="icon-button primary"
+          onClick={onAction}
+        >
+          {actionLabel}
+        </button>
+      )}
+    </section>
+  );
+}
+
+type AdaptersWorkspaceProps = {
+  games: TelemetrySource[];
+  activeSource: TelemetrySource | null;
+  collectorRunMode: string;
+  samplesPublished: number;
+  isCollectorRunning: boolean;
+};
+
+function AdaptersWorkspace({
+  games,
+  activeSource,
+  collectorRunMode,
+  samplesPublished,
+  isCollectorRunning,
+}: AdaptersWorkspaceProps) {
+  return (
+    <section className="adapters-workspace" aria-label="Adapter registry">
+      <header className="zone-bar">
+        <div className="zone-bar-title">
+          <span className="zone-kicker">Telemetry inputs</span>
+          <span className="zone-source">
+            <Plug size={13} /> Adapter registry
+          </span>
+        </div>
+        <div className="zone-bar-meta mono">
+          collector {isCollectorRunning ? "ONLINE" : "IDLE"} ·{" "}
+          {collectorRunMode} · {samplesPublished.toLocaleString()} samples
+        </div>
+      </header>
+      {games.length === 0 ? (
+        <div className="empty-chart">
+          No adapters reported yet. Start the collector to discover available
+          inputs.
+        </div>
+      ) : (
+        <table className="dense-table adapter-table adapters-workspace-table">
+          <thead>
+            <tr>
+              <th>Adapter</th>
+              <th>Input</th>
+              <th>State</th>
+              <th>Active</th>
+            </tr>
+          </thead>
+          <tbody>
+            {games.map((game) => {
+              const isActive = activeSource?.adapterId === game.adapterId;
+              return (
+                <tr key={game.adapterId}>
+                  <td>{game.displayName}</td>
+                  <td>{game.inputKind}</td>
+                  <td>
+                    <span
+                      className={`status-chip status-chip-${game.status.toLowerCase()}`}
+                    >
+                      {game.status}
+                    </span>
+                  </td>
+                  <td className="mono">{isActive ? "yes" : "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }
 

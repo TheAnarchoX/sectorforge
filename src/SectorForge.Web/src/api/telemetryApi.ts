@@ -61,6 +61,19 @@ export function getSessionDetails(sessionId: string, init?: RequestInit) {
   );
 }
 
+export async function deleteSession(sessionId: string) {
+  const response = await fetch(toAbsoluteUrl(`/api/sessions/${sessionId}`), {
+    method: "DELETE",
+  });
+  if (response.status === 404) {
+    return false;
+  }
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "Session delete failed"));
+  }
+  return true;
+}
+
 export function startFakeCollector() {
   return requestJson<CollectorStatus>(
     "/api/collector/start",

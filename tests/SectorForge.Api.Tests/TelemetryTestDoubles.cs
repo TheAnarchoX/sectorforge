@@ -101,6 +101,11 @@ internal sealed class EmptyTelemetrySessionStore : ITelemetrySessionStore
     {
         return Task.FromResult<TelemetrySessionDetails?>(null);
     }
+
+    public Task<bool> DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(false);
+    }
 }
 
 internal sealed class RecordingTelemetryPublisher : ILiveTelemetryPublisher

@@ -431,6 +431,18 @@ export function useTelemetryDashboard() {
     }
   };
 
+  const refreshSessions = async () => {
+    try {
+      const next = await loadSessionSnapshot();
+      setSessions(next);
+      setApiAvailability("online");
+    } catch (requestError) {
+      const nextAlert = createDashboardAlert("snapshot", requestError);
+      setApiAvailability(nextAlert.apiAvailability);
+      setError(nextAlert.alert);
+    }
+  };
+
   const startCollector = async () => {
     setIsBusy(true);
     setError(null);
@@ -509,6 +521,7 @@ export function useTelemetryDashboard() {
     isBusy,
     error,
     refreshDashboard,
+    refreshSessions,
     startCollector,
     stopCollector,
     startReplay,

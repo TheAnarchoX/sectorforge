@@ -72,6 +72,22 @@ app.MapGet("/api/sessions/{id:guid}", async (Guid id, ITelemetrySessionStore sto
     return session is null ? Results.NotFound() : Results.Ok(session);
 });
 
+app.MapDelete("/api/sessions/{id:guid}", async (
+    Guid id,
+    ITelemetrySessionStore store,
+    TelemetryCollectorService collector,
+    CancellationToken cancellationToken) =>
+{
+    var status = collector.GetStatus();
+    if (status.IsRunning && status.RunMode == TelemetryRunMode.Replay && status.LatestSample?.SessionId == id)
+    {
+        return Results.Conflict(new { error = "Stop the active replay before deleting this session." });
+    }
+
+    var deleted = await store.DeleteSessionAsync(id, cancellationToken);
+    return deleted ? Results.NoContent() : Results.NotFound();
+});
+
 app.MapPost("/api/collector/start", async (HttpContext context, TelemetryCollectorService collector) =>
 {
     StartCollectorRequest? request = null;

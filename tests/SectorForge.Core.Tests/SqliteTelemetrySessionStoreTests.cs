@@ -70,6 +70,34 @@ public sealed class SqliteTelemetrySessionStoreTests
         Assert.Equal(2, await CountRawSampleBlobsAsync(connectionString, otherSessionId));
     }
 
+    [Fact]
+    public async Task DeleteSessionRemovesSummaryAndBlobs()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), "SectorForge.Tests", $"{Guid.NewGuid():N}.db");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath }.ToString();
+        var store = new SqliteTelemetrySessionStore(connectionString);
+        var adapter = new FakeTelemetryAdapter();
+        var sessionId = Guid.NewGuid();
+        var keepId = Guid.NewGuid();
+
+        await store.SaveSampleAsync(adapter.CreateSample(TimeSpan.FromSeconds(10), 1, sessionId));
+        await store.SaveSampleAsync(adapter.CreateSample(TimeSpan.FromSeconds(20), 2, sessionId));
+        await store.SaveSampleAsync(adapter.CreateSample(TimeSpan.FromSeconds(15), 1, keepId));
+
+        var deleted = await store.DeleteSessionAsync(sessionId);
+
+        Assert.True(deleted);
+        Assert.Null(await store.GetSessionAsync(sessionId));
+        Assert.Equal(0, await CountRawSampleBlobsAsync(connectionString, sessionId));
+
+        var remaining = await store.ListSessionsAsync();
+        Assert.Single(remaining);
+        Assert.Equal(keepId, remaining[0].Id);
+
+        var missingDelete = await store.DeleteSessionAsync(Guid.NewGuid());
+        Assert.False(missingDelete);
+    }
+
     private static async Task<int> CountRawSampleBlobsAsync(string connectionString, Guid sessionId)
     {
         await using var connection = new SqliteConnection(connectionString);
