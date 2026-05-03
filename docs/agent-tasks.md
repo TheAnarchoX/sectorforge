@@ -394,9 +394,10 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-043: Implement F1 25 Packet Header Parser And Dispatcher
 
-- Status: `ready`
+- Status: `done`
 - Type: protocol adapter
 - Goal: Parse the F1 25 UDP packet header into an internal DTO and dispatch to per-packet readers, isolated from `SectorForge.Core`.
+- Notes: Added the F1 25 header reader and packet dispatcher on 2026-05-03 with explicit little-endian parsing, typed failures for truncated or wrong-format buffers, unsupported packet skips, and synthetic parser tests. Motion, lap data, and car telemetry packet readers currently retain raw payloads for the SF-044 normalizer slice.
 - Suggested files: `src/SectorForge.Collector/Adapters/F125/F125PacketReader.cs`, `src/SectorForge.Collector/Adapters/F125/Packets/*`, `tests/SectorForge.Protocol.Tests/F125/*`
 - Acceptance criteria:
   - Header reader uses `BinaryPrimitives` little-endian reads, no `unsafe` struct overlays.
