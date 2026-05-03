@@ -283,6 +283,108 @@ public sealed class F125NormalizerTests
             });
     }
 
+    [Fact]
+    public void NormalizesFallbackMappingsWhenOptionalMetadataIsSparse()
+    {
+        var playerCarIndex = (byte)0;
+        var motion = ReadPacket<F125MotionPacket>(
+            F125PacketIds.Motion,
+            playerCarIndex,
+            BuildMotionPayload(playerCarIndex));
+
+        var lapPayload = BuildLapDataPayload(playerCarIndex);
+        lapPayload[32] = 0;
+        lapPayload[34] = 2;
+        lapPayload[43] = 0;
+        lapPayload[45] = 7;
+        var lapData = ReadPacket<F125LapDataPacket>(
+            F125PacketIds.LapData,
+            playerCarIndex,
+            lapPayload);
+
+        var carTelemetry = ReadPacket<F125CarTelemetryPacket>(
+            F125PacketIds.CarTelemetry,
+            playerCarIndex,
+            BuildCarTelemetryPayload(playerCarIndex));
+
+        var sessionPayload = BuildSessionPayload();
+        sessionPayload[0] = 99;
+        sessionPayload[3] = 0;
+        sessionPayload[6] = 99;
+        sessionPayload[7] = 99;
+        sessionPayload[124] = 3;
+        sessionPayload[SessionForecastCountOffset] = 1;
+        var forecast = sessionPayload.AsSpan(SessionForecastStartOffset, WeatherForecastSampleSize);
+        forecast.Clear();
+        forecast[1] = 5;
+        forecast[2] = 99;
+        forecast[7] = 64;
+        var session = ReadPacket<F125SessionPacket>(
+            F125PacketIds.Session,
+            playerCarIndex,
+            sessionPayload);
+
+        var carStatusPayload = BuildCarStatusPayload(playerCarIndex);
+        carStatusPayload[13] = 0;
+        carStatusPayload[14] = 0;
+        carStatusPayload[15] = 0x80;
+        carStatusPayload[16] = 0xBF;
+        carStatusPayload[25] = 18;
+        carStatusPayload[26] = 0;
+        carStatusPayload[41] = 9;
+        var carStatus = ReadPacket<F125CarStatusPacket>(
+            F125PacketIds.CarStatus,
+            playerCarIndex,
+            carStatusPayload);
+
+        var playerHistory = ReadPacket<F125SessionHistoryPacket>(
+            F125PacketIds.SessionHistory,
+            playerCarIndex,
+            BuildSessionHistoryPayload(playerCarIndex));
+
+        var sample = new F125Normalizer().Normalize(new F125TelemetryPacketSet(
+            motion,
+            lapData,
+            carTelemetry,
+            session,
+            Participants: null,
+            carStatus,
+            CarDamage: null,
+            SessionHistoryByCarIndex: new Dictionary<int, F125SessionHistoryPacket>
+            {
+                [playerCarIndex] = playerHistory
+            }));
+
+        Assert.Equal("Session 99", sample.Session.Name);
+        Assert.Equal("Session 99", sample.Session.SessionType);
+        Assert.Equal(PitStatus.InPitArea, sample.Lap.PitStatus);
+        Assert.Equal(TyreCompound.Hard, sample.Tyres.Compound);
+        Assert.Null(sample.Fuel.LitersPerLapEstimate);
+        Assert.Null(sample.Fuel.LapsRemainingEstimate);
+        Assert.Equal("Track 99", sample.Track.TrackName);
+        Assert.Equal("99", sample.Track.TrackId);
+        Assert.Equal(WeatherKind.Unknown, sample.Track.WeatherEnum);
+        Assert.Equal("Unknown", sample.Track.Weather);
+        Assert.Equal(64d, sample.Track.RainPercent.GetValueOrDefault(), precision: 3);
+        Assert.Equal(SafetyCarStatus.Unknown, sample.Track.SafetyCarStatus);
+        Assert.True(sample.Track.FormationLap);
+        Assert.NotNull(sample.PowerUnit);
+        Assert.Equal(ErsDeployMode.Unknown, sample.PowerUnit.ErsDeployMode);
+
+        Assert.NotNull(sample.Participants);
+        var participant = Assert.Single(sample.Participants!);
+        Assert.Equal("Car 1", participant.DriverName);
+        Assert.Null(participant.TeamName);
+        Assert.Equal(1, participant.Position);
+        Assert.True(participant.IsPlayer);
+        Assert.True(participant.IsInPit);
+        Assert.Equal(ResultStatus.Retired, participant.ResultStatus);
+        Assert.Null(participant.GridPosition);
+        Assert.Null(participant.DriverNumber);
+        Assert.Null(participant.IsAi);
+        Assert.Equal(TyreCompound.Hard, participant.TyreCompound);
+    }
+
     private static TPacket ReadPacket<TPacket>(
         byte packetId,
         byte playerCarIndex,

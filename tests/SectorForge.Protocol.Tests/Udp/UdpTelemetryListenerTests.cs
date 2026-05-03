@@ -77,6 +77,13 @@ public sealed class UdpTelemetryListenerTests
     }
 
     [Fact]
+    public void ThrowsWhenBindAddressIsMissing()
+    {
+        Assert.Throws<ArgumentException>(() => new UdpTelemetryListener(
+            new UdpTelemetryListenerOptions("   ", Port: 0)));
+    }
+
+    [Fact]
     public void ThrowsWhenPortOutOfRange()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new UdpTelemetryListener(
@@ -110,5 +117,42 @@ public sealed class UdpTelemetryListenerTests
 
         Assert.NotNull(listener);
         Assert.NotEqual(0, listener.LocalEndPoint.Port);
+    }
+
+    [Fact]
+    public async Task BindsWhenReceiveBufferOverrideIsProvided()
+    {
+        await using var listener = new UdpTelemetryListener(
+            new UdpTelemetryListenerOptions("127.0.0.1", Port: 0, ReceiveBufferBytes: 64 * 1024));
+
+        Assert.Equal(IPAddress.Loopback, listener.LocalEndPoint.Address);
+        Assert.NotEqual(0, listener.LocalEndPoint.Port);
+    }
+
+    [Fact]
+    public async Task ReceiveAsyncThrowsAfterListenerIsDisposed()
+    {
+        var listener = new UdpTelemetryListener(new UdpTelemetryListenerOptions("127.0.0.1", Port: 0));
+        await listener.DisposeAsync();
+
+        var enumerator = listener.ReceiveAsync(CancellationToken.None).GetAsyncEnumerator();
+
+        try
+        {
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => enumerator.MoveNextAsync().AsTask());
+        }
+        finally
+        {
+            await enumerator.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task DisposeAsyncIsIdempotent()
+    {
+        var listener = new UdpTelemetryListener(new UdpTelemetryListenerOptions("127.0.0.1", Port: 0));
+
+        await listener.DisposeAsync();
+        await listener.DisposeAsync();
     }
 }

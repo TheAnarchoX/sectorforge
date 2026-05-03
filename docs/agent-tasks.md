@@ -510,7 +510,7 @@ This backlog is written for coding agents and human contributors. Each task is i
   - Fake adapter and existing tests keep working with all new fields rendered as hidden / absent.
   - Lint and frontend build pass.
 
-## Priority 5: Lap Comparison & Analysis
+## Priority 5: Lap Comparison & Analysis, Session overview Expansion, And Other Quality-Of-Life Improvements
 
 The dashboard already has a `Compare` workspace placeholder driven by the workspace rail. This priority fills it in: pick laps from one or more stored sessions, overlay their channels, and inspect deltas the way drivers and engineers expect from tools like MoTeC i2, AiM Race Studio, and SimHub. Each task is scoped so it can ship independently behind the existing `Compare` route without disturbing live or replay flows.
 
@@ -672,6 +672,67 @@ The dashboard already has a `Compare` workspace placeholder driven by the worksp
   - Endpoint retrieves the telemetry data for the specified laps and returns it in the requested format (e.g. CSV with aligned channels, or a MoTeC i2-compatible file).
   - Endpoint includes error handling for unknown sessions/laps and unsupported formats.
   - Tests cover valid export requests, error cases, and format correctness.
+
+### SF-05D: Session Overview Redesign With Lap-Focused Layout, Lap Comparison, And Expanded Metadata
+
+- Status: `ready`
+- Type: frontend feature
+- Goal: Redesign the Session Overview workspace to have a more lap-focused layout that includes the lap comparison features from the Compare workspace, plus expanded session and lap metadata, so users can get a richer understanding of their session performance without needing to switch workspaces.
+- Suggested files: `src/SectorForge.Web/src/components/dashboard/SessionOverview.tsx`,  `src/SectorForge.Web/src/components/dashboard/LapTelemetryChart.tsx`, `src/SectorForge.Web/src/App.tsx`, `src/SectorForge.Web/src/App.css`
+- Acceptance criteria:
+  - Session Overview workspace is redesigned to prominently feature a list of laps with key metadata (lap time, sector times, tyre compound, pit stops).
+  - Each lap entry includes a "Compare" button that opens an inline comparison view with the reference lap and delta plots, without navigating away from the Session Overview.
+  - The comparison view within Session Overview includes the same overlay charts and delta plots as the Compare workspace, but scoped to the selected lap and reference lap.
+  - Users can switch the reference lap within the inline comparison view, and it updates the charts and deltas accordingly.
+  - Lint and frontend build pass.
+
+### SF-05E: Add Session Summary Dashboard Panel With Key Metrics And Visualizations
+
+- Status: `ready`
+- Type: frontend feature
+- Goal: Add a new "Session Summary" panel to the dashboard that provides key metrics (e.g. best lap, average lap time, consistency metrics) and visualizations (e.g. lap time distribution, tyre usage over time) for a completed session, so users can quickly assess their overall performance and identify areas for improvement.
+- Suggested files: `src/SectorForge.Web/src/components/dashboard/SessionSummaryPanel.tsx`, `src/SectorForge.Web/src/utils/*`, `src/SectorForge.Web/src/App.tsx`, `src/SectorForge.Web/src/App.css`
+- Acceptance criteria:
+  - Session Summary panel is added to the dashboard and is visible when viewing a completed session.
+  - Panel includes key metrics such as best lap time, average lap time, and consistency metrics (e.g. standard deviation of lap times).
+  - Panel includes visualizations such as a histogram of lap times and a line chart of tyre usage over the course of the session.
+  - Metrics and visualizations are based on the telemetry data stored for the session and update correctly when viewing different sessions.
+  - Lint and frontend build pass.
+
+### SF-05F: Add Lap Comparison To Driver View
+- Status: `ready`
+- Type: frontend feature
+- Goal: In the Driver View workspace, allow users to select a reference lap and compare their current live lap against it in real-time, with overlay charts and delta plots, so they can get immediate feedback on their performance during a session.
+- Suggested files: `src/SectorForge.Web/src/components/dashboard/DriverView.tsx`, `src/SectorForge.Web/src/components/dashboard/LapTelemetryChart.tsx`
+- Acceptance criteria:
+  - Driver View includes a section for lap comparison where users can select a reference lap from their session history.
+  - When a reference lap is selected, the Driver View shows overlay charts comparing the current live lap to the reference lap, as well as delta plots showing time differences.
+  - The comparison updates in real-time as the user completes their current lap, providing immediate feedback on their performance relative to the reference lap.
+  - Users can change the reference lap during the session, and the comparison updates accordingly.
+  - Lint and frontend build pass.
+
+### SF-05G: Add Session Comparison Feature To Compare Multiple Sessions
+
+- Status: `ready`
+- Type: frontend feature
+- Goal: Extend the Compare workspace to allow users to compare laps across different sessions, so they can analyze how their performance has evolved over time or under different conditions.
+- Suggested files: `src/SectorForge.Web/src/components/dashboard/CompareWorkspace.tsx`, `src/SectorForge.Web/src/utils/*`
+- Acceptance criteria:
+  - Compare workspace allows users to select laps from different sessions in the lap basket.
+  - When laps from different sessions are selected, the overlay charts and delta plots still function correctly, allowing users to compare performance across sessions.
+  - The workspace includes indicators of which session each lap belongs to, and any relevant session metadata (e.g. track, weather conditions) is displayed to provide context for the comparison.
+  - Lint and frontend build pass.
+
+### SF-05H: Add Annotations And Notes To Laps In Compare Views
+- Status: `ready`
+- Type: frontend feature
+- Goal: Allow users to add annotations or notes to specific laps in the Compare workspace, so they can document their observations or insights about particular laps for future reference.
+- Suggested files: `src/SectorForge.Web/src/components/dashboard/CompareWorkspace.tsx`, `src/SectorForge.Web/src/utils/*`
+- Acceptance criteria:
+  - Users can click on a lap in the Compare workspace to open an annotation editor.
+  - Annotations can include text notes and are saved to local storage or the backend for persistence.
+  - Annotated laps display an indicator in the overlay charts and delta plots, and users can view the annotations when hovering over or selecting the lap.
+  - Lint and frontend build pass.
 
 ## Priority 6: LMU Plugin Adapter
 

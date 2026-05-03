@@ -344,6 +344,42 @@ public sealed class F125PacketReaderTests
         Assert.Equal(TimeSpan.FromMilliseconds(83_111), historyPacket.History.LastCompletedLap?.LapTime);
     }
 
+    [Fact]
+    public void ReadsSessionHistoryPacketWithMissingReferencesAndEmptyLaps()
+    {
+        var reader = new F125PacketReader();
+        var payload = BuildSessionHistoryPayload(carIndex: 1);
+        payload[3] = 0;
+        payload[4] = 9;
+        payload[5] = 0;
+        payload[6] = 9;
+        payload.AsSpan(SessionHistoryHeaderSize, SessionHistoryLapDataSize).Clear();
+        payload.AsSpan(SessionHistoryHeaderSize + SessionHistoryLapDataSize, SessionHistoryLapDataSize).Clear();
+
+        var result = reader.Read(BuildPacket(
+            F125PacketIds.SessionHistory,
+            playerCarIndex: 1,
+            payload));
+
+        Assert.Equal(F125PacketReadStatus.Parsed, result.Status);
+        var historyPacket = Assert.IsType<F125SessionHistoryPacket>(result.Packet);
+        Assert.Null(historyPacket.History.BestLapTime);
+        Assert.Null(historyPacket.History.BestSector1);
+        Assert.Null(historyPacket.History.BestSector2);
+        Assert.Null(historyPacket.History.BestSector3);
+        Assert.Null(historyPacket.History.LastCompletedLap);
+        Assert.All(
+            historyPacket.History.Laps,
+            lap =>
+            {
+                Assert.Null(lap.LapTime);
+                Assert.Null(lap.Sector1);
+                Assert.Null(lap.Sector2);
+                Assert.Null(lap.Sector3);
+                Assert.False(lap.IsValid);
+            });
+    }
+
     private static byte[] BuildPacket(byte packetId, byte playerCarIndex, ReadOnlySpan<byte> payload = default)
     {
         var buffer = new byte[F125PacketHeader.Size + payload.Length];

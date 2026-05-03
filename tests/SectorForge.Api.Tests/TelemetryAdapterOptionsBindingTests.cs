@@ -30,6 +30,27 @@ public sealed class TelemetryAdapterOptionsBindingTests
     }
 
     [Fact]
+    public void ForReturnsDefaultEntryWhenAdapterIdIsBlank()
+    {
+        var options = new TelemetryAdaptersOptions
+        {
+            Items = new Dictionary<string, TelemetryAdapterOptions>
+            {
+                ["fake"] = new() { Enabled = true, SampleRateHz = 30 }
+            }
+        };
+
+        var nullAdapter = options.For(null!);
+        var whitespaceAdapter = options.For("   ");
+
+        Assert.False(nullAdapter.Enabled);
+        Assert.Null(nullAdapter.Port);
+        Assert.Null(nullAdapter.SampleRateHz);
+        Assert.False(whitespaceAdapter.Enabled);
+        Assert.Null(whitespaceAdapter.ReceiveBufferBytes);
+    }
+
+    [Fact]
     public void BindsCollectorAndStorageOverrides()
     {
         var configuration = new ConfigurationBuilder()
