@@ -301,6 +301,74 @@ public sealed class F125PacketReaderTests
     }
 
     [Fact]
+    public void SessionPacketValidationFailuresReturnTypedFailures()
+    {
+        var reader = new F125PacketReader();
+
+        var truncatedBaseResult = reader.Read(BuildPacket(
+            F125PacketIds.Session,
+            playerCarIndex: 0,
+            new byte[SessionForecastStartOffset - 1]));
+
+        var truncatedForecastPayload = BuildSessionPayload(forecastCount: 2);
+        Array.Resize(ref truncatedForecastPayload, truncatedForecastPayload.Length - 1);
+        var truncatedForecastResult = reader.Read(BuildPacket(
+            F125PacketIds.Session,
+            playerCarIndex: 0,
+            truncatedForecastPayload));
+
+        Assert.Equal(F125PacketReadStatus.Failed, truncatedBaseResult.Status);
+        Assert.NotNull(truncatedBaseResult.Failure);
+        Assert.Equal(F125PacketReadFailureKind.TruncatedPayload, truncatedBaseResult.Failure.Kind);
+        Assert.Equal(SessionForecastStartOffset - 1, truncatedBaseResult.Failure.ActualBytes);
+        Assert.Equal(SessionForecastStartOffset, truncatedBaseResult.Failure.RequiredBytes);
+
+        Assert.Equal(F125PacketReadStatus.Failed, truncatedForecastResult.Status);
+        Assert.NotNull(truncatedForecastResult.Failure);
+        Assert.Equal(F125PacketReadFailureKind.TruncatedPayload, truncatedForecastResult.Failure.Kind);
+        Assert.Equal(truncatedForecastPayload.Length, truncatedForecastResult.Failure.ActualBytes);
+        Assert.Equal(truncatedForecastPayload.Length + 1, truncatedForecastResult.Failure.RequiredBytes);
+    }
+
+    [Fact]
+    public void ParticipantsPacketValidationFailuresReturnTypedFailures()
+    {
+        var reader = new F125PacketReader();
+
+        var emptyPayloadResult = reader.Read(BuildPacket(
+            F125PacketIds.Participants,
+            playerCarIndex: 0,
+            payload: []));
+
+        var invalidCountResult = reader.Read(BuildPacket(
+            F125PacketIds.Participants,
+            playerCarIndex: 0,
+            payload: [(byte)(CarCount + 1)]));
+
+        var truncatedPayload = new byte[1 + ParticipantDataSize - 1];
+        truncatedPayload[0] = 1;
+        var truncatedPayloadResult = reader.Read(BuildPacket(
+            F125PacketIds.Participants,
+            playerCarIndex: 0,
+            truncatedPayload));
+
+        Assert.Equal(F125PacketReadStatus.Failed, emptyPayloadResult.Status);
+        Assert.NotNull(emptyPayloadResult.Failure);
+        Assert.Equal(F125PacketReadFailureKind.TruncatedPayload, emptyPayloadResult.Failure.Kind);
+        Assert.Equal(1, emptyPayloadResult.Failure.RequiredBytes);
+
+        Assert.Equal(F125PacketReadStatus.Failed, invalidCountResult.Status);
+        Assert.NotNull(invalidCountResult.Failure);
+        Assert.Equal(F125PacketReadFailureKind.InvalidPayload, invalidCountResult.Failure.Kind);
+
+        Assert.Equal(F125PacketReadStatus.Failed, truncatedPayloadResult.Status);
+        Assert.NotNull(truncatedPayloadResult.Failure);
+        Assert.Equal(F125PacketReadFailureKind.TruncatedPayload, truncatedPayloadResult.Failure.Kind);
+        Assert.Equal(truncatedPayload.Length, truncatedPayloadResult.Failure.ActualBytes);
+        Assert.Equal(1 + ParticipantDataSize, truncatedPayloadResult.Failure.RequiredBytes);
+    }
+
+    [Fact]
     public void ReadsParticipantAndSessionHistoryPackets()
     {
         var reader = new F125PacketReader();
@@ -378,6 +446,57 @@ public sealed class F125PacketReaderTests
                 Assert.Null(lap.Sector3);
                 Assert.False(lap.IsValid);
             });
+    }
+
+    [Fact]
+    public void SessionHistoryValidationFailuresReturnTypedFailures()
+    {
+        var reader = new F125PacketReader();
+
+        var truncatedHeaderResult = reader.Read(BuildPacket(
+            F125PacketIds.SessionHistory,
+            playerCarIndex: 0,
+            new byte[SessionHistoryHeaderSize - 1]));
+
+        var invalidCarIndexPayload = new byte[SessionHistoryHeaderSize];
+        invalidCarIndexPayload[0] = CarCount;
+        var invalidCarIndexResult = reader.Read(BuildPacket(
+            F125PacketIds.SessionHistory,
+            playerCarIndex: 0,
+            invalidCarIndexPayload));
+
+        var invalidLapCountPayload = new byte[SessionHistoryHeaderSize];
+        invalidLapCountPayload[1] = 101;
+        var invalidLapCountResult = reader.Read(BuildPacket(
+            F125PacketIds.SessionHistory,
+            playerCarIndex: 0,
+            invalidLapCountPayload));
+
+        var truncatedLapPayload = new byte[SessionHistoryHeaderSize + SessionHistoryLapDataSize - 1];
+        truncatedLapPayload[1] = 1;
+        var truncatedLapResult = reader.Read(BuildPacket(
+            F125PacketIds.SessionHistory,
+            playerCarIndex: 0,
+            truncatedLapPayload));
+
+        Assert.Equal(F125PacketReadStatus.Failed, truncatedHeaderResult.Status);
+        Assert.NotNull(truncatedHeaderResult.Failure);
+        Assert.Equal(F125PacketReadFailureKind.TruncatedPayload, truncatedHeaderResult.Failure.Kind);
+        Assert.Equal(SessionHistoryHeaderSize, truncatedHeaderResult.Failure.RequiredBytes);
+
+        Assert.Equal(F125PacketReadStatus.Failed, invalidCarIndexResult.Status);
+        Assert.NotNull(invalidCarIndexResult.Failure);
+        Assert.Equal(F125PacketReadFailureKind.InvalidPayload, invalidCarIndexResult.Failure.Kind);
+
+        Assert.Equal(F125PacketReadStatus.Failed, invalidLapCountResult.Status);
+        Assert.NotNull(invalidLapCountResult.Failure);
+        Assert.Equal(F125PacketReadFailureKind.InvalidPayload, invalidLapCountResult.Failure.Kind);
+
+        Assert.Equal(F125PacketReadStatus.Failed, truncatedLapResult.Status);
+        Assert.NotNull(truncatedLapResult.Failure);
+        Assert.Equal(F125PacketReadFailureKind.TruncatedPayload, truncatedLapResult.Failure.Kind);
+        Assert.Equal(truncatedLapPayload.Length, truncatedLapResult.Failure.ActualBytes);
+        Assert.Equal(SessionHistoryHeaderSize + SessionHistoryLapDataSize, truncatedLapResult.Failure.RequiredBytes);
     }
 
     private static byte[] BuildPacket(byte packetId, byte playerCarIndex, ReadOnlySpan<byte> payload = default)
