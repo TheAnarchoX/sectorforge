@@ -1,5 +1,6 @@
 import type {
   CollectorStatus,
+  TelemetrySessionDetails,
   TelemetryRunMode,
   TelemetrySessionSummary,
   TelemetrySource,
@@ -49,6 +50,14 @@ export function getSessions() {
   return requestJson<TelemetrySessionSummary[]>(
     "/api/sessions",
     "Sessions request failed",
+  );
+}
+
+export function getSessionDetails(sessionId: string, init?: RequestInit) {
+  return requestJson<TelemetrySessionDetails>(
+    `/api/sessions/${sessionId}`,
+    "Session detail request failed",
+    init,
   );
 }
 

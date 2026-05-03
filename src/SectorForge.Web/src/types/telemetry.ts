@@ -116,6 +116,20 @@ export type TelemetrySessionSummary = {
   sampleCount: number;
 };
 
+export type LapSummary = {
+  sessionId: string;
+  lapNumber: number;
+  lapTime?: string | null;
+  bestLapTime?: string | null;
+  updatedAt: string;
+};
+
+export type TelemetrySessionDetails = {
+  session: TelemetrySessionSummary;
+  laps: LapSummary[];
+  samples: TelemetrySample[];
+};
+
 export type TelemetryTraceSeries = {
   speed: number[];
   rpm: number[];
