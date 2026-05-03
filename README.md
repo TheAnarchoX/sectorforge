@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/TheAnarchoX/sectorforge/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TheAnarchoX/sectorforge/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-94.13%25%20overall-brightgreen)](tests/coverage/README.md)
-[![License](https://img.shields.io/badge/license-MIT-0f172a)](LICENSE)
+[![License](https://img.shields.io/badge/license-Non--Commercial-0f172a)](LICENSE)
 
 ![SectorForge wordmark](docs/assets/sectorforge-wordmark.svg)
 
@@ -169,4 +169,10 @@ flowchart TB
 
 ## License
 
-MIT License. See [LICENSE](LICENSE).
+SectorForge is licensed under the SectorForge Non-Commercial License. You may
+use, fork, modify, and share the software and derivative works for
+non-commercial purposes. You may not sell the software, sell forks or derivative
+works, or otherwise use them to generate revenue. See [LICENSE](LICENSE).
+
+Because this license restricts commercial use, SectorForge is source-available
+rather than OSI-approved open source.

@@ -27,17 +27,18 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ## Priority 0: Repo Publication
 
-### SF-001: Choose And Add An OSS License
+### SF-001: Choose And Add A Non-Commercial License
 
 - Status: `done`
 - Type: governance
-- Goal: Add the project license once the maintainer chooses one.
-- Suggested files: `LICENSE`, `README.md`
-- Notes: Maintainer approved using the best fit license on 2026-05-02. MIT was selected as a simple permissive default for an open-source local developer tool.
+- Goal: Add and maintain the project license once the maintainer chooses one.
+- Suggested files: `LICENSE`, `README.md`, `CONTRIBUTING.md`, `package.json`
+- Notes: Maintainer approved using the best fit license on 2026-05-02, and MIT was initially selected as a simple permissive default. On 2026-05-03, the maintainer requested a non-commercial license that permits use, forks, modifications, and derivatives while forbidding selling or monetizing the software as provided, forks, and derivative works. The repo now uses the custom SectorForge Non-Commercial License; because commercial use is prohibited, this is source-available rather than OSI-approved open source.
 - Acceptance criteria:
   - `LICENSE` exists at the repo root.
-  - `README.md` names the license.
+  - `README.md` names the license and summarizes the non-commercial restriction.
   - Package metadata is consistent with the chosen license if package publishing metadata is added.
+  - `CONTRIBUTING.md` states that contributions are licensed under the same terms.
 
 ### SF-002: Add GitHub Community Health Files
 
@@ -341,8 +342,8 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 - Status: `done`
 - Type: documentation
-- Goal: Add badges to the README for CI status, code coverage, and license to provide at-a-glance information about the project health and licensing. This is a common practice in open-source projects and can help build trust with potential contributors.
-- Notes: Added CI, coverage, and MIT license badges to the top of `README.md` on 2026-05-03.
+- Goal: Add badges to the README for CI status, code coverage, and license to provide at-a-glance information about the project health and licensing. This is a common practice in public projects and can help build trust with potential contributors.
+- Notes: Added CI, coverage, and MIT license badges to the top of `README.md` on 2026-05-03. Updated the license badge to Non-Commercial on 2026-05-03 after the maintainer changed the license direction.
 - Suggested files: `README.md`
 - Acceptance criteria:
   - README includes a badge for CI build status that reflects the current state of the default branch.

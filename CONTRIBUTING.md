@@ -92,6 +92,10 @@ Good manual requests name both the task and the workflow, for example: `Use the 
 - Do not copy vendor protocol documents into the repository.
 - Prefer nullable fields when a game does not expose a normalized value.
 
+## Licensing
+
+By submitting a contribution, you agree that it is licensed under the SectorForge Non-Commercial License in [LICENSE](LICENSE). Do not submit third-party code or assets unless you have the right to license them under those terms.
+
 ## Repository Hygiene
 
 - Do not commit captures, exports, local databases, secrets, or game-specific personal paths.

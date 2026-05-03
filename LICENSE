@@ -1,16 +1,73 @@
-# MIT License
+# SectorForge Non-Commercial License
 
 Copyright (c) 2026 SectorForge contributors
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This license gives you permission to use, study, copy, fork, modify, merge,
+publish, distribute, and create derivative works from this software, but only
+for non-commercial purposes and only under these terms.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+## Definitions
+
+"Software" means this repository, source code, documentation, and any other
+files distributed with this license.
+
+"Derivative Work" means any fork, modification, adaptation, port, translation,
+build, bundled version, or other work based on the Software.
+
+"Non-Commercial Purpose" means personal, educational, research, evaluation,
+hobby, or community use that is not intended for or directed toward commercial
+advantage, monetary compensation, revenue generation, or profit.
+
+"Commercial Use" means using the Software or a Derivative Work to make money
+or obtain commercial advantage, directly or indirectly. Commercial Use includes,
+without limitation: selling, licensing, sublicensing, renting, leasing, hosting
+for a fee, offering paid support or services where the Software or a Derivative
+Work is a material part of the service, bundling with a paid product or
+service, using it in advertising-supported, sponsored, affiliate, subscription,
+or other revenue-generating offerings, or using it for a business, employer,
+client, or paid project.
+
+## Permission
+
+Subject to these terms, each copyright holder grants you a worldwide,
+non-exclusive, royalty-free license to:
+
+- use, run, and study the Software;
+- copy and share the Software;
+- create, use, and share Derivative Works; and
+- distribute the Software and Derivative Works, in source or compiled form,
+
+solely for Non-Commercial Purposes.
+
+## Conditions
+
+1. You may not make Commercial Use of the Software or any Derivative Work
+   without prior written permission from the copyright holders.
+2. You may not sell or otherwise monetize the Software as provided, any fork,
+   or any Derivative Work.
+3. Any distributed copy or Derivative Work must include this license and the
+   copyright notice above.
+4. Any distributed Derivative Work must be licensed under these same terms. You
+   may not relicense the Software or any Derivative Work under terms that permit
+   Commercial Use.
+5. You must clearly mark significant modifications you distribute.
+6. This license does not grant rights to use project names, logos, trademarks,
+   or contributor names except as needed for attribution and notices.
+7. All rights not expressly granted by this license are reserved.
+
+## Contributions
+
+Unless agreed otherwise in writing, any contribution intentionally submitted for
+inclusion in the Software is licensed under this license.
+
+## Termination
+
+Your rights under this license terminate automatically if you violate it. If you
+stop all violation and cure the violation within 30 days of becoming aware of
+it, your rights are reinstated for that violation unless a copyright holder
+notifies you otherwise.
+
+## Disclaimer
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
