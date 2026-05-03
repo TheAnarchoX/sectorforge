@@ -30,6 +30,44 @@ export function formatTime(value: string | null | undefined) {
   return negative ? `-${formatted}` : formatted;
 }
 
+export function parseDurationSeconds(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const negative = value.startsWith("-");
+  const clean = negative ? value.slice(1) : value;
+  const daySplit = clean.split(".");
+  const timePart =
+    daySplit.length === 2 && daySplit[0].includes(":")
+      ? clean
+      : (daySplit.at(-1) ?? clean);
+  const segments = timePart.split(":");
+
+  if (segments.length < 2 || segments.length > 3) {
+    return null;
+  }
+
+  const [hoursPart, minutesPart, secondsPart] =
+    segments.length === 3
+      ? segments
+      : ["0", segments[0] ?? "0", segments[1] ?? "0"];
+  const hours = Number(hoursPart);
+  const minutes = Number(minutesPart);
+  const seconds = Number(secondsPart);
+
+  if (
+    Number.isNaN(hours) ||
+    Number.isNaN(minutes) ||
+    Number.isNaN(seconds)
+  ) {
+    return null;
+  }
+
+  const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+  return negative ? -totalSeconds : totalSeconds;
+}
+
 export function formatDelta(value: string | null | undefined) {
   if (!value) {
     return "-";

@@ -18,6 +18,7 @@ function App() {
     games,
     sessions,
     traceSeries,
+    lapTrace,
     isBusy,
     error,
     refreshDashboard,
@@ -102,6 +103,7 @@ function App() {
           runMode={runMode}
           sample={sample}
           traceSeries={traceSeries}
+          lapTrace={lapTrace}
         />
         <TelemetrySidebar
           sample={sample}

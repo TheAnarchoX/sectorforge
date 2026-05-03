@@ -51,7 +51,7 @@ jobs:
         with:
           node-version: "24.x"
           cache: pnpm
-          cache-dependency-path: src/SectorForge.Web/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Restore .NET
         run: dotnet restore .\src\SectorForge.slnx
@@ -71,7 +71,7 @@ jobs:
         run: dotnet format .\src\SectorForge.slnx --verify-no-changes --no-restore
 
       - name: Install frontend dependencies
-        run: pnpm --dir .\src\SectorForge.Web install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Lint frontend
         run: pnpm --dir .\src\SectorForge.Web lint

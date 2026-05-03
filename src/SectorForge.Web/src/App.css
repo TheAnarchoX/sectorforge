@@ -389,6 +389,145 @@
   padding: 0 10px 10px;
 }
 
+.lap-chart-panel .panel-body {
+  padding: 8px 10px 12px;
+}
+
+.lap-chart-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.lap-chart-meta,
+.lap-chart-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.lap-chart-legend,
+.lap-chart-axis-label,
+.lap-chart-y-axis,
+.lap-chart-state-title {
+  font-family: var(--font-label);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.lap-chart-legend,
+.lap-chart-axis-label,
+.lap-chart-y-axis {
+  color: var(--ink-muted);
+}
+
+.lap-chart-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lap-chart-legend-swatch {
+  display: inline-flex;
+  width: 18px;
+  height: 2px;
+  background: var(--accent-cyan);
+  box-shadow: 0 0 0 1px rgba(99, 184, 214, 0.18);
+}
+
+.lap-chart-caption {
+  color: var(--ink-muted);
+  font-size: 11px;
+}
+
+.lap-chart-grid {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.lap-chart-y-axis {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
+.lap-chart-stage {
+  min-width: 0;
+}
+
+.lap-chart-svg,
+.lap-chart-state {
+  width: 100%;
+  min-height: 248px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(99, 184, 214, 0.05), transparent 36%),
+    #000;
+}
+
+.lap-chart-svg {
+  display: block;
+  height: auto;
+}
+
+.lap-chart-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.lap-chart-state-title {
+  color: var(--ink-strong);
+}
+
+.lap-chart-state-message {
+  max-width: 34rem;
+  margin: 0;
+  line-height: 1.45;
+}
+
+.lap-chart-grid-line {
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 1;
+}
+
+.lap-chart-axis-line {
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 1.2;
+}
+
+.lap-chart-tick-label {
+  fill: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.lap-chart-path {
+  fill: none;
+  stroke: var(--accent-cyan);
+  stroke-width: 3;
+  stroke-linecap: square;
+  stroke-linejoin: round;
+}
+
+.lap-chart-point {
+  fill: var(--accent-cyan);
+}
+
 .trace-stack {
   display: grid;
   gap: 1px;
@@ -827,6 +966,21 @@
 
   .timing-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lap-chart-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .lap-chart-y-axis {
+    justify-content: flex-start;
+    writing-mode: horizontal-tb;
+    transform: none;
+  }
+
+  .lap-chart-footer {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .trace-lane {

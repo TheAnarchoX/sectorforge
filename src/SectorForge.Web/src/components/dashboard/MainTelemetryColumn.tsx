@@ -1,5 +1,6 @@
 import { Activity, RadioTower } from "lucide-react";
 import type {
+  CurrentLapTelemetrySeries,
   TelemetryRunMode,
   TelemetrySample,
   TelemetrySource,
@@ -11,6 +12,7 @@ import {
   formatNumber,
   formatTime,
 } from "../../utils/telemetryFormat";
+import { LapTelemetryChart } from "./LapTelemetryChart";
 import { StripCell, TraceLane } from "./DashboardPrimitives";
 
 type MainTelemetryColumnProps = {
@@ -18,6 +20,7 @@ type MainTelemetryColumnProps = {
   runMode: TelemetryRunMode;
   sample: TelemetrySample | null;
   traceSeries: TelemetryTraceSeries;
+  lapTrace: CurrentLapTelemetrySeries;
 };
 
 export function MainTelemetryColumn({
@@ -25,6 +28,7 @@ export function MainTelemetryColumn({
   runMode,
   sample,
   traceSeries,
+  lapTrace,
 }: MainTelemetryColumnProps) {
   const stripItems = [
     {
@@ -91,6 +95,14 @@ export function MainTelemetryColumn({
     sample?.driverInput.steering === undefined
       ? "-"
       : `${(sample.driverInput.steering * 100).toFixed(0)}`;
+  const lapTracePointCount = lapTrace.points.length;
+  const activeLapNumber = lapTrace.lapNumber ?? sample?.lap.lapNumber ?? null;
+  const lapTraceStatusLabel =
+    lapTracePointCount > 0
+      ? `${lapTracePointCount} points`
+      : runMode === "Idle"
+        ? "Standby"
+        : "Priming";
 
   return (
     <section className="main-column">
@@ -118,6 +130,29 @@ export function MainTelemetryColumn({
           {stripItems.map((item) => (
             <StripCell key={item.label} {...item} />
           ))}
+        </div>
+      </div>
+
+      <div className="panel lap-chart-panel">
+        <div className="panel-header">
+          <div>
+            <div className="panel-kicker">Lap telemetry</div>
+            <h2 className="panel-title">Current lap speed</h2>
+          </div>
+          <div className="status-pill mono">
+            <Activity size={16} />
+            <span className="status-pill-value">
+              lap {activeLapNumber ?? "-"} // {lapTraceStatusLabel}
+            </span>
+          </div>
+        </div>
+        <div className="panel-body">
+          <LapTelemetryChart
+            points={lapTrace.points}
+            lapNumber={activeLapNumber}
+            currentValue={sample?.vehicle.speedKph}
+            isActive={runMode !== "Idle"}
+          />
         </div>
       </div>
 

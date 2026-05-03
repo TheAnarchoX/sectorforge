@@ -138,6 +138,17 @@ export type TelemetryTraceSeries = {
   steering: number[];
 };
 
+export type LapTelemetryPoint = {
+  elapsedSeconds: number;
+  value: number;
+};
+
+export type CurrentLapTelemetrySeries = {
+  sessionId: string | null;
+  lapNumber: number | null;
+  points: LapTelemetryPoint[];
+};
+
 export type ConnectionState =
   | "connecting"
   | "connected"

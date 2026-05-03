@@ -12,14 +12,23 @@ import {
 import type {
   CollectorStatus,
   ConnectionState,
+  CurrentLapTelemetrySeries,
   TelemetrySample,
   TelemetrySessionSummary,
   TelemetryTraceSeries,
   TelemetrySource,
 } from "../types/telemetry";
+import { parseDurationSeconds } from "../utils/telemetryFormat";
 
 const TRACE_HISTORY_LIMIT = 180;
+const MAX_LAP_TRACE_POINTS = 720;
 const SESSION_REFRESH_INTERVAL_MS = 5000;
+
+const EMPTY_LAP_TRACE: CurrentLapTelemetrySeries = {
+  sessionId: null,
+  lapNumber: null,
+  points: [],
+};
 
 type DashboardSnapshot = {
   collectorStatus: CollectorStatus;
@@ -161,6 +170,22 @@ function appendTraceValue(history: number[], nextValue: number) {
   return nextHistory.slice(Math.max(0, nextHistory.length - TRACE_HISTORY_LIMIT));
 }
 
+function appendLapTracePoint(
+  points: CurrentLapTelemetrySeries["points"],
+  nextPoint: CurrentLapTelemetrySeries["points"][number],
+) {
+  const lastPoint = points.at(-1) ?? null;
+
+  if (
+    lastPoint !== null &&
+    Math.abs(lastPoint.elapsedSeconds - nextPoint.elapsedSeconds) < 0.001
+  ) {
+    return [...points.slice(0, -1), nextPoint];
+  }
+
+  return [...points, nextPoint].slice(-MAX_LAP_TRACE_POINTS);
+}
+
 export function useTelemetryDashboard() {
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("connecting");
@@ -178,6 +203,8 @@ export function useTelemetryDashboard() {
     brake: [],
     steering: [],
   });
+  const [lapTrace, setLapTrace] =
+    useState<CurrentLapTelemetrySeries>(EMPTY_LAP_TRACE);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<DashboardAlert | null>(null);
 
@@ -228,6 +255,10 @@ export function useTelemetryDashboard() {
     setCollectorStatus(status);
     setApiAvailability("online");
 
+    if (!status.isRunning || status.runMode === "Idle") {
+      setLapTrace(EMPTY_LAP_TRACE);
+    }
+
     if (status.lastError) {
       setError(createDashboardAlert("collectorRuntime", status.lastError).alert);
       return;
@@ -256,6 +287,34 @@ export function useTelemetryDashboard() {
         (nextSample.driverInput.steering ?? 0) * 100,
       ),
     }));
+
+    const elapsedSeconds = parseDurationSeconds(nextSample.lap.currentLapTime);
+    const speedKph = nextSample.vehicle.speedKph;
+
+    if (elapsedSeconds === null || speedKph === null || speedKph === undefined) {
+      return;
+    }
+
+    setLapTrace((current) => {
+      const lastPoint = current.points.at(-1) ?? null;
+      const nextLapNumber = nextSample.lap.lapNumber ?? null;
+      const shouldReset =
+        current.sessionId !== nextSample.session.id ||
+        current.lapNumber !== nextLapNumber ||
+        (lastPoint !== null && elapsedSeconds + 0.05 < lastPoint.elapsedSeconds);
+      const nextPoint = {
+        elapsedSeconds,
+        value: speedKph,
+      };
+
+      return {
+        sessionId: nextSample.session.id,
+        lapNumber: nextLapNumber,
+        points: shouldReset
+          ? [nextPoint]
+          : appendLapTracePoint(current.points, nextPoint),
+      };
+    });
   });
 
   useEffect(() => {
@@ -320,6 +379,7 @@ export function useTelemetryDashboard() {
   const startCollector = async () => {
     setIsBusy(true);
     setError(null);
+    setLapTrace(EMPTY_LAP_TRACE);
 
     try {
       const [nextStatus, nextGames] = await Promise.all([
@@ -341,6 +401,7 @@ export function useTelemetryDashboard() {
   const stopCollector = async () => {
     setIsBusy(true);
     setError(null);
+    setLapTrace(EMPTY_LAP_TRACE);
 
     try {
       const nextStatus = await stopCollectorRequest(collectorStatus?.runMode);
@@ -365,6 +426,7 @@ export function useTelemetryDashboard() {
   const startReplay = async (sessionId: string) => {
     setIsBusy(true);
     setError(null);
+    setLapTrace(EMPTY_LAP_TRACE);
 
     try {
       setCollectorStatus(await startReplayRequest(sessionId));
@@ -386,6 +448,7 @@ export function useTelemetryDashboard() {
     games,
     sessions,
     traceSeries,
+    lapTrace,
     isBusy,
     error,
     refreshDashboard,

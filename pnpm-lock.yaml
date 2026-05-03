@@ -6,7 +6,9 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  src/SectorForge.Web:
     dependencies:
       '@microsoft/signalr':
         specifier: ^10.0.0

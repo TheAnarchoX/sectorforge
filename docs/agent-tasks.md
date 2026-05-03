@@ -199,7 +199,7 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-031: Improve Dashboard Empty And Error States
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend polish
 - Goal: Make disconnected API, stopped collector, and no-session states feel deliberate.
 - Suggested files: `src/SectorForge.Web/src/App.tsx`, `src/SectorForge.Web/src/App.css`
@@ -211,7 +211,7 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-032: Add Session Detail View
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend feature
 - Goal: Let users inspect a stored session from the recent captures list.
 - Suggested files: `src/SectorForge.Web/src/*`, `src/SectorForge.Api/Program.cs` if API shape needs small additions
@@ -223,7 +223,7 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-033: Add Lap Telemetry Chart
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend feature
 - Goal: Add a simple time-series chart of lap speed or another telemetry value.
 - Suggested files: `src/SectorForge.Web/src/*`, `src/SectorForge.Api /Program.cs` if API shape needs small additions
@@ -281,6 +281,54 @@ This backlog is written for coding agents and human contributors. Each task is i
   - Code coverage reports are generated for the frontend and can be viewed locally.
   - CI workflow is updated to run frontend tests and fail if coverage falls below the target.
   - A baseline coverage percentage is established and documented.
+
+## Intermezzo: README Polish
+
+### SFI-001: Add Screenshots And GIFs To README
+
+- Status: `ready`
+- Type: documentation
+- Goal: Add visual examples of the dashboard and features to the README to help users understand what the project does at a glance. This can include screenshots of the dashboard, charts, and session details, as well as short GIFs demonstrating live telemetry updates and replay mode.
+- Suggested files: `README.md`, `docs/assets/*`
+- Acceptance criteria:
+  - README includes at least one screenshot of the dashboard showing live telemetry.
+  - README includes a GIF demonstrating live updates or replay mode.
+  - Images are optimized for web and stored in the repo under `docs/assets/` or a similar folder.
+  - Visuals enhance the README without making it too long or cluttered.
+
+### SFI-002: Add Setup Notes To README
+
+- Status: `ready`
+- Type: documentation
+- Goal: Add a setup section to the README that provides clear instructions for getting the project up and running locally. This should include prerequisites, installation steps, and how to start the development environment. Clear setup instructions will help new contributors get started quickly and reduce friction.
+- Suggested files: `README.md`
+- Acceptance criteria:
+  - README has a "Setup" section with clear, step-by-step instructions for local development.
+  - Instructions cover prerequisites (e.g., .NET SDK, Node.js), installation steps, and how to start the dev environment.
+  - Setup instructions are tested to ensure they work as written.
+  
+### SFI-003: Add Architecture Overview To README
+
+- Status: `ready`
+- Type: documentation
+- Goal: Add an architecture overview section to the README that explains the high-level structure of the project, including the different components (collector, API, frontend, adapters) and how they interact. This will help new contributors understand the overall design and where to focus their efforts when working on different features.
+- Suggested files: `README.md`, architecture diagrams if needed
+- Acceptance criteria:
+  - README includes an "Architecture Overview" section that describes the main components of the project.
+  - The overview explains how the collector, API, frontend, and adapters interact with each other.
+  - Diagrams or visuals are included if they help clarify the architecture.
+
+### SFI-004: Add (CI) Badges To README
+
+- Status: `ready`
+- Type: documentation
+- Goal: Add badges to the README for CI status, code coverage, and license to provide at-a-glance information about the project health and licensing. This is a common practice in open-source projects and can help build trust with potential contributors.
+- Suggested files: `README.md`
+- Acceptance criteria:
+  - README includes a badge for CI build status that reflects the current state of the default branch.
+  - README includes a badge for code coverage that shows the current coverage percentage.
+  - README includes a badge for the chosen license.
+  - Badges are placed prominently at the top of the README.
 
 ## Priority 4: Real Game Adapter Path
 
