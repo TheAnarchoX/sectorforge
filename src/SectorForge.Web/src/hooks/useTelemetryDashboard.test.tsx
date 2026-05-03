@@ -236,10 +236,12 @@ describe("useTelemetryDashboard", () => {
     });
 
     // Sample, trace, and lap-trace updates are batched into a single React
-    // commit at COMMIT_INTERVAL_MS (50ms). Advance the throttled commit timer
-    // so the snapshot lands in state before assertions.
+    // commit at COMMIT_INTERVAL_MS (100ms) and then flushed on the next
+    // animation frame. Advance the timer and pump rAF so the snapshot lands
+    // in state before assertions.
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(50);
+      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(16);
     });
 
     expect(result.current.error).toBeNull();
