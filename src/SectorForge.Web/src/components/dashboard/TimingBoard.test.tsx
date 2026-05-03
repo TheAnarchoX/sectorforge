@@ -223,6 +223,48 @@ describe("TimingBoard", () => {
     expect(screen.getByText("Sample 2/3")).toBeInTheDocument();
   });
 
+  it("reloads selected-session details when the selected capture summary changes", async () => {
+    const user = userEvent.setup();
+    const session = createSessionSummary();
+    const updatedSession = createSessionSummary({
+      id: session.id,
+      sampleCount: session.sampleCount + 240,
+      lastSeenAt: "2026-05-03T12:45:00.000Z",
+    });
+    const sessionDetails = createSessionDetails();
+
+    timingBoardApiMock.getSessionDetails.mockResolvedValue(sessionDetails);
+
+    const rendered = renderTimingBoard({ sessions: [session], sample: null });
+
+    await user.click(getSessionCaptureButton("Silverstone"));
+    await screen.findByText(/recorded laps/i);
+
+    expect(timingBoardApiMock.getSessionDetails).toHaveBeenCalledTimes(1);
+
+    rendered.rerender(
+      <TimingBoard
+        collectorStatus={createCollectorStatus()}
+        sample={null}
+        activeSource={createTelemetrySource()}
+        sessions={[updatedSession]}
+        isApiOffline={false}
+        isBusy={false}
+        activeReplaySessionId={null}
+        onStartReplay={rendered.onStartReplay}
+        onStopReplay={rendered.onStopReplay}
+        onReplayStateChange={rendered.onReplayStateChange}
+        onSessionDeleted={rendered.onSessionDeleted}
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(timingBoardApiMock.getSessionDetails).toHaveBeenCalledTimes(2);
+  });
+
   it("shows a detail error when capture data cannot be loaded", async () => {
     const user = userEvent.setup();
 

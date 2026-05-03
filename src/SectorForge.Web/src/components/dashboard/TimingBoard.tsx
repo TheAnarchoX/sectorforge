@@ -50,6 +50,7 @@ function isAbortError(error: unknown) {
 }
 
 const REPLAY_TRACE_WINDOW = 180;
+const REPLAY_LAP_TRACE_WINDOW = 720;
 const REPLAY_STEP_MS_FALLBACK = 60;
 const REPLAY_STEP_MS_MIN = 35;
 const REPLAY_STEP_MS_MAX = 140;
@@ -116,9 +117,31 @@ function buildReplayLapTrace(
     };
   }
 
-  const points = samples.slice(0, clampedIndex + 1).flatMap((nextSample) => {
-    if (nextSample.lap.lapNumber !== currentLapNumber) {
-      return [];
+  let lapStartIndex = clampedIndex;
+
+  while (lapStartIndex > 0) {
+    const previousLapNumber = samples[lapStartIndex - 1]?.lap.lapNumber ?? null;
+    if (previousLapNumber !== currentLapNumber) {
+      break;
+    }
+
+    lapStartIndex -= 1;
+  }
+
+  const points = [] as CurrentLapTelemetrySeries["points"];
+  const visibleStartIndex = Math.max(
+    lapStartIndex,
+    clampedIndex + 1 - REPLAY_LAP_TRACE_WINDOW,
+  );
+
+  for (
+    let sampleCursor = visibleStartIndex;
+    sampleCursor <= clampedIndex;
+    sampleCursor += 1
+  ) {
+    const nextSample = samples[sampleCursor];
+    if (nextSample?.lap.lapNumber !== currentLapNumber) {
+      continue;
     }
 
     const elapsedSeconds = parseDurationSeconds(nextSample.lap.currentLapTime);
@@ -129,17 +152,30 @@ function buildReplayLapTrace(
       speedKph === null ||
       speedKph === undefined
     ) {
-      return [];
+      continue;
     }
 
-    return [{ elapsedSeconds, value: speedKph }];
-  });
+    points.push({ elapsedSeconds, value: speedKph });
+  }
 
   return {
     sessionId: currentSample.session.id,
     lapNumber: currentLapNumber,
     points,
   };
+}
+
+function getSessionSpeedMax(samples: TelemetrySample[]) {
+  let maxSpeedKph = 320;
+
+  for (const nextSample of samples) {
+    const speedKph = nextSample.vehicle.speedKph ?? 0;
+    if (speedKph > maxSpeedKph) {
+      maxSpeedKph = speedKph;
+    }
+  }
+
+  return maxSpeedKph;
 }
 
 function getReplayDelayMs(samples: TelemetrySample[], sampleIndex: number) {
@@ -406,12 +442,21 @@ export function TimingBoard({
     visibleReplayIndex,
   ]);
 
-  const sessionSpeedValues =
-    visibleSession?.samples.map(
-      (nextSample) => nextSample.vehicle.speedKph ?? 0,
-    ) ?? [];
+  const sessionSpeedValues = useMemo(
+    () =>
+      visibleSession?.samples.map(
+        (nextSample) => nextSample.vehicle.speedKph ?? 0,
+      ) ?? [],
+    [visibleSession],
+  );
+  const sessionSpeedMax = useMemo(
+    () =>
+      visibleSession === null
+        ? 320
+        : getSessionSpeedMax(visibleSession.samples),
+    [visibleSession],
+  );
   const latestStoredSample = visibleSession?.samples.at(-1) ?? null;
-  const sessionSpeedMax = Math.max(320, ...sessionSpeedValues, 1);
   const overviewSample = isReplaySessionActive
     ? visibleReplaySample
     : visibleSession !== null

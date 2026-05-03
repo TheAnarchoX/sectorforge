@@ -16,8 +16,20 @@ const dashboardHookMock = vi.hoisted(() => ({
   current: null as ReturnType<typeof createDashboardState> | null,
 }));
 
+const memoryMonitorMock = vi.hoisted(() => ({
+  current: null as {
+    title: string;
+    message: string;
+    tone: "warning";
+  } | null,
+}));
+
 vi.mock("./hooks/useTelemetryDashboard", () => ({
   useTelemetryDashboard: () => dashboardHookMock.current,
+}));
+
+vi.mock("./hooks/useDevelopmentMemoryMonitor", () => ({
+  useDevelopmentMemoryMonitor: () => memoryMonitorMock.current,
 }));
 
 function createDashboardState(
@@ -65,6 +77,7 @@ function createDashboardState(
 describe("App", () => {
   beforeEach(() => {
     dashboardHookMock.current = createDashboardState();
+    memoryMonitorMock.current = null;
   });
 
   it("switches workspaces and wires top-level actions in the idle state", async () => {
@@ -135,5 +148,19 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: /compare/i }));
     await user.click(screen.getByRole("button", { name: "Open Sessions" }));
     expect(screen.getByText("Stored sessions")).toBeInTheDocument();
+  });
+
+  it("renders development memory warnings in the shared notice area", () => {
+    memoryMonitorMock.current = {
+      title: "High frontend memory usage",
+      message: "JS heap is using 240 MB of 320 MB.",
+      tone: "warning",
+    };
+
+    render(<App />);
+
+    expect(screen.getByText("High frontend memory usage")).toBeInTheDocument();
+    expect(screen.getByText(/240 MB of 320 MB/i)).toBeInTheDocument();
+    expect(screen.getByText("Collector idle")).toBeInTheDocument();
   });
 });

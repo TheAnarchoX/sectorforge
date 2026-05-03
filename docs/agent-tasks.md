@@ -287,10 +287,11 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-038: Frontend Memory Usage Monitoring And Optimization To prevent Leaks and Out-of-Memory Issues During Long Sessions
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend resilience
 - Goal: Implement memory usage monitoring in the frontend and optimize any identified leaks or inefficiencies. This will help ensure the dashboard remains responsive and stable during long driving sessions, especially when replaying stored sessions with large amounts of telemetry data.
 - Suggested files: `src/SectorForge.Web/src/*`, docs
+- Notes: Added a dev-only frontend heap monitor on 2026-05-03 that surfaces high-usage warnings when Chromium exposes `performance.memory`. The Sessions workspace now releases hidden capture detail payloads unless replay is actively using them, and replay/session trace derivation no longer rescans or spreads whole-session sample arrays on every update.
 - Acceptance criteria:
   - Memory usage is monitored in development builds, with warnings for high usage.
   - Any identified memory leaks or inefficiencies are addressed and optimized.

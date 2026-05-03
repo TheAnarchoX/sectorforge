@@ -14,6 +14,7 @@ import {
   WorkspaceRail,
   type Workspace,
 } from "./components/dashboard/WorkspaceRail";
+import { useDevelopmentMemoryMonitor } from "./hooks/useDevelopmentMemoryMonitor";
 import { useTelemetryDashboard } from "./hooks/useTelemetryDashboard";
 import type { DashboardReplayState, TelemetrySource } from "./types/telemetry";
 import "./App.css";
@@ -23,6 +24,7 @@ function App() {
   const [replayState, setReplayState] = useState<DashboardReplayState | null>(
     null,
   );
+  const memoryNotice = useDevelopmentMemoryMonitor();
   const {
     connectionState,
     apiAvailability,
@@ -57,6 +59,7 @@ function App() {
       collectorStatus?.latestSample?.sessionId ??
       null)
     : null;
+  const shouldRenderTimingBoard = workspace === "sessions" || isReplayRunning;
   const replayNotice = isReplayRunning
     ? [
         {
@@ -71,7 +74,7 @@ function App() {
         },
       ]
     : [];
-  const stateNotices = isApiOffline
+  const runtimeNotices = isApiOffline
     ? []
     : replayNotice.length > 0
       ? replayNotice
@@ -87,6 +90,8 @@ function App() {
             },
           ]
         : [];
+  const stateNotices =
+    memoryNotice === null ? runtimeNotices : [memoryNotice, ...runtimeNotices];
 
   const liveWorkspace = (
     <section className="pitwall-console" aria-label="Pitwall console">
@@ -197,28 +202,28 @@ function App() {
           />
         )}
 
-        {/* TimingBoard remains mounted so replay state survives workspace
-            switches; only displayed when Sessions workspace is active. */}
-        <div
-          className={
-            workspace === "sessions" ? undefined : "timing-board-hidden"
-          }
-          aria-hidden={workspace !== "sessions"}
-        >
-          <TimingBoard
-            collectorStatus={collectorStatus}
-            sample={displaySample}
-            activeSource={displaySource}
-            sessions={sessions}
-            isApiOffline={isApiOffline}
-            isBusy={isBusy}
-            activeReplaySessionId={activeReplaySessionId}
-            onStartReplay={startReplay}
-            onStopReplay={stopCollector}
-            onReplayStateChange={setReplayState}
-            onSessionDeleted={() => void refreshSessions()}
-          />
-        </div>
+        {shouldRenderTimingBoard && (
+          <div
+            className={
+              workspace === "sessions" ? undefined : "timing-board-hidden"
+            }
+            aria-hidden={workspace !== "sessions"}
+          >
+            <TimingBoard
+              collectorStatus={collectorStatus}
+              sample={displaySample}
+              activeSource={displaySource}
+              sessions={sessions}
+              isApiOffline={isApiOffline}
+              isBusy={isBusy}
+              activeReplaySessionId={activeReplaySessionId}
+              onStartReplay={startReplay}
+              onStopReplay={stopCollector}
+              onReplayStateChange={setReplayState}
+              onSessionDeleted={() => void refreshSessions()}
+            />
+          </div>
+        )}
       </div>
     </main>
   );
