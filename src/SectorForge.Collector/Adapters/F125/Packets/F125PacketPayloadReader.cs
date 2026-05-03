@@ -110,7 +110,9 @@ public sealed class F125SessionPacketReader : IF125PacketPayloadReader
             WeatherCode: payload[0],
             TrackTemperatureC: F125PacketLayout.ReadSignedByte(payload[1]),
             AirTemperatureC: F125PacketLayout.ReadSignedByte(payload[2]),
+            TotalLaps: payload[3],
             TrackLengthMeters: BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(4, sizeof(ushort))),
+            SessionTypeCode: payload[6],
             TrackId: F125PacketLayout.ReadSignedByte(payload[7]),
             SessionTimeLeft: TimeSpan.FromSeconds(BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(9, sizeof(ushort)))),
             SessionDuration: TimeSpan.FromSeconds(BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(11, sizeof(ushort)))),
@@ -160,26 +162,26 @@ public sealed class F125LapDataPacketReader : IF125PacketPayloadReader
 
         return new F125PlayerLapData(
             CarIndex: carIndex,
-            LapNumber: payload[31],
+            LapNumber: payload[33],
             CurrentLapTime: TimeSpan.FromMilliseconds(currentLapTime),
             LastLapTime: F125PacketLayout.ReadMilliseconds(lastLapTime),
             BestLapTime: null,
-            Position: payload[30],
-            SectorIndex: payload[34],
-            LapDistanceMeters: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(18, sizeof(float))),
+            Position: payload[32],
+            SectorIndex: payload[36],
+            LapDistanceMeters: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(20, sizeof(float))),
             Sector1Time: F125PacketLayout.ReadSectorTime(payload, millisecondsOffset: 8, minutesOffset: 10),
             Sector2Time: F125PacketLayout.ReadSectorTime(payload, millisecondsOffset: 11, minutesOffset: 13),
-            DeltaToCarInFront: F125PacketLayout.ReadMilliseconds(BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(14, sizeof(ushort)))),
-            DeltaToRaceLeader: F125PacketLayout.ReadMilliseconds(BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(16, sizeof(ushort)))),
-            TotalDistanceMeters: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(22, sizeof(float))),
-            IsValid: payload[35] == 0,
-            PitStatusCode: payload[32],
-            PitStopCount: payload[33],
-            GridPosition: payload[41],
-            ResultStatusCode: payload[43],
-            PenaltiesSeconds: payload[36],
-            WarningsCount: payload[37],
-            CornersCut: payload[38]);
+            DeltaToCarInFront: F125PacketLayout.ReadSectorTime(payload, millisecondsOffset: 14, minutesOffset: 16),
+            DeltaToRaceLeader: F125PacketLayout.ReadSectorTime(payload, millisecondsOffset: 17, minutesOffset: 19),
+            TotalDistanceMeters: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(24, sizeof(float))),
+            IsValid: payload[37] == 0,
+            PitStatusCode: payload[34],
+            PitStopCount: payload[35],
+            GridPosition: payload[43],
+            ResultStatusCode: payload[45],
+            PenaltiesSeconds: payload[38],
+            WarningsCount: payload[39],
+            CornersCut: payload[40]);
     }
 }
 
@@ -258,7 +260,11 @@ public sealed class F125CarTelemetryPacketReader : IF125PacketPayloadReader
             Gear: unchecked((sbyte)playerPayload[15]),
             Rpm: BinaryPrimitives.ReadUInt16LittleEndian(playerPayload.Slice(16, sizeof(ushort))),
             DrsActive: playerPayload[18] != 0,
-            EngineTemperatureC: BinaryPrimitives.ReadUInt16LittleEndian(playerPayload.Slice(38, sizeof(ushort))));
+            EngineTemperatureC: BinaryPrimitives.ReadUInt16LittleEndian(playerPayload.Slice(38, sizeof(ushort))),
+            BrakeTemperaturesC: F125PacketLayout.ReadUInt16WheelTelemetry(playerPayload, 22),
+            TyreSurfaceTemperaturesC: F125PacketLayout.ReadByteWheelTelemetry(playerPayload, 30),
+            TyreInnerTemperaturesC: F125PacketLayout.ReadByteWheelTelemetry(playerPayload, 34),
+            TyrePressuresPsi: F125PacketLayout.ReadSingleWheelTelemetry(playerPayload, 40));
 
         return F125PacketPayloadReadResult.Parsed(new F125CarTelemetryPacket(header, payload.ToArray(), playerCar));
     }
@@ -464,12 +470,12 @@ internal static class F125PacketLayout
 {
     public const int CarCount = 22;
     public const int CarMotionDataSize = 60;
-    public const int LapDataSize = 50;
+    public const int LapDataSize = 57;
     public const int CarTelemetryDataSize = 60;
     public const int CarStatusDataSize = 55;
     public const int CarDamageDataSize = 42;
-    public const int ParticipantDataSize = 60;
-    public const int ParticipantNameLength = 48;
+    public const int ParticipantDataSize = 57;
+    public const int ParticipantNameLength = 32;
     public const int SessionWeatherForecastCountOffset = 126;
     public const int SessionWeatherForecastStartOffset = 127;
     public const int WeatherForecastSampleSize = 8;
@@ -538,6 +544,27 @@ internal static class F125PacketLayout
 
     public static sbyte ReadSignedByte(byte value)
         => unchecked((sbyte)value);
+
+    public static F125WheelTelemetry ReadUInt16WheelTelemetry(ReadOnlySpan<byte> payload, int offset)
+        => new(
+            RearLeft: BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(offset, sizeof(ushort))),
+            RearRight: BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(offset + 2, sizeof(ushort))),
+            FrontLeft: BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(offset + 4, sizeof(ushort))),
+            FrontRight: BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(offset + 6, sizeof(ushort))));
+
+    public static F125WheelTelemetry ReadByteWheelTelemetry(ReadOnlySpan<byte> payload, int offset)
+        => new(
+            RearLeft: payload[offset],
+            RearRight: payload[offset + 1],
+            FrontLeft: payload[offset + 2],
+            FrontRight: payload[offset + 3]);
+
+    public static F125WheelTelemetry ReadSingleWheelTelemetry(ReadOnlySpan<byte> payload, int offset)
+        => new(
+            RearLeft: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(offset, sizeof(float))),
+            RearRight: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(offset + 4, sizeof(float))),
+            FrontLeft: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(offset + 8, sizeof(float))),
+            FrontRight: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(offset + 12, sizeof(float))));
 
     public static F125PacketReadFailure Truncated(byte packetId, int actualBytes, int requiredBytes)
         => new(

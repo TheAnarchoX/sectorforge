@@ -8,7 +8,25 @@
       "preLaunchTask": "dotnet: build api",
       "program": "${workspaceFolder}/src/SectorForge.Api/bin/Debug/net10.0/SectorForge.Api.dll",
       "args": ["--Collector:AutoStart=true", "--Collector:AdapterId=fake"],
-      "cwd": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}/src/SectorForge.Api",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:5221"
+      }
+    },
+    {
+      "name": "API: Debug real adapters (no autostart)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "dotnet: build api",
+      "program": "${workspaceFolder}/src/SectorForge.Api/bin/Debug/net10.0/SectorForge.Api.dll",
+      "args": [
+        "--Collector:AutoStart=false",
+        "--Adapters:fake:Enabled=false",
+        "--Adapters:f1-25-udp:Enabled=true"
+      ],
+      "cwd": "${workspaceFolder}/src/SectorForge.Api",
       "stopAtEntry": false,
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development",
@@ -36,6 +54,13 @@
       "url": "http://localhost:5173",
       "webRoot": "${workspaceFolder}/src/SectorForge.Web",
       "timeout": 30000
+    },
+    {
+      "name": "Web: External browser against local API",
+      "type": "node-terminal",
+      "request": "launch",
+      "preLaunchTask": "web: dev server",
+      "command": "powershell -NoProfile -Command \"Start-Process 'http://localhost:5173'\""
     }
   ],
   "compounds": [
@@ -44,6 +69,14 @@
       "configurations": [
         "API: Debug fake telemetry",
         "Web: Embedded browser against local API"
+      ],
+      "stopAll": true
+    },
+    {
+      "name": "SectorForge: API (real adapters) + Web",
+      "configurations": [
+        "API: Debug real adapters (no autostart)",
+        "Web: External browser against local API"
       ],
       "stopAll": true
     }

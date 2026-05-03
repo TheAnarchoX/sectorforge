@@ -10,6 +10,17 @@ public sealed class F125Normalizer
     private const string AdapterId = "f1-25-udp";
     private const string DisplayName = "F1 25 UDP";
     private const string InputKind = "UDP packets";
+    private readonly TimeProvider _timeProvider;
+
+    public F125Normalizer()
+        : this(TimeProvider.System)
+    {
+    }
+
+    public F125Normalizer(TimeProvider timeProvider)
+    {
+        _timeProvider = timeProvider;
+    }
 
     public TelemetrySample Normalize(
         F125MotionPacket motion,
@@ -35,11 +46,13 @@ public sealed class F125Normalizer
         var header = carTelemetry.Header;
         var sessionId = CreateSessionId(header.SessionUid);
         var sessionElapsed = TimeSpan.FromSeconds(header.SessionTime);
-        var timestamp = DateTimeOffset.UnixEpoch + sessionElapsed;
+        var timestamp = _timeProvider.GetUtcNow();
         var playerCarIndex = header.PlayerCarIndex;
         F125SessionHistoryPacket? playerHistoryPacket = null;
         packets.SessionHistoryByCarIndex?.TryGetValue(playerCarIndex, out playerHistoryPacket);
         var playerHistory = playerHistoryPacket?.History;
+        var sessionType = session is null ? null : MapSessionType(session.SessionTypeCode);
+        WeatherKind? weather = session is null ? null : MapWeather(session.WeatherCode);
 
         return new TelemetrySample(
             SessionId: sessionId,
@@ -54,8 +67,8 @@ public sealed class F125Normalizer
                 Status: TelemetrySourceStatus.Running),
             Session: new SessionState(
                 Id: sessionId,
-                Name: null,
-                SessionType: null,
+                Name: BuildSessionName(session, sessionType),
+                SessionType: sessionType,
                 StartedAt: timestamp - sessionElapsed,
                 IsActive: true),
             Lap: new LapState(
@@ -93,10 +106,22 @@ public sealed class F125Normalizer
                 Pitch: motion.PlayerCar.Pitch,
                 Roll: motion.PlayerCar.Roll),
             Tyres: new TyreState(
-                FrontLeft: null,
-                FrontRight: null,
-                RearLeft: null,
-                RearRight: null,
+                FrontLeft: WheelTemperature(
+                    carTelemetry.PlayerCar.TyreSurfaceTemperaturesC.FrontLeft,
+                    carTelemetry.PlayerCar.TyreInnerTemperaturesC.FrontLeft),
+                FrontRight: WheelTemperature(
+                    carTelemetry.PlayerCar.TyreSurfaceTemperaturesC.FrontRight,
+                    carTelemetry.PlayerCar.TyreInnerTemperaturesC.FrontRight),
+                RearLeft: WheelTemperature(
+                    carTelemetry.PlayerCar.TyreSurfaceTemperaturesC.RearLeft,
+                    carTelemetry.PlayerCar.TyreInnerTemperaturesC.RearLeft),
+                RearRight: WheelTemperature(
+                    carTelemetry.PlayerCar.TyreSurfaceTemperaturesC.RearRight,
+                    carTelemetry.PlayerCar.TyreInnerTemperaturesC.RearRight),
+                FrontLeftPressurePsi: carTelemetry.PlayerCar.TyrePressuresPsi.FrontLeft,
+                FrontRightPressurePsi: carTelemetry.PlayerCar.TyrePressuresPsi.FrontRight,
+                RearLeftPressurePsi: carTelemetry.PlayerCar.TyrePressuresPsi.RearLeft,
+                RearRightPressurePsi: carTelemetry.PlayerCar.TyrePressuresPsi.RearRight,
                 Compound: carStatus is null
                     ? null
                     : MapTyreCompound(carStatus.VisualTyreCompoundCode, carStatus.ActualTyreCompoundCode),
@@ -106,24 +131,24 @@ public sealed class F125Normalizer
                 RearLeftWear: carDamage is null ? null : new WheelWearState(carDamage.RearLeftTyreWearPercent),
                 RearRightWear: carDamage is null ? null : new WheelWearState(carDamage.RearRightTyreWearPercent)),
             Brakes: new BrakeState(
-                FrontLeftTemperatureC: null,
-                FrontRightTemperatureC: null,
-                RearLeftTemperatureC: null,
-                RearRightTemperatureC: null),
+                FrontLeftTemperatureC: carTelemetry.PlayerCar.BrakeTemperaturesC.FrontLeft,
+                FrontRightTemperatureC: carTelemetry.PlayerCar.BrakeTemperaturesC.FrontRight,
+                RearLeftTemperatureC: carTelemetry.PlayerCar.BrakeTemperaturesC.RearLeft,
+                RearRightTemperatureC: carTelemetry.PlayerCar.BrakeTemperaturesC.RearRight),
             Fuel: new FuelState(
                 RemainingLiters: carStatus?.FuelInTankLiters,
                 CapacityLiters: carStatus?.FuelCapacityLiters,
                 LitersPerLapEstimate: EstimateLitersPerLap(carStatus),
                 LapsRemainingEstimate: EstimateLapsRemaining(carStatus)),
             Track: new TrackState(
-                TrackName: null,
+                TrackName: MapTrackName(session?.TrackId),
                 TrackTemperatureC: session?.TrackTemperatureC,
                 AirTemperatureC: session?.AirTemperatureC,
-                Weather: null,
+                Weather: weather is null ? null : MapWeatherName(weather.Value),
                 TrackId: session?.TrackId.ToString(CultureInfo.InvariantCulture),
                 TrackLengthMeters: session?.TrackLengthMeters,
                 RainPercent: CurrentRainPercent(session),
-                WeatherEnum: session is null ? null : MapWeather(session.WeatherCode),
+                WeatherEnum: weather,
                 SafetyCarStatus: session is null ? null : MapSafetyCarStatus(session.SafetyCarStatusCode),
                 FormationLap: session is null ? null : session.SafetyCarStatusCode == 3),
             DriverInput: new DriverInputState(
@@ -164,6 +189,97 @@ public sealed class F125Normalizer
             1 => PitStatus.Pitting,
             2 => PitStatus.InPitArea,
             _ => PitStatus.Unknown
+        };
+
+    private static WheelTemperatureState WheelTemperature(double surfaceC, double innerC)
+        => new(SurfaceC: surfaceC, CoreC: innerC, InnerC: innerC);
+
+    private static string? BuildSessionName(F125SessionData? session, string? sessionType)
+    {
+        if (session is null)
+        {
+            return null;
+        }
+
+        if (session.TotalLaps > 0 && string.Equals(sessionType, "Race", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"{session.TotalLaps.ToString(CultureInfo.InvariantCulture)}-lap race";
+        }
+
+        return sessionType;
+    }
+
+    private static string? MapTrackName(int? trackId)
+        => trackId switch
+        {
+            0 => "Melbourne",
+            1 => "Paul Ricard",
+            2 => "Shanghai",
+            3 => "Sakhir",
+            4 => "Catalunya",
+            5 => "Monaco",
+            6 => "Montreal",
+            7 => "Silverstone",
+            8 => "Hockenheim",
+            9 => "Hungaroring",
+            10 => "Spa-Francorchamps",
+            11 => "Monza",
+            12 => "Singapore",
+            13 => "Suzuka",
+            14 => "Abu Dhabi",
+            15 => "Circuit of The Americas",
+            16 => "Interlagos",
+            17 => "Red Bull Ring",
+            18 => "Sochi",
+            19 => "Mexico City",
+            20 => "Baku",
+            25 => "Hanoi",
+            26 => "Zandvoort",
+            27 => "Imola",
+            28 => "Portimao",
+            29 => "Jeddah",
+            30 => "Miami",
+            31 => "Las Vegas",
+            32 => "Losail",
+            null or < 0 => null,
+            _ => $"Track {trackId.Value.ToString(CultureInfo.InvariantCulture)}"
+        };
+
+    private static string? MapSessionType(byte value)
+        => value switch
+        {
+            1 => "Practice 1",
+            2 => "Practice 2",
+            3 => "Practice 3",
+            4 => "Short practice",
+            5 => "Qualifying 1",
+            6 => "Qualifying 2",
+            7 => "Qualifying 3",
+            8 => "Short qualifying",
+            9 => "One-shot qualifying",
+            10 => "Sprint shootout 1",
+            11 => "Sprint shootout 2",
+            12 => "Sprint shootout 3",
+            13 => "Short sprint shootout",
+            14 => "One-shot sprint shootout",
+            15 => "Race",
+            16 => "Race 2",
+            17 => "Race 3",
+            18 => "Time trial",
+            0 => null,
+            _ => $"Session {value.ToString(CultureInfo.InvariantCulture)}"
+        };
+
+    private static string MapWeatherName(WeatherKind weather)
+        => weather switch
+        {
+            WeatherKind.Clear => "Clear",
+            WeatherKind.LightCloud => "Light cloud",
+            WeatherKind.Overcast => "Overcast",
+            WeatherKind.LightRain => "Light rain",
+            WeatherKind.HeavyRain => "Heavy rain",
+            WeatherKind.Storm => "Storm",
+            _ => "Unknown"
         };
 
     private static DamageState? BuildDamage(F125CarDamageData? carDamage)

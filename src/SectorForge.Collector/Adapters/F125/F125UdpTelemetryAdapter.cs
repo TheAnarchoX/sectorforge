@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SectorForge.Collector.Adapters.F125.Packets;
 using SectorForge.Core.Telemetry;
@@ -16,17 +17,20 @@ public sealed class F125UdpTelemetryAdapter : ITelemetryAdapter
     private readonly IUdpTelemetryListenerFactory _listenerFactory;
     private readonly F125PacketReader _packetReader;
     private readonly F125Normalizer _normalizer;
+    private readonly ILogger<F125UdpTelemetryAdapter>? _logger;
 
     public F125UdpTelemetryAdapter(
         IOptions<TelemetryAdaptersOptions> adaptersOptions,
         IUdpTelemetryListenerFactory listenerFactory,
         F125PacketReader packetReader,
-        F125Normalizer normalizer)
+        F125Normalizer normalizer,
+        ILogger<F125UdpTelemetryAdapter>? logger = null)
         : this(
             adaptersOptions?.Value.For(AdapterId) ?? throw new ArgumentNullException(nameof(adaptersOptions)),
             listenerFactory,
             packetReader,
-            normalizer)
+            normalizer,
+            logger)
     {
     }
 
@@ -34,12 +38,14 @@ public sealed class F125UdpTelemetryAdapter : ITelemetryAdapter
         TelemetryAdapterOptions options,
         IUdpTelemetryListenerFactory listenerFactory,
         F125PacketReader? packetReader = null,
-        F125Normalizer? normalizer = null)
+        F125Normalizer? normalizer = null,
+        ILogger<F125UdpTelemetryAdapter>? logger = null)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _listenerFactory = listenerFactory ?? throw new ArgumentNullException(nameof(listenerFactory));
         _packetReader = packetReader ?? new F125PacketReader();
         _normalizer = normalizer ?? new F125Normalizer();
+        _logger = logger;
         Source = CreateSource(_options);
     }
 
@@ -52,12 +58,31 @@ public sealed class F125UdpTelemetryAdapter : ITelemetryAdapter
             throw new InvalidOperationException("F1 25 UDP adapter is disabled. Enable Adapters:f1-25-udp:Enabled before selecting it.");
         }
 
-        await using var listener = _listenerFactory.Bind(CreateListenerOptions(_options));
+        var listenerOptions = CreateListenerOptions(_options);
+        _logger?.LogInformation(
+            "Binding F1 25 UDP listener to {BindAddress}:{Port}",
+            listenerOptions.BindAddress,
+            listenerOptions.Port);
+
+        await using var listener = _listenerFactory.Bind(listenerOptions);
+        _logger?.LogInformation("F1 25 UDP listener bound to {LocalEndPoint}", listener.LocalEndPoint);
+
         F125PacketAccumulator? accumulator = null;
+        var loggedFirstDatagram = false;
+        var loggedFirstSample = false;
 
         await foreach (var datagram in listener.ReceiveAsync(cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (!loggedFirstDatagram)
+            {
+                loggedFirstDatagram = true;
+                _logger?.LogInformation(
+                    "Received first F1 25 UDP datagram from {RemoteEndPoint} with {PayloadBytes} bytes",
+                    datagram.RemoteEndPoint,
+                    datagram.Payload.Length);
+            }
 
             var readResult = _packetReader.Read(datagram.Payload.Span);
             if (readResult.Status == F125PacketReadStatus.Skipped)
@@ -79,7 +104,16 @@ public sealed class F125UdpTelemetryAdapter : ITelemetryAdapter
             var packetSet = accumulator.Apply(packet);
             if (packet is F125CarTelemetryPacket && packetSet is not null)
             {
-                yield return _normalizer.Normalize(packetSet);
+                var sample = _normalizer.Normalize(packetSet);
+                if (!loggedFirstSample)
+                {
+                    loggedFirstSample = true;
+                    _logger?.LogInformation(
+                        "Publishing first F1 25 telemetry sample at sequence {Sequence}",
+                        sample.Sequence);
+                }
+
+                yield return sample;
             }
         }
     }

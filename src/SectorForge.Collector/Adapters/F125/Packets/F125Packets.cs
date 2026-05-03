@@ -96,13 +96,25 @@ public sealed record F125PlayerCarTelemetry(
     int Gear,
     double Rpm,
     bool DrsActive,
-    double EngineTemperatureC);
+    double EngineTemperatureC,
+    F125WheelTelemetry BrakeTemperaturesC,
+    F125WheelTelemetry TyreSurfaceTemperaturesC,
+    F125WheelTelemetry TyreInnerTemperaturesC,
+    F125WheelTelemetry TyrePressuresPsi);
+
+public sealed record F125WheelTelemetry(
+    double RearLeft,
+    double RearRight,
+    double FrontLeft,
+    double FrontRight);
 
 public sealed record F125SessionData(
     byte WeatherCode,
     double TrackTemperatureC,
     double AirTemperatureC,
+    int TotalLaps,
     int TrackLengthMeters,
+    byte SessionTypeCode,
     int TrackId,
     TimeSpan SessionTimeLeft,
     TimeSpan SessionDuration,

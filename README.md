@@ -6,18 +6,21 @@
 
 ![SectorForge wordmark](docs/assets/sectorforge-wordmark.svg)
 
-SectorForge is a Windows-first, local-first telemetry and race analysis app for sim racing. The current slice pairs a native .NET collector and local API with SignalR live telemetry, SQLite session storage, replay controls, and a React/Vite dashboard.
+SectorForge is a Windows-first, local-first telemetry and race analysis app for sim racing. The current slice pairs a native .NET collector and local API with SignalR live telemetry, SQLite session storage, replay controls, a React/Vite dashboard, and a config-gated F1 25 UDP beta path.
 
-Docker, WSL, admin rights, and a running sim are not required for the current MVP. The fake adapter starts automatically so contributors can work on the runtime, storage, and UI without needing real game telemetry.
+Docker, WSL, admin rights, and a running sim are not required for the current MVP. The fake adapter starts automatically through the normal dev script so contributors can work on the runtime, storage, and UI without needing real game telemetry. F1 25 UDP can be enabled manually when the game is configured to send telemetry to SectorForge.
 
 ## Quick Look
 
-- Native collector and adapter boundary for UDP, shared memory, plugin, or replay inputs.
+- Native collector and adapter boundary for fake, UDP, shared memory, plugin, or replay inputs.
+- Config-gated F1 25 UDP beta adapter with player-car telemetry and optional session, tyre, ERS, damage, weather, and participant timing channels.
 - Normalized telemetry model in the backend so live, stored, and replay flows share the same data shape.
 - Local SignalR dashboard with live feed, session review, replay, and driving-focused views.
 - SQLite persistence with bounded raw sample retention for long local runs.
 
 ![SectorForge live dashboard](docs/assets/dashboard-live.png)
+
+![SectorForge live telemetry animation](docs/assets/dashboard-live.gif)
 
 ## Setup
 
@@ -83,11 +86,37 @@ The API host reads its runtime configuration from `src\SectorForge.Api\appsettin
 | `Collector:AutoStart` | `false` | Start the collector automatically with `Collector:AdapterId` when the API host boots. |
 | `Collector:AdapterId` | `fake` | Adapter id selected when autostart is enabled. |
 | `Storage:RetainedSampleBlobLimit` | `1800` | Per-session raw sample blob cap; older blobs are pruned, summaries are kept. |
-| `Adapters:<id>:Enabled` | `true` for `fake`, `false` for placeholders | Enable flag per adapter id (e.g. `fake`, `f1-25-udp`, `acc-shared-memory`, `ams2-project-cars`, `lmu-plugin-udp`). |
+| `Adapters:<id>:Enabled` | `true` for `fake`, `false` for real-game adapters | Enable flag per adapter id (e.g. `fake`, `f1-25-udp`, `acc-shared-memory`, `ams2-project-cars`, `lmu-plugin-udp`). |
 | `Adapters:fake:SampleRateHz` | `60` | Fake adapter emit rate in Hertz. |
-| `Adapters:<id>:BindAddress` | `127.0.0.1` for UDP placeholders | UDP/socket bind address for adapters that bind a listener. |
+| `Adapters:<id>:BindAddress` | `127.0.0.1` for UDP adapters | UDP/socket bind address for adapters that bind a listener. |
 | `Adapters:<id>:Port` | adapter-specific (e.g. `20777` for `f1-25-udp`) | UDP/socket port for adapters that bind a listener. |
 | `Adapters:<id>:ReceiveBufferBytes` | OS default | Optional UDP socket receive buffer override. |
+
+### F1 25 UDP Beta
+
+The `f1-25-udp` adapter is implemented but opt-in. It listens for F1 25 UDP packets, publishes normalized player-car samples, and fills optional channel groups when their source packets have arrived: motion and g-force data, lap timing, sector splits, driver flags, tyres, ERS, damage, weather forecast, safety-car/session status, and participant timing.
+
+The adapter stays disabled by default so local development remains game-free. Missing optional packets leave their `TelemetrySample` fields `null`, unsupported packet IDs are skipped, and bind or parse failures surface through collector status instead of crashing the API host. Team and car display names are still generic because the normalized model does not carry F1-specific IDs yet.
+
+For a manual F1 25 run, start the API with the F1 adapter selected and start the dashboard in a second PowerShell window:
+
+```powershell
+$env:ASPNETCORE_URLS = "http://localhost:5221"
+$env:ASPNETCORE_ENVIRONMENT = "Development"
+dotnet run --project .\src\SectorForge.Api\SectorForge.Api.csproj --no-launch-profile -- `
+   --Collector:AutoStart=true `
+   --Collector:AdapterId=f1-25-udp `
+   --Adapters:f1-25-udp:Enabled=true `
+   --Adapters:f1-25-udp:BindAddress=0.0.0.0 `
+   --Adapters:f1-25-udp:Port=20777
+```
+
+```powershell
+$env:VITE_API_BASE_URL = "http://localhost:5221"
+npx --yes pnpm@latest --dir .\src\SectorForge.Web dev --host localhost --port 5173
+```
+
+Configure F1 25 to send UDP telemetry to the machine and port SectorForge is listening on. Use `127.0.0.1` if the game and API are on the same machine; use a LAN address or `0.0.0.0` bind when receiving from another host.
 
 ### Local Development Loop
 
@@ -134,10 +163,10 @@ For the deeper runtime breakdown, see [docs/architecture.md](docs/architecture.m
 | Fake telemetry adapter | Working 60 Hz simulated stream |
 | ASP.NET Core API | Health, games, sessions, collector control, replay control |
 | SignalR hub | Streams normalized telemetry samples |
-| React dashboard | Live feed, session review, replay controls, driver HUD |
+| React dashboard | Live feed, session review, replay controls, driver HUD, F1 25 optional channel panels |
 | SQLite storage | Sessions, lap summaries, raw sample blobs with retention cap |
-| Compare workflow | Placeholder workspace for lap overlay work |
-| F1 25 UDP | Placeholder adapter |
+| Compare workflow | Placeholder workspace; lap-channel API and overlay work queued next |
+| F1 25 UDP | Beta, config-gated; player-car telemetry plus optional packet aggregation |
 | ACC shared memory | Placeholder adapter |
 | AMS2 telemetry | Placeholder adapter |
 | LMU plugin/UDP | Placeholder adapter |
@@ -163,6 +192,8 @@ flowchart TB
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) for local checks and contribution rules.
 - [docs/architecture.md](docs/architecture.md) for runtime flow, storage, and frontend guardrails.
+- [docs/game-adapters.md](docs/game-adapters.md) for adapter status, enablement notes, and limitations.
+- [docs/protocol-notes.md](docs/protocol-notes.md) for protocol references and implementation decisions.
 - [docs/agent-tasks.md](docs/agent-tasks.md) for the scoped backlog.
 - [AGENTS.md](AGENTS.md) for repo-level coding-agent guidance.
 - [tests/coverage/README.md](tests/coverage/README.md) for baseline and threshold details.

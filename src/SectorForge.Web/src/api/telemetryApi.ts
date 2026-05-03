@@ -75,19 +75,24 @@ export async function deleteSession(sessionId: string) {
 }
 
 export function startFakeCollector() {
+  return startCollectorAdapter("fake");
+}
+
+export function startCollectorAdapter(adapterId: string) {
   return requestJson<CollectorStatus>(
     "/api/collector/start",
     "Collector start failed",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ adapterId: "fake" }),
+      body: JSON.stringify({ adapterId }),
     },
   );
 }
 
 export function stopCollector(runMode: TelemetryRunMode | null | undefined) {
-  const endpoint = runMode === "Replay" ? "/api/replay/stop" : "/api/collector/stop";
+  const endpoint =
+    runMode === "Replay" ? "/api/replay/stop" : "/api/collector/stop";
 
   return requestJson<CollectorStatus>(endpoint, "Collector stop failed", {
     method: "POST",

@@ -1,6 +1,10 @@
-import { memo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { Pause, Play, RefreshCw } from "lucide-react";
-import type { ConnectionState, TelemetryRunMode } from "../../types/telemetry";
+import type {
+  ConnectionState,
+  TelemetryRunMode,
+  TelemetrySource,
+} from "../../types/telemetry";
 
 type DashboardHeaderProps = {
   connectionState: ConnectionState;
@@ -12,7 +16,9 @@ type DashboardHeaderProps = {
   sessionName?: string | null;
   sourceName?: string | null;
   samplesPublished: number;
-  onStartCollector: () => void;
+  adapters: TelemetrySource[];
+  activeAdapterId: string | null;
+  onStartAdapter: (adapterId: string) => void;
   onStopCollector: () => void;
   onRefresh: () => void;
 };
@@ -29,10 +35,39 @@ function DashboardHeaderImpl({
   sessionName,
   sourceName,
   samplesPublished,
-  onStartCollector,
+  adapters,
+  activeAdapterId,
+  onStartAdapter,
   onStopCollector,
   onRefresh,
 }: DashboardHeaderProps) {
+  const startableAdapters = useMemo(
+    () => adapters.filter((adapter) => adapter.status !== "NotImplemented"),
+    [adapters],
+  );
+  const defaultAdapterId =
+    activeAdapterId ?? startableAdapters[0]?.adapterId ?? "fake";
+  const [selectedAdapterId, setSelectedAdapterId] = useState(defaultAdapterId);
+  useEffect(() => {
+    if (
+      !startableAdapters.some(
+        (adapter) => adapter.adapterId === selectedAdapterId,
+      )
+    ) {
+      setSelectedAdapterId(defaultAdapterId);
+    }
+  }, [defaultAdapterId, selectedAdapterId, startableAdapters]);
+  // Follow the active adapter so the picker reflects what's actually running
+  // (e.g. when the collector was started outside the dashboard or via a
+  // launch profile that selects something other than "fake").
+  useEffect(() => {
+    if (
+      activeAdapterId &&
+      startableAdapters.some((adapter) => adapter.adapterId === activeAdapterId)
+    ) {
+      setSelectedAdapterId(activeAdapterId);
+    }
+  }, [activeAdapterId, startableAdapters]);
   const modeLabel = isCollectorRunning ? runMode.toUpperCase() : "IDLE";
   const modeTone: ChipTone = !isCollectorRunning
     ? "stop"
@@ -97,16 +132,45 @@ function DashboardHeaderImpl({
         role="group"
         aria-label="Dashboard controls"
       >
+        <label className="topbar-adapter-picker">
+          <span className="topbar-adapter-picker-label">Adapter</span>
+          <select
+            className="topbar-adapter-select mono"
+            value={selectedAdapterId}
+            onChange={(event) => setSelectedAdapterId(event.target.value)}
+            disabled={isBusy || startableAdapters.length === 0}
+            aria-label="Telemetry adapter to start"
+          >
+            {startableAdapters.length === 0 && (
+              <option value="">No adapters</option>
+            )}
+            {startableAdapters.map((adapter) => (
+              <option key={adapter.adapterId} value={adapter.adapterId}>
+                {adapter.displayName}
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           className="icon-button primary"
           type="button"
-          onClick={onStartCollector}
-          disabled={isBusy || isCollectorRunning}
-          aria-label="Start fake telemetry"
-          title="Start fake telemetry"
+          onClick={() => onStartAdapter(selectedAdapterId)}
+          disabled={
+            isBusy ||
+            startableAdapters.length === 0 ||
+            (isCollectorRunning && selectedAdapterId === activeAdapterId)
+          }
+          aria-label={`Start ${selectedAdapterId}`}
+          title={
+            isCollectorRunning && selectedAdapterId !== activeAdapterId
+              ? `Switch collector to ${selectedAdapterId}`
+              : `Start ${selectedAdapterId}`
+          }
         >
           <Play size={15} />
-          Start
+          {isCollectorRunning && selectedAdapterId !== activeAdapterId
+            ? "Switch"
+            : "Start"}
         </button>
         <button
           className="icon-button danger"

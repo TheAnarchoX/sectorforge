@@ -82,13 +82,14 @@ describe("App", () => {
 
   it("switches workspaces and wires top-level actions in the idle state", async () => {
     const user = userEvent.setup();
+    dashboardHookMock.current = createDashboardState({
+      games: [createTelemetrySource()],
+    });
     render(<App />);
 
     expect(screen.getByText("Collector idle")).toBeInTheDocument();
 
-    await user.click(
-      screen.getByRole("button", { name: "Start fake telemetry" }),
-    );
+    await user.click(screen.getByRole("button", { name: /^Start fake$/i }));
     await user.click(
       screen.getByRole("button", { name: "Refresh dashboard state" }),
     );
@@ -107,7 +108,7 @@ describe("App", () => {
     expect(screen.getByText(/Lap overlays/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /adapters/i }));
-    expect(screen.getByText(/No adapters reported yet/i)).toBeInTheDocument();
+    expect(screen.getByTestId("adapter-row-fake")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /sessions/i }));
     expect(screen.getAllByText("No captures yet").length).toBeGreaterThan(0);

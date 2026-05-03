@@ -9,11 +9,11 @@ public sealed class F125NormalizerTests
 {
     private const int CarCount = 22;
     private const int MotionDataSize = 60;
-    private const int LapDataSize = 50;
+    private const int LapDataSize = 57;
     private const int CarTelemetryDataSize = 60;
     private const int CarStatusDataSize = 55;
     private const int CarDamageDataSize = 42;
-    private const int ParticipantDataSize = 60;
+    private const int ParticipantDataSize = 57;
     private const int SessionForecastCountOffset = 126;
     private const int SessionForecastStartOffset = 127;
     private const int WeatherForecastSampleSize = 8;
@@ -37,15 +37,18 @@ public sealed class F125NormalizerTests
             playerCarIndex,
             BuildCarTelemetryPayload(playerCarIndex));
 
-        var sample = new F125Normalizer().Normalize(motion, lapData, carTelemetry);
+        var capturedAt = new DateTimeOffset(2026, 5, 3, 16, 0, 0, TimeSpan.Zero);
+
+        var sample = new F125Normalizer(new FixedTimeProvider(capturedAt)).Normalize(motion, lapData, carTelemetry);
 
         Assert.Equal(GameId.F125, sample.Source.Game);
         Assert.Equal("f1-25-udp", sample.Source.AdapterId);
         Assert.Equal(TelemetrySourceStatus.Running, sample.Source.Status);
         Assert.False(sample.Source.IsSimulated);
         Assert.Equal(5678, sample.Sequence);
+        Assert.Equal(capturedAt, sample.Timestamp);
         Assert.Equal(TimeSpan.FromSeconds(42.5), sample.Timing.SessionElapsed);
-        Assert.Equal(DateTimeOffset.UnixEpoch, sample.Session.StartedAt);
+        Assert.Equal(capturedAt - TimeSpan.FromSeconds(42.5), sample.Session.StartedAt);
         Assert.Equal(ExpectedSessionId(), sample.SessionId);
         Assert.Equal(sample.SessionId, sample.Session.Id);
         Assert.True(sample.Session.IsActive);
@@ -68,6 +71,20 @@ public sealed class F125NormalizerTests
         Assert.Equal(-0.34, sample.DriverInput.Steering.GetValueOrDefault(), precision: 3);
         Assert.Equal(0.64, sample.DriverInput.Clutch.GetValueOrDefault(), precision: 3);
         Assert.True(sample.DriverInput.DrsActive);
+        Assert.Equal(91, sample.Tyres.FrontLeft?.SurfaceC.GetValueOrDefault() ?? 0, precision: 3);
+        Assert.Equal(101, sample.Tyres.FrontLeft?.CoreC.GetValueOrDefault() ?? 0, precision: 3);
+        Assert.Equal(92, sample.Tyres.FrontRight?.SurfaceC.GetValueOrDefault() ?? 0, precision: 3);
+        Assert.Equal(102, sample.Tyres.FrontRight?.CoreC.GetValueOrDefault() ?? 0, precision: 3);
+        Assert.Equal(83, sample.Tyres.RearLeft?.SurfaceC.GetValueOrDefault() ?? 0, precision: 3);
+        Assert.Equal(84, sample.Tyres.RearRight?.SurfaceC.GetValueOrDefault() ?? 0, precision: 3);
+        Assert.Equal(27.1, sample.Tyres.FrontLeftPressurePsi.GetValueOrDefault(), precision: 3);
+        Assert.Equal(27.2, sample.Tyres.FrontRightPressurePsi.GetValueOrDefault(), precision: 3);
+        Assert.Equal(26.1, sample.Tyres.RearLeftPressurePsi.GetValueOrDefault(), precision: 3);
+        Assert.Equal(26.2, sample.Tyres.RearRightPressurePsi.GetValueOrDefault(), precision: 3);
+        Assert.Equal(401, sample.Brakes.FrontLeftTemperatureC.GetValueOrDefault(), precision: 3);
+        Assert.Equal(402, sample.Brakes.FrontRightTemperatureC.GetValueOrDefault(), precision: 3);
+        Assert.Equal(301, sample.Brakes.RearLeftTemperatureC.GetValueOrDefault(), precision: 3);
+        Assert.Equal(302, sample.Brakes.RearRightTemperatureC.GetValueOrDefault(), precision: 3);
 
         Assert.Equal(7, sample.Lap.LapNumber);
         Assert.Equal(TimeSpan.FromMilliseconds(12_345), sample.Lap.CurrentLapTime);
@@ -91,8 +108,6 @@ public sealed class F125NormalizerTests
 
         Assert.Null(sample.Vehicle.CarName);
         Assert.Null(sample.Vehicle.OilTemperatureC);
-        Assert.Null(sample.Tyres.FrontLeft);
-        Assert.Null(sample.Brakes.FrontLeftTemperatureC);
         Assert.Null(sample.Fuel.RemainingLiters);
         Assert.Null(sample.Track.TrackName);
         Assert.Null(sample.Track.TrackId);
@@ -152,8 +167,9 @@ public sealed class F125NormalizerTests
             F125PacketIds.SessionHistory,
             playerCarIndex,
             BuildSessionHistoryPayload(carIndex: 0));
+        var capturedAt = new DateTimeOffset(2026, 5, 3, 16, 30, 0, TimeSpan.Zero);
 
-        var sample = new F125Normalizer().Normalize(new F125TelemetryPacketSet(
+        var sample = new F125Normalizer(new FixedTimeProvider(capturedAt)).Normalize(new F125TelemetryPacketSet(
             motion,
             lapData,
             carTelemetry,
@@ -167,6 +183,8 @@ public sealed class F125NormalizerTests
                 [playerCarIndex] = playerHistory
             }));
 
+        Assert.Equal("5-lap race", sample.Session.Name);
+        Assert.Equal("Race", sample.Session.SessionType);
         Assert.True(sample.DriverInput.DrsAllowed);
         Assert.True(sample.DriverInput.PitLimiterActive);
         Assert.True(sample.DriverInput.AbsActive);
@@ -206,10 +224,12 @@ public sealed class F125NormalizerTests
         Assert.Equal(2.706, sample.Fuel.LitersPerLapEstimate.GetValueOrDefault(), precision: 3);
         Assert.Equal(12, sample.Fuel.LapsRemainingEstimate);
 
-        Assert.Equal("-4", sample.Track.TrackId);
+        Assert.Equal("Silverstone", sample.Track.TrackName);
+        Assert.Equal("7", sample.Track.TrackId);
         Assert.Equal(5_891, sample.Track.TrackLengthMeters.GetValueOrDefault(), precision: 3);
         Assert.Equal(-2, sample.Track.TrackTemperatureC.GetValueOrDefault(), precision: 3);
         Assert.Equal(18, sample.Track.AirTemperatureC.GetValueOrDefault(), precision: 3);
+        Assert.Equal("Light rain", sample.Track.Weather);
         Assert.Equal(42, sample.Track.RainPercent.GetValueOrDefault(), precision: 3);
         Assert.Equal(WeatherKind.LightRain, sample.Track.WeatherEnum);
         Assert.Equal(SafetyCarStatus.Virtual, sample.Track.SafetyCarStatus);
@@ -341,20 +361,20 @@ public sealed class F125NormalizerTests
         payload[playerOffset + 10] = 1;
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 11, sizeof(ushort)), 12_345);
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 14, sizeof(ushort)), 450);
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 16, sizeof(ushort)), 1_750);
-        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 18, sizeof(float)), 1234.5f);
-        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 22, sizeof(float)), 5432.25f);
-        payload[playerOffset + 30] = position;
-        payload[playerOffset + 31] = 7;
-        payload[playerOffset + 32] = 1;
-        payload[playerOffset + 33] = 2;
-        payload[playerOffset + 34] = 2;
-        payload[playerOffset + 35] = 0;
-        payload[playerOffset + 36] = 5;
-        payload[playerOffset + 37] = 4;
-        payload[playerOffset + 38] = 3;
-        payload[playerOffset + 41] = gridPosition;
-        payload[playerOffset + 43] = resultStatus;
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 17, sizeof(ushort)), 1_750);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 20, sizeof(float)), 1234.5f);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 24, sizeof(float)), 5432.25f);
+        payload[playerOffset + 32] = position;
+        payload[playerOffset + 33] = 7;
+        payload[playerOffset + 34] = 1;
+        payload[playerOffset + 35] = 2;
+        payload[playerOffset + 36] = 2;
+        payload[playerOffset + 37] = 0;
+        payload[playerOffset + 38] = 5;
+        payload[playerOffset + 39] = 4;
+        payload[playerOffset + 40] = 3;
+        payload[playerOffset + 43] = gridPosition;
+        payload[playerOffset + 45] = resultStatus;
     }
 
     private static byte[] BuildCarTelemetryPayload(byte playerCarIndex)
@@ -371,7 +391,23 @@ public sealed class F125NormalizerTests
         payload[playerOffset + 15] = 6;
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 16, sizeof(ushort)), 11_250);
         payload[playerOffset + 18] = 1;
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 22, sizeof(ushort)), 301);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 24, sizeof(ushort)), 302);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 26, sizeof(ushort)), 401);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 28, sizeof(ushort)), 402);
+        payload[playerOffset + 30] = 83;
+        payload[playerOffset + 31] = 84;
+        payload[playerOffset + 32] = 91;
+        payload[playerOffset + 33] = 92;
+        payload[playerOffset + 34] = 94;
+        payload[playerOffset + 35] = 95;
+        payload[playerOffset + 36] = 101;
+        payload[playerOffset + 37] = 102;
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 38, sizeof(ushort)), 102);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 40, sizeof(float)), 26.1f);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 44, sizeof(float)), 26.2f);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 48, sizeof(float)), 27.1f);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 52, sizeof(float)), 27.2f);
         return payload;
     }
 
@@ -381,8 +417,10 @@ public sealed class F125NormalizerTests
         payload[0] = 3;
         payload[1] = unchecked((byte)-2);
         payload[2] = 18;
+        payload[3] = 5;
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(4, sizeof(ushort)), 5_891);
-        payload[7] = unchecked((byte)-4);
+        payload[6] = 15;
+        payload[7] = 7;
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(9, sizeof(ushort)), 600);
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(11, sizeof(ushort)), 1_200);
         payload[124] = 2;
@@ -498,5 +536,11 @@ public sealed class F125NormalizerTests
         BinaryPrimitives.WriteUInt16LittleEndian(payload.Slice(7, sizeof(ushort)), sector2Ms);
         BinaryPrimitives.WriteUInt16LittleEndian(payload.Slice(10, sizeof(ushort)), sector3Ms);
         payload[13] = 1;
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow()
+            => utcNow;
     }
 }

@@ -6,6 +6,8 @@ import {
   SessionBand,
   StateNotice,
 } from "./components/dashboard/DashboardPrimitives";
+import { LiveStatusPanels } from "./components/dashboard/LiveStatusPanels";
+import { AdapterSetupTable } from "./components/dashboard/AdapterSetupTable";
 import { MainTelemetryColumn } from "./components/dashboard/MainTelemetryColumn";
 import { SimplifiedDriveView } from "./components/dashboard/SimplifiedDriveView";
 import { TelemetrySidebar } from "./components/dashboard/TelemetrySidebar";
@@ -93,12 +95,15 @@ function App() {
   const stateNotices =
     memoryNotice === null ? runtimeNotices : [memoryNotice, ...runtimeNotices];
 
-  const handleStartCollector = useCallback(() => {
-    void startCollector();
-  }, [startCollector]);
   const handleStopCollector = useCallback(() => {
     void stopCollector();
   }, [stopCollector]);
+  const handleStartAdapter = useCallback(
+    (adapterId: string) => {
+      void startCollector(adapterId);
+    },
+    [startCollector],
+  );
   const handleRefresh = useCallback(() => {
     void refreshDashboard();
   }, [refreshDashboard]);
@@ -120,6 +125,7 @@ function App() {
         lapNumber={displaySample?.lap.lapNumber ?? null}
         flag={isReplayRunning ? "yellow" : "green"}
       />
+      <LiveStatusPanels sample={displaySample} />
       <div className="pitwall-grid">
         <MainTelemetryColumn
           activeSource={displaySource}
@@ -158,7 +164,9 @@ function App() {
           sessionName={displaySample?.session.name}
           sourceName={displaySource?.displayName}
           samplesPublished={collectorStatus?.samplesPublished ?? 0}
-          onStartCollector={handleStartCollector}
+          adapters={games}
+          activeAdapterId={displaySource?.adapterId ?? null}
+          onStartAdapter={handleStartAdapter}
           onStopCollector={handleStopCollector}
           onRefresh={handleRefresh}
         />
@@ -212,6 +220,9 @@ function App() {
             collectorRunMode={runMode}
             samplesPublished={collectorStatus?.samplesPublished ?? 0}
             isCollectorRunning={isCollectorRunning}
+            isBusy={isBusy}
+            onStartAdapter={handleStartAdapter}
+            onStopAdapter={handleStopCollector}
           />
         )}
 
@@ -286,6 +297,9 @@ type AdaptersWorkspaceProps = {
   collectorRunMode: string;
   samplesPublished: number;
   isCollectorRunning: boolean;
+  isBusy: boolean;
+  onStartAdapter: (adapterId: string) => void;
+  onStopAdapter: () => void;
 };
 
 function AdaptersWorkspace({
@@ -294,6 +308,9 @@ function AdaptersWorkspace({
   collectorRunMode,
   samplesPublished,
   isCollectorRunning,
+  isBusy,
+  onStartAdapter,
+  onStopAdapter,
 }: AdaptersWorkspaceProps) {
   return (
     <section className="adapters-workspace" aria-label="Adapter registry">
@@ -315,35 +332,14 @@ function AdaptersWorkspace({
           inputs.
         </div>
       ) : (
-        <table className="dense-table adapter-table adapters-workspace-table">
-          <thead>
-            <tr>
-              <th>Adapter</th>
-              <th>Input</th>
-              <th>State</th>
-              <th>Active</th>
-            </tr>
-          </thead>
-          <tbody>
-            {games.map((game) => {
-              const isActive = activeSource?.adapterId === game.adapterId;
-              return (
-                <tr key={game.adapterId}>
-                  <td>{game.displayName}</td>
-                  <td>{game.inputKind}</td>
-                  <td>
-                    <span
-                      className={`status-chip status-chip-${game.status.toLowerCase()}`}
-                    >
-                      {game.status}
-                    </span>
-                  </td>
-                  <td className="mono">{isActive ? "yes" : "—"}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <AdapterSetupTable
+          adapters={games}
+          activeAdapterId={activeSource?.adapterId ?? null}
+          isCollectorRunning={isCollectorRunning}
+          isBusy={isBusy}
+          onStartAdapter={onStartAdapter}
+          onStopAdapter={onStopAdapter}
+        />
       )}
     </section>
   );

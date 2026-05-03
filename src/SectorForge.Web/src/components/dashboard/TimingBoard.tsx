@@ -992,12 +992,14 @@ export function TimingBoard({
                     <th>Last</th>
                     <th>Best</th>
                     <th>Gap</th>
+                    <th>Tyre</th>
+                    <th>Pits</th>
                   </tr>
                 </thead>
                 <tbody>
                   {overviewParticipants.length === 0 ? (
                     <tr className="table-row-empty">
-                      <td colSpan={8}>
+                      <td colSpan={10}>
                         <div className="table-empty-state">
                           <span>No participant snapshot yet</span>
                           <span className="table-subvalue muted">
@@ -1047,6 +1049,33 @@ export function TimingBoard({
                               {getParticipantGapNote(participant)}
                             </span>
                           </div>
+                        </td>
+                        <td>
+                          {participant.tyreCompound &&
+                          participant.tyreCompound !== "Unknown" ? (
+                            <div className="table-stack">
+                              <span
+                                className={`tyre-chip tyre-chip-${participant.tyreCompound.toLowerCase()}`}
+                              >
+                                {participant.tyreCompound}
+                              </span>
+                              <span className="table-subvalue muted mono">
+                                {participant.isPlayer &&
+                                overviewSample?.tyres.ageLaps !== null &&
+                                overviewSample?.tyres.ageLaps !== undefined
+                                  ? `age ${overviewSample.tyres.ageLaps}`
+                                  : ""}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="muted">—</span>
+                          )}
+                        </td>
+                        <td className="mono">
+                          {participant.pitStopCount === null ||
+                          participant.pitStopCount === undefined
+                            ? "—"
+                            : participant.pitStopCount}
                         </td>
                       </tr>
                     ))

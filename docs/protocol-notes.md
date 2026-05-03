@@ -21,7 +21,7 @@ Implemented shape:
 
 Data-model expansion status:
 
-The `TelemetrySample` model was expanded additively across SF-046, SF-047, and SF-048. The F1 25 normalizer now fills the mapped subset when matching packets are present: g-forces, world position, lap distance and split timing, DRS / pit-limiter / ABS / TC flags, ERS state, tyre compound and age, damage, weather forecast, session timing, safety-car state, and participant timing. Remaining dashboard surfacing is tracked by SF-049.
+The `TelemetrySample` model was expanded additively across SF-046, SF-047, and SF-048. The F1 25 normalizer now fills the mapped subset when matching packets are present: wall-clock sample time, g-forces, world position, lap distance and split timing, track and session labels, DRS / pit-limiter / ABS / TC flags, ERS state, tyre temperatures / pressures / compound / age, brake temperatures, damage, weather forecast, session timing, safety-car state, and participant timing. Remaining dashboard surfacing is tracked by SF-049.
 
 Current limitations:
 

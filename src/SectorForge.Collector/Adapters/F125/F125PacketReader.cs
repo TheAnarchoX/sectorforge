@@ -11,7 +11,7 @@ public sealed class F125PacketReader
     {
     }
 
-    public F125PacketReader(IEnumerable<IF125PacketPayloadReader> payloadReaders)
+    public F125PacketReader(IReadOnlyCollection<IF125PacketPayloadReader> payloadReaders)
     {
         ArgumentNullException.ThrowIfNull(payloadReaders);
 

@@ -8,11 +8,11 @@ public sealed class F125PacketReaderTests
 {
     private const int CarCount = 22;
     private const int MotionDataSize = 60;
-    private const int LapDataSize = 50;
+    private const int LapDataSize = 57;
     private const int CarTelemetryDataSize = 60;
     private const int CarStatusDataSize = 55;
     private const int CarDamageDataSize = 42;
-    private const int ParticipantDataSize = 60;
+    private const int ParticipantDataSize = 57;
     private const int SessionForecastCountOffset = 126;
     private const int SessionForecastStartOffset = 127;
     private const int WeatherForecastSampleSize = 8;
@@ -120,7 +120,14 @@ public sealed class F125PacketReaderTests
         Assert.Equal((byte)2, firstResult.Header.PlayerCarIndex);
         Assert.Equal((byte)12, secondResult.Header.PlayerCarIndex);
         Assert.IsType<F125LapDataPacket>(firstResult.Packet);
-        Assert.IsType<F125CarTelemetryPacket>(secondResult.Packet);
+        var carTelemetryPacket = Assert.IsType<F125CarTelemetryPacket>(secondResult.Packet);
+        Assert.Equal(401, carTelemetryPacket.PlayerCar.BrakeTemperaturesC.FrontLeft, precision: 3);
+        Assert.Equal(402, carTelemetryPacket.PlayerCar.BrakeTemperaturesC.FrontRight, precision: 3);
+        Assert.Equal(301, carTelemetryPacket.PlayerCar.BrakeTemperaturesC.RearLeft, precision: 3);
+        Assert.Equal(302, carTelemetryPacket.PlayerCar.BrakeTemperaturesC.RearRight, precision: 3);
+        Assert.Equal(91, carTelemetryPacket.PlayerCar.TyreSurfaceTemperaturesC.FrontLeft, precision: 3);
+        Assert.Equal(101, carTelemetryPacket.PlayerCar.TyreInnerTemperaturesC.FrontLeft, precision: 3);
+        Assert.Equal(27.1, carTelemetryPacket.PlayerCar.TyrePressuresPsi.FrontLeft, precision: 3);
     }
 
     [Fact]
@@ -253,8 +260,10 @@ public sealed class F125PacketReaderTests
         Assert.Equal(3, packet.Session.WeatherCode);
         Assert.Equal(-2, packet.Session.TrackTemperatureC, precision: 3);
         Assert.Equal(18, packet.Session.AirTemperatureC, precision: 3);
+        Assert.Equal(5, packet.Session.TotalLaps);
         Assert.Equal(5_891, packet.Session.TrackLengthMeters);
-        Assert.Equal(-4, packet.Session.TrackId);
+        Assert.Equal(15, packet.Session.SessionTypeCode);
+        Assert.Equal(7, packet.Session.TrackId);
         Assert.Equal(TimeSpan.FromSeconds(600), packet.Session.SessionTimeLeft);
         Assert.Equal(TimeSpan.FromSeconds(1_200), packet.Session.SessionDuration);
         Assert.Equal(2, packet.Session.SafetyCarStatusCode);
@@ -370,9 +379,10 @@ public sealed class F125PacketReaderTests
         var playerOffset = playerCarIndex * LapDataSize;
         BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(playerOffset, sizeof(uint)), 83_210);
         BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(playerOffset + 4, sizeof(uint)), 12_345);
-        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 18, sizeof(float)), 1234.5f);
-        payload[playerOffset + 31] = 7;
-        payload[playerOffset + 34] = 2;
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 20, sizeof(float)), 1234.5f);
+        payload[playerOffset + 32] = 1;
+        payload[playerOffset + 33] = 7;
+        payload[playerOffset + 36] = 2;
         return payload;
     }
 
@@ -387,6 +397,23 @@ public sealed class F125PacketReaderTests
         payload[playerOffset + 14] = 64;
         payload[playerOffset + 15] = 6;
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 16, sizeof(ushort)), 11_250);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 22, sizeof(ushort)), 301);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 24, sizeof(ushort)), 302);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 26, sizeof(ushort)), 401);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 28, sizeof(ushort)), 402);
+        payload[playerOffset + 30] = 83;
+        payload[playerOffset + 31] = 84;
+        payload[playerOffset + 32] = 91;
+        payload[playerOffset + 33] = 92;
+        payload[playerOffset + 34] = 94;
+        payload[playerOffset + 35] = 95;
+        payload[playerOffset + 36] = 101;
+        payload[playerOffset + 37] = 102;
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 38, sizeof(ushort)), 102);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 40, sizeof(float)), 26.1f);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 44, sizeof(float)), 26.2f);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 48, sizeof(float)), 27.1f);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 52, sizeof(float)), 27.2f);
         return payload;
     }
 
@@ -446,8 +473,10 @@ public sealed class F125PacketReaderTests
         payload[0] = 3;
         payload[1] = unchecked((byte)-2);
         payload[2] = 18;
+        payload[3] = 5;
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(4, sizeof(ushort)), 5_891);
-        payload[7] = unchecked((byte)-4);
+        payload[6] = 15;
+        payload[7] = 7;
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(9, sizeof(ushort)), 600);
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(11, sizeof(ushort)), 1_200);
         payload[124] = 2;

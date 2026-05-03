@@ -5,6 +5,7 @@ import {
   getGames,
   getSessions,
   getTelemetryHubUrl,
+  startCollectorAdapter,
   startFakeCollector,
   startReplay as startReplayRequest,
   stopCollector as stopCollectorRequest,
@@ -91,7 +92,10 @@ function isLikelyOfflineError(message: string) {
 function createDashboardAlert(
   context: DashboardErrorContext,
   error: unknown,
-): { alert: DashboardAlert; apiAvailability: Exclude<ApiAvailability, "checking"> } {
+): {
+  alert: DashboardAlert;
+  apiAvailability: Exclude<ApiAvailability, "checking">;
+} {
   const rawMessage = getErrorMessage(error, "Request failed");
 
   if (isLikelyOfflineError(rawMessage)) {
@@ -363,74 +367,81 @@ export function useTelemetryDashboard() {
     }
 
     if (status.lastError) {
-      setError(createDashboardAlert("collectorRuntime", status.lastError).alert);
+      setError(
+        createDashboardAlert("collectorRuntime", status.lastError).alert,
+      );
       return;
     }
 
     setError(null);
   });
 
-  const handleTelemetrySample = useEffectEvent((nextSample: TelemetrySample) => {
-    latestSampleRef.current = nextSample;
-    sampleDirtyRef.current = true;
+  const handleTelemetrySample = useEffectEvent(
+    (nextSample: TelemetrySample) => {
+      latestSampleRef.current = nextSample;
+      sampleDirtyRef.current = true;
 
-    const buffers = traceBuffersRef.current;
-    appendTraceValue(buffers.speed, nextSample.vehicle.speedKph ?? 0);
-    appendTraceValue(buffers.rpm, nextSample.vehicle.rpm ?? 0);
-    appendTraceValue(
-      buffers.throttle,
-      (nextSample.driverInput.throttle ?? 0) * 100,
-    );
-    appendTraceValue(
-      buffers.brake,
-      (nextSample.driverInput.brake ?? 0) * 100,
-    );
-    appendTraceValue(
-      buffers.steering,
-      (nextSample.driverInput.steering ?? 0) * 100,
-    );
-    traceDirtyRef.current = true;
+      const buffers = traceBuffersRef.current;
+      appendTraceValue(buffers.speed, nextSample.vehicle.speedKph ?? 0);
+      appendTraceValue(buffers.rpm, nextSample.vehicle.rpm ?? 0);
+      appendTraceValue(
+        buffers.throttle,
+        (nextSample.driverInput.throttle ?? 0) * 100,
+      );
+      appendTraceValue(
+        buffers.brake,
+        (nextSample.driverInput.brake ?? 0) * 100,
+      );
+      appendTraceValue(
+        buffers.steering,
+        (nextSample.driverInput.steering ?? 0) * 100,
+      );
+      traceDirtyRef.current = true;
 
-    const elapsedSeconds = parseDurationSeconds(nextSample.lap.currentLapTime);
-    const speedKph = nextSample.vehicle.speedKph;
+      const elapsedSeconds = parseDurationSeconds(
+        nextSample.lap.currentLapTime,
+      );
+      const speedKph = nextSample.vehicle.speedKph;
 
-    if (
-      elapsedSeconds !== null &&
-      speedKph !== null &&
-      speedKph !== undefined
-    ) {
-      const lapRef = lapTraceRef.current;
-      const lastPoint =
-        lapRef.points.length > 0
-          ? lapRef.points[lapRef.points.length - 1]
-          : null;
-      const nextLapNumber = nextSample.lap.lapNumber ?? null;
-      const shouldReset =
-        lapRef.sessionId !== nextSample.session.id ||
-        lapRef.lapNumber !== nextLapNumber ||
-        (lastPoint !== null && elapsedSeconds + 0.05 < lastPoint.elapsedSeconds);
-      const nextPoint = { elapsedSeconds, value: speedKph };
+      if (
+        elapsedSeconds !== null &&
+        speedKph !== null &&
+        speedKph !== undefined
+      ) {
+        const lapRef = lapTraceRef.current;
+        const lastPoint =
+          lapRef.points.length > 0
+            ? lapRef.points[lapRef.points.length - 1]
+            : null;
+        const nextLapNumber = nextSample.lap.lapNumber ?? null;
+        const shouldReset =
+          lapRef.sessionId !== nextSample.session.id ||
+          lapRef.lapNumber !== nextLapNumber ||
+          (lastPoint !== null &&
+            elapsedSeconds + 0.05 < lastPoint.elapsedSeconds);
+        const nextPoint = { elapsedSeconds, value: speedKph };
 
-      if (shouldReset) {
-        lapRef.sessionId = nextSample.session.id;
-        lapRef.lapNumber = nextLapNumber;
-        lapRef.points.length = 0;
-        lapRef.points.push(nextPoint);
-      } else {
-        appendLapTracePoint(lapRef.points, nextPoint);
+        if (shouldReset) {
+          lapRef.sessionId = nextSample.session.id;
+          lapRef.lapNumber = nextLapNumber;
+          lapRef.points.length = 0;
+          lapRef.points.push(nextPoint);
+        } else {
+          appendLapTracePoint(lapRef.points, nextPoint);
+        }
+        lapTraceDirtyRef.current = true;
       }
-      lapTraceDirtyRef.current = true;
-    }
 
-    if (apiAvailability !== "online") {
-      setApiAvailability("online");
-    }
-    if (error !== null) {
-      setError(null);
-    }
+      if (apiAvailability !== "online") {
+        setApiAvailability("online");
+      }
+      if (error !== null) {
+        setError(null);
+      }
 
-    scheduleCommit();
-  });
+      scheduleCommit();
+    },
+  );
 
   useEffect(() => {
     const initialFetch = window.setTimeout(() => {
@@ -568,14 +579,18 @@ export function useTelemetryDashboard() {
     }
   };
 
-  const startCollector = async () => {
+  const startCollector = async (adapterId?: string) => {
     setIsBusy(true);
     setError(null);
     resetLapTrace();
 
     try {
+      const startRequest =
+        adapterId === undefined || adapterId === "fake"
+          ? startFakeCollector()
+          : startCollectorAdapter(adapterId);
       const [nextStatus, nextGames] = await Promise.all([
-        startFakeCollector(),
+        startRequest,
         getGames(),
       ]);
       setCollectorStatus(nextStatus);

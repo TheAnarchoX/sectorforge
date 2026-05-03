@@ -496,10 +496,10 @@ This backlog is written for coding agents and human contributors. Each task is i
 
 ### SF-049: Surface New F1 25 Channels In Dashboard And Lap Channels API
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend feature
 - Goal: Render the new SF-046/047/048 channels in the dashboard with strict null-guarding, and extend the SF-050 lap channel manifest to include them when available.
-- Notes: Pre-SF-049 is complete, so this task can now surface real optional channels populated by the F1 25 adapter. Panels must still be strictly null-guarded because optional packet groups may not have arrived for a session.
+- Notes: Frontend dashboard surfacing landed on 2026-05-03 via `LiveStatusPanels` (DRS / pit limiter / ABS / TC strip, sector split tiles, lap-valid badge, weather forecast strip, collapsed-by-default damage and ERS panels), plus tyre compound chip + age and a pit-stop column on the Sessions participant table. Each panel is mounted only when its source field is non-null. The SF-050 channel manifest entries for `lateralG`, `longitudinalG`, `lapDistance`, `drsActive`, and `ersStoreJoules` are deferred to the SF-050 implementation, since the lap channels endpoint and manifest do not yet exist; the requirement has been recorded under SF-050's acceptance criteria.
 - Suggested files: `src/SectorForge.Web/src/types/*`, `src/SectorForge.Web/src/components/dashboard/*`, `src/SectorForge.Api/Services/*`, `src/SectorForge.Api/Program.cs`, `tests/SectorForge.Api.Tests/*`, `docs/architecture.md`
 - Acceptance criteria:
   - Live workspace shows DRS / pit limiter / ABS / TC indicator strip, sector 1/2/3 split tiles, and a lap-valid badge - each panel mounts only when its source field is non-null.
@@ -524,6 +524,7 @@ The dashboard already has a `Compare` workspace placeholder driven by the worksp
   - `GET /api/sessions/{sessionId}/laps/{lapNumber}/channels` returns aligned arrays plus lap metadata (number, lap time, sector splits) as JSON.
   - Endpoint reads from existing stored sample blobs and respects `Storage:RetainedSampleBlobLimit` pruning by surfacing a clear "lap not retained" error when blobs are gone.
   - Response includes a stable channel manifest so additional channels can be added without breaking existing clients.
+  - Channel manifest includes `lateralG`, `longitudinalG`, `lapDistance`, `drsActive`, and `ersStoreJoules` (deferred from SF-049), gated by per-session availability so absent fields are omitted from the manifest.
   - Tests cover unknown session, unknown lap, pruned lap, and a happy-path lap shape.
   - Endpoint shape is documented in `docs/architecture.md` or a new compare docs section.
 
