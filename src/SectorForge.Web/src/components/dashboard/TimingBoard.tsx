@@ -4,6 +4,8 @@ import {
   Activity,
   AlertTriangle,
   Pause,
+  Pin,
+  PinOff,
   Play,
   Search,
   Square,
@@ -36,13 +38,25 @@ type TimingBoardProps = {
   sample: TelemetrySample | null;
   activeSource: TelemetrySource | null;
   sessions: TelemetrySessionSummary[];
+  pinnedLapCount: number;
+  maxPinnedLaps: number;
   isApiOffline: boolean;
   isBusy: boolean;
   activeReplaySessionId: string | null;
+  isLapPinned: (sessionId: string, lapNumber: number) => boolean;
+  onPinLap: (lap: LapComparePinInput) => void;
+  onUnpinLap: (sessionId: string, lapNumber: number) => void;
   onStartReplay: (sessionId: string) => Promise<boolean>;
   onStopReplay: () => Promise<void> | void;
   onReplayStateChange: Dispatch<SetStateAction<DashboardReplayState | null>>;
   onSessionDeleted?: () => void | Promise<void>;
+};
+
+type LapComparePinInput = {
+  sessionId: string;
+  lapNumber: number;
+  label?: string;
+  color?: string;
 };
 
 function isAbortError(error: unknown) {
@@ -267,14 +281,29 @@ function getParticipantGapNote(participant: ParticipantState) {
   return participant.isInPit ? "Pit lane" : "On track";
 }
 
+function getLapCompareLabel(
+  session: TelemetrySessionSummary,
+  lapNumber: number,
+) {
+  const context =
+    session.trackName ?? session.carName ?? session.sourceName ?? session.game;
+
+  return `${context} L${lapNumber}`;
+}
+
 export function TimingBoard({
   collectorStatus,
   sample,
   activeSource,
   sessions,
+  pinnedLapCount,
+  maxPinnedLaps,
   isApiOffline,
   isBusy,
   activeReplaySessionId,
+  isLapPinned,
+  onPinLap,
+  onUnpinLap,
   onStartReplay,
   onStopReplay,
   onReplayStateChange,
@@ -866,12 +895,13 @@ export function TimingBoard({
                       <th>Δ best</th>
                       <th>Trace</th>
                       <th>Updated</th>
+                      <th>Compare</th>
                     </tr>
                   </thead>
                   <tbody>
                     {visibleSession.laps.length === 0 ? (
                       <tr className="table-row-empty">
-                        <td colSpan={5}>
+                        <td colSpan={6}>
                           <div className="table-empty-state">
                             <span>No lap summaries yet</span>
                             <span className="table-subvalue muted">
@@ -905,6 +935,20 @@ export function TimingBoard({
                                 100,
                               )
                             : 0;
+                        const isPinnedToCompare = isLapPinned(
+                          lap.sessionId,
+                          lap.lapNumber,
+                        );
+                        const isPinLimitReached =
+                          !isPinnedToCompare && pinnedLapCount >= maxPinnedLaps;
+                        const pinLabel = isPinnedToCompare
+                          ? `Unpin lap ${lap.lapNumber} from compare`
+                          : `Pin lap ${lap.lapNumber} for compare`;
+                        const pinTitle = isPinnedToCompare
+                          ? "Remove lap from Compare"
+                          : isPinLimitReached
+                            ? `Compare basket holds ${maxPinnedLaps} laps`
+                            : "Pin lap to Compare";
                         return (
                           <tr
                             className={isBest ? "table-row-active" : undefined}
@@ -929,6 +973,38 @@ export function TimingBoard({
                             </td>
                             <td className="mono">
                               {formatShortTimestamp(lap.updatedAt)}
+                            </td>
+                            <td className="session-lap-pin-cell">
+                              <button
+                                type="button"
+                                className={`icon-button lap-pin-button${isPinnedToCompare ? " active" : ""}`}
+                                aria-label={pinLabel}
+                                aria-pressed={isPinnedToCompare}
+                                title={pinTitle}
+                                disabled={isPinLimitReached}
+                                onClick={() => {
+                                  if (isPinnedToCompare) {
+                                    onUnpinLap(lap.sessionId, lap.lapNumber);
+                                    return;
+                                  }
+
+                                  onPinLap({
+                                    sessionId: lap.sessionId,
+                                    lapNumber: lap.lapNumber,
+                                    label: getLapCompareLabel(
+                                      visibleSession.session,
+                                      lap.lapNumber,
+                                    ),
+                                  });
+                                }}
+                              >
+                                {isPinnedToCompare ? (
+                                  <PinOff size={13} />
+                                ) : (
+                                  <Pin size={13} />
+                                )}
+                                {isPinnedToCompare ? "Pinned" : "Pin"}
+                              </button>
                             </td>
                           </tr>
                         );

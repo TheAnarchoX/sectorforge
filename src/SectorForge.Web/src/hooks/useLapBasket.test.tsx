@@ -154,6 +154,33 @@ describe("useLapBasket", () => {
     expect(result.current.entries).toHaveLength(1);
   });
 
+  it("moves an existing lap to the reference position without losing the basket", () => {
+    const { result } = renderHook(() => useLapBasket());
+
+    act(() => {
+      result.current.addLap({
+        sessionId: FIRST_SESSION_ID,
+        lapNumber: 4,
+        label: "Practice lap 4",
+      });
+      result.current.addLap({
+        sessionId: SECOND_SESSION_ID,
+        lapNumber: 5,
+        label: "Practice lap 5",
+      });
+    });
+
+    act(() => {
+      result.current.setReference(SECOND_SESSION_ID, 5);
+    });
+
+    expect(result.current.reference?.label).toBe("Practice lap 5");
+    expect(result.current.comparisons.map((entry) => entry.label)).toEqual([
+      "Practice lap 4",
+    ]);
+    expect(result.current.entries).toHaveLength(2);
+  });
+
   it("falls back to an empty basket when stored JSON is invalid", () => {
     window.localStorage.setItem(LAP_BASKET_STORAGE_KEY, "not-json");
 

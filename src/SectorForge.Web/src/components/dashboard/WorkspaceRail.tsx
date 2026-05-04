@@ -38,12 +38,14 @@ type WorkspaceRailProps = {
   active: Workspace;
   onSelect: (workspace: Workspace) => void;
   isReplayRunning: boolean;
+  compareBasketCount?: number;
 };
 
 export function WorkspaceRail({
   active,
   onSelect,
   isReplayRunning,
+  compareBasketCount = 0,
 }: WorkspaceRailProps) {
   return (
     <nav className="workspace-rail" aria-label="Workspaces">
@@ -55,18 +57,32 @@ export function WorkspaceRail({
           const Icon = item.icon;
           const isActive = active === item.id;
           const showReplayMark = item.id === "sessions" && isReplayRunning;
+          const compareCount = item.id === "compare" ? compareBasketCount : 0;
+          const showCompareCount = compareCount > 0;
           return (
             <li key={item.id}>
               <button
                 type="button"
                 className={`workspace-rail-item${isActive ? " active" : ""}`}
                 aria-current={isActive ? "page" : undefined}
+                aria-label={
+                  showCompareCount
+                    ? `${item.label}, ${compareCount} pinned ${
+                        compareCount === 1 ? "lap" : "laps"
+                      }`
+                    : undefined
+                }
                 onClick={() => onSelect(item.id)}
               >
                 <span className="workspace-rail-icon">
                   <Icon size={18} />
                   {showReplayMark && (
                     <span className="workspace-rail-pulse" aria-hidden="true" />
+                  )}
+                  {showCompareCount && (
+                    <span className="workspace-rail-count" aria-hidden="true">
+                      {compareCount}
+                    </span>
                   )}
                 </span>
                 <span className="workspace-rail-text">

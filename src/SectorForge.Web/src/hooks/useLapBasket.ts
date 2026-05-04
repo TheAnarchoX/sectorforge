@@ -219,6 +219,26 @@ export function useLapBasket(options: UseLapBasketOptions = {}) {
     );
   }, []);
 
+  const setReference = useCallback((sessionId: string, lapNumber: number) => {
+    setEntries((currentEntries) => {
+      const referenceIndex = currentEntries.findIndex(
+        (entry) =>
+          entry.sessionId === sessionId && entry.lapNumber === lapNumber,
+      );
+
+      if (referenceIndex <= 0) {
+        return currentEntries;
+      }
+
+      const nextReference = currentEntries[referenceIndex];
+      return [
+        nextReference,
+        ...currentEntries.slice(0, referenceIndex),
+        ...currentEntries.slice(referenceIndex + 1),
+      ];
+    });
+  }, []);
+
   const clear = useCallback(() => {
     setEntries([]);
   }, []);
@@ -240,9 +260,10 @@ export function useLapBasket(options: UseLapBasketOptions = {}) {
       maxEntries,
       addLap,
       removeLap,
+      setReference,
       clear,
       isPinned,
     }),
-    [addLap, clear, entries, isPinned, maxEntries, removeLap],
+    [addLap, clear, entries, isPinned, maxEntries, removeLap, setReference],
   );
 }

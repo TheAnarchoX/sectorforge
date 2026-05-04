@@ -1,4 +1,7 @@
-export function formatNumber(value: number | null | undefined, decimals: number) {
+export function formatNumber(
+  value: number | null | undefined,
+  decimals: number,
+) {
   return value === null || value === undefined ? "-" : value.toFixed(decimals);
 }
 
@@ -56,11 +59,7 @@ export function parseDurationSeconds(value: string | null | undefined) {
   const minutes = Number(minutesPart);
   const seconds = Number(secondsPart);
 
-  if (
-    Number.isNaN(hours) ||
-    Number.isNaN(minutes) ||
-    Number.isNaN(seconds)
-  ) {
+  if (Number.isNaN(hours) || Number.isNaN(minutes) || Number.isNaN(seconds)) {
     return null;
   }
 
@@ -74,6 +73,19 @@ export function formatDelta(value: string | null | undefined) {
   }
 
   return value.startsWith("-") ? formatTime(value) : `+${formatTime(value)}`;
+}
+
+export function formatDeltaSeconds(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return "-";
+  }
+
+  if (Math.abs(value) < 0.0005) {
+    return "0.000s";
+  }
+
+  const sign = value > 0 ? "+" : "-";
+  return `${sign}${Math.abs(value).toFixed(3)}s`;
 }
 
 export function formatShortTimestamp(value: string | null | undefined) {

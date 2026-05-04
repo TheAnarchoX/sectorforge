@@ -229,6 +229,7 @@ function App() {
         active={workspace}
         onSelect={handleWorkspaceSelect}
         isReplayRunning={isReplayRunning}
+        compareBasketCount={lapBasket.entries.length}
       />
 
       <div className="app-shell-content">
@@ -284,6 +285,7 @@ function App() {
           <CompareWorkspace
             basketEntries={lapBasket.entries}
             onRemoveLap={lapBasket.removeLap}
+            onSetReferenceLap={lapBasket.setReference}
             onClearBasket={lapBasket.clear}
             onOpenSessions={handleOpenSessions}
           />
@@ -314,9 +316,14 @@ function App() {
               sample={displaySample}
               activeSource={displaySource}
               sessions={sessions}
+              pinnedLapCount={lapBasket.entries.length}
+              maxPinnedLaps={lapBasket.maxEntries}
               isApiOffline={isApiOffline}
               isBusy={isBusy}
               activeReplaySessionId={activeReplaySessionId}
+              isLapPinned={lapBasket.isPinned}
+              onPinLap={lapBasket.addLap}
+              onUnpinLap={lapBasket.removeLap}
               onStartReplay={startReplay}
               onStopReplay={stopCollector}
               onReplayStateChange={setReplayState}

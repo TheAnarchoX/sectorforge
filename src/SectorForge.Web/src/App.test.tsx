@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CollectorStatus } from "./types/telemetry";
 import App from "./App";
+import { LAP_BASKET_STORAGE_KEY } from "./hooks/useLapBasket";
 import {
   createCollectorStatus,
   createLapTrace,
@@ -194,6 +195,34 @@ describe("App", () => {
     expect(
       screen.getByRole("heading", { name: "Awaiting telemetry" }),
     ).toBeInTheDocument();
+  });
+
+  it("shows a Compare rail badge for persisted pinned laps", () => {
+    window.localStorage.setItem(
+      LAP_BASKET_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        entries: [
+          {
+            sessionId: "session-1",
+            lapNumber: 3,
+            label: "Silverstone L3",
+            color: "#63b8d6",
+          },
+        ],
+      }),
+    );
+
+    render(<App />);
+
+    const workspaceRail = screen.getByRole("navigation", {
+      name: "Workspaces",
+    });
+    const compareButton = within(workspaceRail).getByRole("button", {
+      name: /compare, 1 pinned lap/i,
+    });
+
+    expect(within(compareButton).getByText("1")).toBeInTheDocument();
   });
 
   it("renders development memory warnings in the shared notice area", () => {

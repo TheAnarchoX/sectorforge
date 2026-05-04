@@ -39,6 +39,9 @@ function renderTimingBoard(
   const onStopReplay = vi.fn().mockResolvedValue(undefined);
   const onReplayStateChange = vi.fn();
   const onSessionDeleted = vi.fn().mockResolvedValue(undefined);
+  const isLapPinned = vi.fn().mockReturnValue(false);
+  const onPinLap = vi.fn();
+  const onUnpinLap = vi.fn();
 
   const utils = render(
     <TimingBoard
@@ -46,9 +49,14 @@ function renderTimingBoard(
       sample={createTelemetrySample()}
       activeSource={createTelemetrySource()}
       sessions={[createSessionSummary()]}
+      pinnedLapCount={0}
+      maxPinnedLaps={6}
       isApiOffline={false}
       isBusy={false}
       activeReplaySessionId={null}
+      isLapPinned={isLapPinned}
+      onPinLap={onPinLap}
+      onUnpinLap={onUnpinLap}
       onStartReplay={onStartReplay}
       onStopReplay={onStopReplay}
       onReplayStateChange={onReplayStateChange}
@@ -63,6 +71,9 @@ function renderTimingBoard(
     onStopReplay,
     onReplayStateChange,
     onSessionDeleted,
+    isLapPinned,
+    onPinLap,
+    onUnpinLap,
   };
 }
 
@@ -169,9 +180,14 @@ describe("TimingBoard", () => {
         sample={null}
         activeSource={createTelemetrySource()}
         sessions={[session]}
+        pinnedLapCount={0}
+        maxPinnedLaps={6}
         isApiOffline={false}
         isBusy={false}
         activeReplaySessionId={session.id}
+        isLapPinned={rendered.isLapPinned}
+        onPinLap={rendered.onPinLap}
+        onUnpinLap={rendered.onUnpinLap}
         onStartReplay={rendered.onStartReplay}
         onStopReplay={rendered.onStopReplay}
         onReplayStateChange={rendered.onReplayStateChange}
@@ -223,6 +239,73 @@ describe("TimingBoard", () => {
     expect(screen.getByText("Sample 2/3")).toBeInTheDocument();
   });
 
+  it("pins and unpins stored lap rows for compare", async () => {
+    const user = userEvent.setup();
+    const session = createSessionSummary();
+    const pinnedKeys = new Set<string>();
+    const isLapPinned = vi.fn((sessionId: string, lapNumber: number) =>
+      pinnedKeys.has(`${sessionId}:${lapNumber}`),
+    );
+
+    timingBoardApiMock.getSessionDetails.mockResolvedValue(
+      createSessionDetails(),
+    );
+
+    const rendered = renderTimingBoard({
+      sessions: [session],
+      sample: null,
+      isLapPinned,
+    });
+
+    await user.click(getSessionCaptureButton("Silverstone"));
+    await screen.findByText(/recorded laps/i);
+
+    const pinLap = screen.getByRole("button", {
+      name: /pin lap 3 for compare/i,
+    });
+    expect(pinLap).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(pinLap);
+
+    expect(rendered.onPinLap).toHaveBeenCalledWith({
+      sessionId: session.id,
+      lapNumber: 3,
+      label: "Silverstone L3",
+    });
+
+    pinnedKeys.add(`${session.id}:3`);
+    rendered.rerender(
+      <TimingBoard
+        collectorStatus={createCollectorStatus()}
+        sample={null}
+        activeSource={createTelemetrySource()}
+        sessions={[session]}
+        pinnedLapCount={1}
+        maxPinnedLaps={6}
+        isApiOffline={false}
+        isBusy={false}
+        activeReplaySessionId={null}
+        isLapPinned={isLapPinned}
+        onPinLap={rendered.onPinLap}
+        onUnpinLap={rendered.onUnpinLap}
+        onStartReplay={rendered.onStartReplay}
+        onStopReplay={rendered.onStopReplay}
+        onReplayStateChange={rendered.onReplayStateChange}
+        onSessionDeleted={rendered.onSessionDeleted}
+      />,
+    );
+
+    const unpinLap = screen.getByRole("button", {
+      name: /unpin lap 3 from compare/i,
+    });
+    expect(unpinLap).toHaveClass("active");
+    expect(unpinLap).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(unpinLap);
+
+    expect(rendered.onUnpinLap).toHaveBeenCalledWith(session.id, 3);
+  });
+
   it("reloads selected-session details when the selected capture summary changes", async () => {
     const user = userEvent.setup();
     const session = createSessionSummary();
@@ -248,9 +331,14 @@ describe("TimingBoard", () => {
         sample={null}
         activeSource={createTelemetrySource()}
         sessions={[updatedSession]}
+        pinnedLapCount={0}
+        maxPinnedLaps={6}
         isApiOffline={false}
         isBusy={false}
         activeReplaySessionId={null}
+        isLapPinned={rendered.isLapPinned}
+        onPinLap={rendered.onPinLap}
+        onUnpinLap={rendered.onUnpinLap}
         onStartReplay={rendered.onStartReplay}
         onStopReplay={rendered.onStopReplay}
         onReplayStateChange={rendered.onReplayStateChange}

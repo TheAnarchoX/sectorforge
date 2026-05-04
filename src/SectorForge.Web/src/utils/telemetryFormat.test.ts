@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   clamp,
   formatDelta,
+  formatDeltaSeconds,
   formatGear,
   formatNumber,
   formatShortTimestamp,
@@ -25,6 +26,10 @@ describe("telemetryFormat", () => {
     expect(formatDelta("00:00:00.333")).toBe("+00:00.333");
     expect(formatDelta("-00:00:00.333")).toBe("-00:00.333");
     expect(formatDelta(undefined)).toBe("-");
+    expect(formatDeltaSeconds(0.25)).toBe("+0.250s");
+    expect(formatDeltaSeconds(-0.125)).toBe("-0.125s");
+    expect(formatDeltaSeconds(0.0001)).toBe("0.000s");
+    expect(formatDeltaSeconds(null)).toBe("-");
   });
 
   it("parses duration strings into seconds", () => {
