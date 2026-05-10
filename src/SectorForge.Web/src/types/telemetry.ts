@@ -280,11 +280,44 @@ export type LapSummary = {
   updatedAt: string;
 };
 
+export type LapCompareChannelKey =
+  | "speedKph"
+  | "rpm"
+  | "throttle"
+  | "brake"
+  | "steering"
+  | "lateralG"
+  | "longitudinalG"
+  | "drsActive"
+  | "ersStoreJoules";
+
+export const DEFAULT_COMPARE_PANEL_ID = "overlay-primary";
+export const DEFAULT_COMPARE_PANEL_CHANNEL: LapCompareChannelKey = "speedKph";
+
+export type LapBasketPanelChannelSelection = {
+  panelId: string;
+  channelKey: LapCompareChannelKey;
+};
+
+export type LapBasketSessionContext = {
+  game?: string | null;
+  sourceName?: string | null;
+  trackName?: string | null;
+  carName?: string | null;
+  startedAt?: string | null;
+  lastSeenAt?: string | null;
+  weather?: string | null;
+  trackTemperatureC?: number | null;
+  airTemperatureC?: number | null;
+};
+
 export type LapBasketEntry = {
   sessionId: string;
   lapNumber: number;
   label: string;
   color: string;
+  channelSelections?: LapBasketPanelChannelSelection[];
+  session?: LapBasketSessionContext;
 };
 
 export type LapChannelValueKind = "Number" | "Boolean";

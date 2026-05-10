@@ -256,6 +256,60 @@
   min-height: 320px;
 }
 
+.compare-session-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1px;
+  border-bottom: 1px solid var(--line-firm);
+  background: var(--line-soft);
+}
+
+.compare-session-chip {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--canvas-1);
+}
+
+.compare-session-chip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.compare-session-chip-title {
+  overflow: hidden;
+  color: var(--ink-strong);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compare-session-chip-id {
+  color: var(--accent-cyan);
+  font-size: 10px;
+}
+
+.compare-session-chip-subtitle,
+.compare-session-chip-meta,
+.compare-session-chip-laps {
+  overflow: hidden;
+  color: var(--ink-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compare-session-chip-laps {
+  color: var(--ink-soft);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .compare-basket-list {
   display: grid;
   gap: 1px;
@@ -298,6 +352,14 @@
   font-size: 10px;
 }
 
+.compare-lap-context {
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .compare-channel-status {
   display: inline-flex;
   align-items: center;
@@ -337,6 +399,11 @@
 .compare-row-action {
   width: 30px;
   padding: 4px;
+}
+
+.compare-overlay-stack {
+  display: flex;
+  flex-direction: column;
 }
 
 @media (max-width: 720px) {
@@ -389,6 +456,14 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-soft);
+}
+
+.compare-overlay-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .compare-overlay-channel-select {
@@ -450,6 +525,13 @@
   stroke-linecap: round;
 }
 
+.compare-distance-cursor-line {
+  stroke: var(--accent-cyan);
+  stroke-width: 1.25;
+  stroke-dasharray: 4 4;
+  pointer-events: none;
+}
+
 .compare-overlay-placeholder {
   padding: 28px 14px;
   text-align: center;
@@ -484,6 +566,15 @@
 
 .compare-overlay-legend-label {
   font-weight: 600;
+}
+
+.compare-overlay-legend-session {
+  max-width: 180px;
+  overflow: hidden;
+  color: var(--ink-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .compare-overlay-legend-badge {
@@ -635,6 +726,15 @@
   white-space: nowrap;
 }
 
+.compare-sector-lap-session {
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 9px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .compare-sector-delta {
   font-size: 10px;
   font-weight: 700;
@@ -674,6 +774,51 @@
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.compare-cursor-readout {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--line-firm);
+  background: var(--canvas-1);
+}
+
+.compare-cursor-table-region {
+  border-top: 1px solid var(--line-soft);
+}
+
+.compare-cursor-table {
+  min-width: 620px;
+}
+
+.compare-cursor-table th:first-child {
+  width: 34%;
+}
+
+.compare-cursor-table th:nth-child(2),
+.compare-cursor-table th:nth-child(3),
+.compare-cursor-table th:nth-child(4) {
+  width: 22%;
+}
+
+.compare-cursor-reference-row th,
+.compare-cursor-reference-row td {
+  background: rgba(99, 184, 214, 0.03);
+}
+
+.compare-cursor-value {
+  color: var(--ink-strong);
+  font-weight: 700;
+}
+
+.compare-cursor-loading,
+.compare-cursor-error,
+.compare-cursor-sector {
+  color: var(--ink-muted);
+}
+
+.compare-cursor-error {
+  color: var(--accent-red);
 }
 
 .compare-delta-chart {
@@ -2137,6 +2282,14 @@
   gap: 8px;
 }
 
+.session-detail-heading-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .session-detail-note {
   color: var(--ink-muted);
   font-size: 11px;
@@ -2301,13 +2454,35 @@
 }
 
 .session-lap-table {
-  min-width: 560px;
+  min-width: 680px;
+}
+
+.session-lap-table th:first-child,
+.session-lap-table td:first-child {
+  width: 72px;
+  text-align: center;
 }
 
 .session-lap-table th:last-child,
 .session-lap-table td:last-child {
   width: 92px;
   text-align: right;
+}
+
+.session-lap-select-cell {
+  text-align: center;
+}
+
+.session-lap-select-checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent-cyan);
+  cursor: pointer;
+}
+
+.session-compare-selected-button {
+  white-space: nowrap;
 }
 
 .session-lap-pin-cell {

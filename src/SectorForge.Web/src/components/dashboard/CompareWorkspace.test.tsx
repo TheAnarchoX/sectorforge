@@ -1,8 +1,15 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CompareWorkspace } from "./CompareWorkspace";
 import { createLapChannelsResponse } from "../../test/telemetryFixtures";
+import { DEFAULT_COMPARE_PANEL_ID } from "../../types/telemetry";
 
 const getLapChannelsForBasketEntryMock = vi.hoisted(() => vi.fn());
 
@@ -272,8 +279,151 @@ describe("CompareWorkspace", () => {
     expect(screen.getByLabelText("Reference lap")).toBeInTheDocument();
   });
 
-  it("switches the overlay channel via the channel selector", async () => {
+  it("keeps overlay and delta charts working for laps from different sessions", async () => {
+    getLapChannelsForBasketEntryMock.mockImplementation(
+      ({ sessionId }: { sessionId: string }) =>
+        Promise.resolve(
+          createLapChannelsResponse({
+            sessionId,
+            lapNumber: 4,
+            sampleCount: 3,
+            channels: {
+              time:
+                sessionId === "11111111-1111-1111-1111-111111111111"
+                  ? [0, 10, 20]
+                  : [0, 11, 19],
+              speedKph:
+                sessionId === "11111111-1111-1111-1111-111111111111"
+                  ? [120, 150, 200]
+                  : [118, 152, 204],
+              rpm: [5000, 6000, 7000],
+              throttle: [0.2, 0.6, 0.9],
+              brake: [0.0, 0.1, 0.2],
+              steering: [0.0, 0.1, -0.1],
+              lapDistance: [0, 100, 200],
+            },
+          }),
+        ),
+    );
+
+    render(
+      <CompareWorkspace
+        basketEntries={[
+          {
+            sessionId: "11111111-1111-1111-1111-111111111111",
+            lapNumber: 4,
+            label: "Silverstone L4",
+            color: "#63b8d6",
+            session: {
+              game: "SectorForge Sim",
+              sourceName: "Fake telemetry",
+              trackName: "Silverstone",
+              carName: "GT3 Evo",
+              startedAt: "2026-05-03T11:45:00.000Z",
+              weather: "Dry",
+              trackTemperatureC: 31.2,
+              airTemperatureC: 22.4,
+            },
+          },
+          {
+            sessionId: "22222222-2222-2222-2222-222222222222",
+            lapNumber: 4,
+            label: "Spa L4",
+            color: "#d9b04a",
+            session: {
+              game: "SectorForge Sim",
+              sourceName: "Fake telemetry",
+              trackName: "Spa-Francorchamps",
+              carName: "GT3 Evo",
+              startedAt: "2026-05-04T14:15:00.000Z",
+              weather: "Light rain",
+              trackTemperatureC: 24.8,
+              airTemperatureC: 18.1,
+            },
+          },
+        ]}
+        onOpenSessions={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("2 sessions")).toBeInTheDocument();
+    const contextStrip = screen.getByRole("region", {
+      name: "Compared session context",
+    });
+    expect(within(contextStrip).getByText("Silverstone")).toBeInTheDocument();
+    expect(
+      within(contextStrip).getByText("Spa-Francorchamps"),
+    ).toBeInTheDocument();
+    expect(within(contextStrip).getByText(/Dry/)).toBeInTheDocument();
+    expect(within(contextStrip).getByText(/Light rain/)).toBeInTheDocument();
+
+    const overlay = await screen.findByRole("img", {
+      name: /Lap overlay chart for Speed/i,
+    });
+    const deltaPlot = await screen.findByRole("img", {
+      name: /Delta time plot vs Silverstone L4/i,
+    });
+
+    await waitFor(() => {
+      expect(
+        overlay.querySelectorAll("path.compare-overlay-trace").length,
+      ).toBe(2);
+      expect(
+        deltaPlot.querySelectorAll(".compare-delta-segment").length,
+      ).toBeGreaterThan(0);
+    });
+    expect(
+      screen.getAllByText(/Silverstone \/ 11111111/).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/Spa-Francorchamps \/ 22222222/).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("uses basket panel channel selection and forwards selector changes", async () => {
     const user = userEvent.setup();
+    const onSetPanelChannel = vi.fn();
+    getLapChannelsForBasketEntryMock.mockResolvedValue(
+      createLapChannelsResponse({ sampleCount: 3 }),
+    );
+
+    render(
+      <CompareWorkspace
+        basketEntries={[
+          {
+            sessionId: "11111111-1111-1111-1111-111111111111",
+            lapNumber: 4,
+            label: "Practice lap 4",
+            color: "#63b8d6",
+            channelSelections: [
+              { panelId: DEFAULT_COMPARE_PANEL_ID, channelKey: "rpm" },
+            ],
+          },
+        ]}
+        onSetPanelChannel={onSetPanelChannel}
+        onOpenSessions={vi.fn()}
+      />,
+    );
+
+    await screen.findByRole("img", { name: /Lap overlay chart for RPM/i });
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: /Channel/i }),
+      "throttle",
+    );
+    expect(
+      await screen.findByRole("img", {
+        name: /Lap overlay chart for Throttle/i,
+      }),
+    ).toBeInTheDocument();
+    expect(onSetPanelChannel).toHaveBeenCalledWith(
+      DEFAULT_COMPARE_PANEL_ID,
+      "throttle",
+    );
+  });
+
+  it("adds, updates, and removes an independent overlay chart", async () => {
+    const user = userEvent.setup();
+    const onSetPanelChannel = vi.fn();
     getLapChannelsForBasketEntryMock.mockResolvedValue(
       createLapChannelsResponse({ sampleCount: 3 }),
     );
@@ -288,20 +438,46 @@ describe("CompareWorkspace", () => {
             color: "#63b8d6",
           },
         ]}
+        onSetPanelChannel={onSetPanelChannel}
         onOpenSessions={vi.fn()}
       />,
     );
 
-    await screen.findByRole("img", { name: /Lap overlay chart for Speed/i });
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: /Channel/i }),
-      "throttle",
-    );
     expect(
       await screen.findByRole("img", {
-        name: /Lap overlay chart for Throttle/i,
+        name: /Lap overlay chart for Speed overlay 1/i,
       }),
     ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Add chart" }));
+
+    expect(onSetPanelChannel).toHaveBeenCalledWith("overlay-2", "rpm");
+    expect(
+      await screen.findByRole("img", {
+        name: /Lap overlay chart for RPM overlay 2/i,
+      }),
+    ).toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: /Overlay 2 channel/i }),
+      "throttle",
+    );
+
+    expect(onSetPanelChannel).toHaveBeenCalledWith("overlay-2", "throttle");
+    expect(
+      await screen.findByRole("img", {
+        name: /Lap overlay chart for Throttle overlay 2/i,
+      }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Remove overlay 2" }));
+
+    expect(
+      screen.queryByRole("img", {
+        name: /Lap overlay chart for Throttle overlay 2/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Reference / Practice lap 4")).toBeInTheDocument();
   });
 
   it("renders a delta time plot with losing and gaining segments", async () => {
@@ -355,6 +531,173 @@ describe("CompareWorkspace", () => {
     expect(
       deltaPlot.querySelectorAll(".compare-delta-segment-gain").length,
     ).toBeGreaterThan(0);
+  });
+
+  it("shares a distance cursor between overlay and delta panels", async () => {
+    getLapChannelsForBasketEntryMock.mockImplementation(
+      ({ lapNumber }: { lapNumber: number }) =>
+        Promise.resolve(
+          createLapChannelsResponse({
+            lapNumber,
+            sampleCount: 3,
+            channels: {
+              time: lapNumber === 4 ? [0, 10, 20] : [0, 12, 18],
+              speedKph: [120, 150, 200],
+              rpm: [5000, 6000, 7000],
+              throttle: [0.2, 0.6, 0.9],
+              brake: [0.0, 0.1, 0.2],
+              steering: [0.0, 0.1, -0.1],
+              lapDistance: [0, 100, 200],
+            },
+          }),
+        ),
+    );
+
+    render(
+      <CompareWorkspace
+        basketEntries={[
+          {
+            sessionId: "11111111-1111-1111-1111-111111111111",
+            lapNumber: 4,
+            label: "Practice lap 4",
+            color: "#63b8d6",
+          },
+          {
+            sessionId: "22222222-2222-2222-2222-222222222222",
+            lapNumber: 5,
+            label: "Practice lap 5",
+            color: "#d9b04a",
+          },
+        ]}
+        onOpenSessions={vi.fn()}
+      />,
+    );
+
+    const overlay = await screen.findByRole("img", {
+      name: /Lap overlay chart for Speed/i,
+    });
+    const deltaPlot = await screen.findByRole("img", {
+      name: /Delta time plot vs Practice lap 4/i,
+    });
+    vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 860,
+      bottom: 280,
+      width: 860,
+      height: 280,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    fireEvent.pointerMove(overlay, { clientX: 450 });
+
+    await waitFor(() => {
+      expect(
+        overlay.querySelector(".compare-distance-cursor-line"),
+      ).not.toBeNull();
+      expect(
+        deltaPlot.querySelector(".compare-distance-cursor-line"),
+      ).not.toBeNull();
+    });
+
+    const cursorTable = await screen.findByRole("table", {
+      name: /Cursor values at 100 m/i,
+    });
+    const lap4Header = within(cursorTable).getByRole("rowheader", {
+      name: /Lap 4\s*Practice lap 4/i,
+    });
+    const lap5Header = within(cursorTable).getByRole("rowheader", {
+      name: /Lap 5\s*Practice lap 5/i,
+    });
+    const lap4Row = lap4Header.closest("tr");
+    const lap5Row = lap5Header.closest("tr");
+    if (lap4Row === null || lap5Row === null) {
+      throw new Error("Expected cursor readout rows to render.");
+    }
+
+    expect(within(lap4Row).getByText("150 kph")).toBeInTheDocument();
+    expect(within(lap4Row).getByText("REF")).toBeInTheDocument();
+    expect(within(lap4Row).getByText("S1")).toBeInTheDocument();
+    expect(within(lap5Row).getByText("150 kph")).toBeInTheDocument();
+    expect(within(lap5Row).getByText("+2.000s")).toBeInTheDocument();
+    expect(within(lap5Row).getByText("S1")).toBeInTheDocument();
+
+    fireEvent.pointerLeave(overlay);
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("table", { name: /Cursor values at 100 m/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    fireEvent.focus(deltaPlot);
+    expect(
+      await screen.findByRole("table", { name: /Cursor values at 100 m/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the distance cursor synchronized across multiple overlay charts", async () => {
+    const user = userEvent.setup();
+    getLapChannelsForBasketEntryMock.mockResolvedValue(
+      createLapChannelsResponse({
+        sampleCount: 3,
+        channels: {
+          time: [0, 10, 20],
+          speedKph: [120, 150, 200],
+          rpm: [5000, 6000, 7000],
+          throttle: [0.2, 0.6, 0.9],
+          brake: [0.0, 0.1, 0.2],
+          steering: [0.0, 0.1, -0.1],
+          lapDistance: [0, 100, 200],
+        },
+      }),
+    );
+
+    render(
+      <CompareWorkspace
+        basketEntries={[
+          {
+            sessionId: "11111111-1111-1111-1111-111111111111",
+            lapNumber: 4,
+            label: "Practice lap 4",
+            color: "#63b8d6",
+          },
+        ]}
+        onOpenSessions={vi.fn()}
+      />,
+    );
+
+    const primaryOverlay = await screen.findByRole("img", {
+      name: /Lap overlay chart for Speed overlay 1/i,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Add chart" }));
+    const secondaryOverlay = await screen.findByRole("img", {
+      name: /Lap overlay chart for RPM overlay 2/i,
+    });
+    vi.spyOn(primaryOverlay, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 860,
+      bottom: 280,
+      width: 860,
+      height: 280,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    fireEvent.pointerMove(primaryOverlay, { clientX: 450 });
+
+    await waitFor(() => {
+      expect(
+        primaryOverlay.querySelector(".compare-distance-cursor-line"),
+      ).not.toBeNull();
+      expect(
+        secondaryOverlay.querySelector(".compare-distance-cursor-line"),
+      ).not.toBeNull();
+    });
   });
 
   it("shows a clipping notice when compared laps have different lengths", async () => {

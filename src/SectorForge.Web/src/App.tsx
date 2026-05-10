@@ -12,7 +12,10 @@ import { AdapterSetupTable } from "./components/dashboard/AdapterSetupTable";
 import { MainTelemetryColumn } from "./components/dashboard/MainTelemetryColumn";
 import { SimplifiedDriveView } from "./components/dashboard/SimplifiedDriveView";
 import { TelemetrySidebar } from "./components/dashboard/TelemetrySidebar";
-import { TimingBoard } from "./components/dashboard/TimingBoard";
+import {
+  TimingBoard,
+  type LapComparePinInput,
+} from "./components/dashboard/TimingBoard";
 import {
   WorkspaceRail,
   type Workspace,
@@ -80,6 +83,7 @@ function App() {
     null,
   );
   const lapBasket = useLapBasket();
+  const addLapToBasket = lapBasket.addLap;
   const memoryNotice = useDevelopmentMemoryMonitor();
   const {
     connectionState,
@@ -175,6 +179,16 @@ function App() {
   const handleOpenSessions = useCallback(() => {
     handleWorkspaceSelect("sessions");
   }, [handleWorkspaceSelect]);
+  const handleCompareSelectedLaps = useCallback(
+    (laps: LapComparePinInput[]) => {
+      for (const lap of laps) {
+        addLapToBasket(lap);
+      }
+
+      handleWorkspaceSelect("compare");
+    },
+    [addLapToBasket, handleWorkspaceSelect],
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -286,6 +300,7 @@ function App() {
             basketEntries={lapBasket.entries}
             onRemoveLap={lapBasket.removeLap}
             onSetReferenceLap={lapBasket.setReference}
+            onSetPanelChannel={lapBasket.setPanelChannel}
             onClearBasket={lapBasket.clear}
             onOpenSessions={handleOpenSessions}
           />
@@ -324,6 +339,7 @@ function App() {
               isLapPinned={lapBasket.isPinned}
               onPinLap={lapBasket.addLap}
               onUnpinLap={lapBasket.removeLap}
+              onCompareSelectedLaps={handleCompareSelectedLaps}
               onStartReplay={startReplay}
               onStopReplay={stopCollector}
               onReplayStateChange={setReplayState}

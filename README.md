@@ -15,7 +15,7 @@ Docker, WSL, admin rights, and a running sim are not required for the current MV
 - Native collector and adapter boundary for fake, UDP, shared memory, plugin, or replay inputs.
 - Config-gated F1 25 UDP beta adapter with player-car telemetry and optional session, tyre, ERS, damage, weather, and participant timing channels.
 - Normalized telemetry model in the backend so live, stored, and replay flows share the same data shape.
-- Local SignalR dashboard with live feed, session review, replay, and driving-focused views.
+- Local SignalR dashboard with live feed, session review, replay, lap compare, and driving-focused views.
 - SQLite persistence with bounded raw sample retention for long local runs.
 
 ![SectorForge live dashboard](docs/assets/dashboard-live.png)
@@ -165,7 +165,7 @@ For the deeper runtime breakdown, see [docs/architecture.md](docs/architecture.m
 | SignalR hub | Streams normalized telemetry samples |
 | React dashboard | Live feed, session review, replay controls, driver HUD, F1 25 optional channel panels |
 | SQLite storage | Sessions, lap summaries, raw sample blobs with retention cap |
-| Compare workflow | Placeholder workspace; lap-channel API and overlay work queued next |
+| Compare workflow | Usable lap basket, overlay chart, delta plot, sector table, and synchronized cursor |
 | F1 25 UDP | Beta, config-gated; player-car telemetry plus optional packet aggregation |
 | ACC shared memory | Placeholder adapter |
 | AMS2 telemetry | Placeholder adapter |
@@ -191,7 +191,7 @@ flowchart TB
 ## More Docs
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) for local checks and contribution rules.
-- [docs/architecture.md](docs/architecture.md) for runtime flow, storage, and frontend guardrails.
+- [docs/architecture.md](docs/architecture.md) for runtime flow, storage, frontend guardrails, and the [compare workflow](docs/architecture.md#compare-workflow).
 - [docs/game-adapters.md](docs/game-adapters.md) for adapter status, enablement notes, and limitations.
 - [docs/protocol-notes.md](docs/protocol-notes.md) for protocol references and implementation decisions.
 - [docs/agent-tasks.md](docs/agent-tasks.md) for the scoped backlog.

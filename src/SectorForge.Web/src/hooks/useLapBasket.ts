@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { LapBasketEntry } from "../types/telemetry";
+import {
+  DEFAULT_COMPARE_PANEL_CHANNEL,
+  DEFAULT_COMPARE_PANEL_ID,
+} from "../types/telemetry";
+import type {
+  LapBasketEntry,
+  LapBasketPanelChannelSelection,
+  LapBasketSessionContext,
+  LapCompareChannelKey,
+} from "../types/telemetry";
 
 export const LAP_BASKET_STORAGE_KEY = "sectorforge.lapBasket.v1";
 export const DEFAULT_LAP_BASKET_LIMIT = 6;
@@ -13,12 +22,25 @@ const DEFAULT_LAP_COLORS = [
   "#b68cff",
   "#f08c46",
 ];
+const LAP_COMPARE_CHANNEL_KEYS = new Set<LapCompareChannelKey>([
+  "speedKph",
+  "rpm",
+  "throttle",
+  "brake",
+  "steering",
+  "lateralG",
+  "longitudinalG",
+  "drsActive",
+  "ersStoreJoules",
+]);
 
 export type LapBasketAddInput = Pick<
   LapBasketEntry,
   "sessionId" | "lapNumber"
 > &
-  Partial<Pick<LapBasketEntry, "label" | "color">>;
+  Partial<
+    Pick<LapBasketEntry, "label" | "color" | "channelSelections" | "session">
+  >;
 
 export type UseLapBasketOptions = {
   storageKey?: string;
@@ -58,10 +80,113 @@ function readString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function readOptionalString(value: unknown) {
+  const text = readString(value);
+  return text === "" ? null : text;
+}
+
+function readOptionalNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function readLapNumber(value: unknown) {
   return typeof value === "number" && Number.isInteger(value) && value > 0
     ? value
     : null;
+}
+
+function isLapCompareChannelKey(value: unknown): value is LapCompareChannelKey {
+  return (
+    typeof value === "string" &&
+    LAP_COMPARE_CHANNEL_KEYS.has(value as LapCompareChannelKey)
+  );
+}
+
+function createDefaultChannelSelections() {
+  return [
+    {
+      panelId: DEFAULT_COMPARE_PANEL_ID,
+      channelKey: DEFAULT_COMPARE_PANEL_CHANNEL,
+    },
+  ] satisfies LapBasketPanelChannelSelection[];
+}
+
+function normalizeChannelSelection(value: unknown) {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const panelId = readString(value.panelId);
+  if (panelId === "" || !isLapCompareChannelKey(value.channelKey)) {
+    return null;
+  }
+
+  return {
+    panelId,
+    channelKey: value.channelKey,
+  } satisfies LapBasketPanelChannelSelection;
+}
+
+function normalizeChannelSelections(value: unknown) {
+  if (!Array.isArray(value)) {
+    return createDefaultChannelSelections();
+  }
+
+  const selections: LapBasketPanelChannelSelection[] = [];
+  const seenPanels = new Set<string>();
+  for (const candidate of value) {
+    const selection = normalizeChannelSelection(candidate);
+    if (selection === null || seenPanels.has(selection.panelId)) {
+      continue;
+    }
+
+    selections.push(selection);
+    seenPanels.add(selection.panelId);
+  }
+
+  return selections.length > 0 ? selections : createDefaultChannelSelections();
+}
+
+function normalizeSessionContext(value: unknown) {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const sessionContext = {
+    game: readOptionalString(value.game),
+    sourceName: readOptionalString(value.sourceName),
+    trackName: readOptionalString(value.trackName),
+    carName: readOptionalString(value.carName),
+    startedAt: readOptionalString(value.startedAt),
+    lastSeenAt: readOptionalString(value.lastSeenAt),
+    weather: readOptionalString(value.weather),
+    trackTemperatureC: readOptionalNumber(value.trackTemperatureC),
+    airTemperatureC: readOptionalNumber(value.airTemperatureC),
+  } satisfies LapBasketSessionContext;
+
+  return Object.values(sessionContext).some(
+    (contextValue) => contextValue !== null,
+  )
+    ? sessionContext
+    : undefined;
+}
+
+function upsertChannelSelection(
+  selections: LapBasketPanelChannelSelection[] | undefined,
+  nextSelection: LapBasketPanelChannelSelection,
+) {
+  const normalizedSelections = normalizeChannelSelections(selections);
+  const existingIndex = normalizedSelections.findIndex(
+    (selection) => selection.panelId === nextSelection.panelId,
+  );
+
+  if (existingIndex < 0) {
+    return [...normalizedSelections, nextSelection];
+  }
+
+  return normalizedSelections.map((selection, index) =>
+    index === existingIndex ? nextSelection : selection,
+  );
 }
 
 function normalizeEntry(value: unknown, colorIndex: number) {
@@ -77,12 +202,16 @@ function normalizeEntry(value: unknown, colorIndex: number) {
 
   const label = readString(value.label) || getDefaultLabel(lapNumber);
   const color = readString(value.color) || pickColor(colorIndex);
+  const channelSelections = normalizeChannelSelections(value.channelSelections);
+  const session = normalizeSessionContext(value.session);
 
   return {
     sessionId,
     lapNumber,
     label,
     color,
+    channelSelections,
+    ...(session === undefined ? {} : { session }),
   } satisfies LapBasketEntry;
 }
 
@@ -180,12 +309,23 @@ export function useLapBasket(options: UseLapBasketOptions = {}) {
           existingIndex >= 0
             ? currentEntries[existingIndex].color
             : pickColor(currentEntries.length);
+        const fallbackChannelSelections =
+          existingIndex >= 0
+            ? currentEntries[existingIndex].channelSelections
+            : currentEntries[0]?.channelSelections;
+        const fallbackSession =
+          existingIndex >= 0
+            ? currentEntries[existingIndex].session
+            : undefined;
         const nextEntry = normalizeEntry(
           {
             sessionId: lap.sessionId,
             lapNumber: lap.lapNumber,
             label: lap.label,
             color: lap.color ?? fallbackColor,
+            channelSelections:
+              lap.channelSelections ?? fallbackChannelSelections,
+            session: lap.session ?? fallbackSession,
           },
           currentEntries.length,
         );
@@ -239,6 +379,26 @@ export function useLapBasket(options: UseLapBasketOptions = {}) {
     });
   }, []);
 
+  const setPanelChannel = useCallback(
+    (panelId: string, channelKey: LapCompareChannelKey) => {
+      const nextSelection = normalizeChannelSelection({ panelId, channelKey });
+      if (nextSelection === null) {
+        return;
+      }
+
+      setEntries((currentEntries) =>
+        currentEntries.map((entry) => ({
+          ...entry,
+          channelSelections: upsertChannelSelection(
+            entry.channelSelections,
+            nextSelection,
+          ),
+        })),
+      );
+    },
+    [],
+  );
+
   const clear = useCallback(() => {
     setEntries([]);
   }, []);
@@ -261,9 +421,19 @@ export function useLapBasket(options: UseLapBasketOptions = {}) {
       addLap,
       removeLap,
       setReference,
+      setPanelChannel,
       clear,
       isPinned,
     }),
-    [addLap, clear, entries, isPinned, maxEntries, removeLap, setReference],
+    [
+      addLap,
+      clear,
+      entries,
+      isPinned,
+      maxEntries,
+      removeLap,
+      setPanelChannel,
+      setReference,
+    ],
   );
 }

@@ -6,6 +6,8 @@ import App from "./App";
 import { LAP_BASKET_STORAGE_KEY } from "./hooks/useLapBasket";
 import {
   createCollectorStatus,
+  createLapChannelsResponse,
+  createSessionDetails,
   createLapTrace,
   createSessionSummary,
   createTelemetrySample,
@@ -25,12 +27,24 @@ const memoryMonitorMock = vi.hoisted(() => ({
   } | null,
 }));
 
+const telemetryApiMock = vi.hoisted(() => ({
+  deleteSession: vi.fn(),
+  getLapChannelsForBasketEntry: vi.fn(),
+  getSessionDetails: vi.fn(),
+}));
+
 vi.mock("./hooks/useTelemetryDashboard", () => ({
   useTelemetryDashboard: () => dashboardHookMock.current,
 }));
 
 vi.mock("./hooks/useDevelopmentMemoryMonitor", () => ({
   useDevelopmentMemoryMonitor: () => memoryMonitorMock.current,
+}));
+
+vi.mock("./api/telemetryApi", () => ({
+  deleteSession: telemetryApiMock.deleteSession,
+  getLapChannelsForBasketEntry: telemetryApiMock.getLapChannelsForBasketEntry,
+  getSessionDetails: telemetryApiMock.getSessionDetails,
 }));
 
 function createDashboardState(
@@ -81,6 +95,22 @@ describe("App", () => {
     window.localStorage.clear();
     dashboardHookMock.current = createDashboardState();
     memoryMonitorMock.current = null;
+    telemetryApiMock.deleteSession.mockReset();
+    telemetryApiMock.getLapChannelsForBasketEntry.mockReset();
+    telemetryApiMock.getSessionDetails.mockReset();
+    telemetryApiMock.deleteSession.mockResolvedValue(true);
+    telemetryApiMock.getSessionDetails.mockResolvedValue(
+      createSessionDetails(),
+    );
+    telemetryApiMock.getLapChannelsForBasketEntry.mockImplementation(
+      (entry: { sessionId: string; lapNumber: number }) =>
+        Promise.resolve(
+          createLapChannelsResponse({
+            sessionId: entry.sessionId,
+            lapNumber: entry.lapNumber,
+          }),
+        ),
+    );
   });
 
   it("switches workspaces and wires top-level actions in the idle state", async () => {
@@ -223,6 +253,35 @@ describe("App", () => {
     });
 
     expect(within(compareButton).getByText("1")).toBeInTheDocument();
+  });
+
+  it("opens Compare with laps selected from Session History", async () => {
+    const user = userEvent.setup();
+    const session = createSessionSummary();
+    dashboardHookMock.current = createDashboardState({ sessions: [session] });
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: /sessions/i }));
+    await user.click(screen.getByText("Silverstone"));
+    await screen.findByText(/recorded laps/i);
+
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select lap 3 for compare" }),
+    );
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select lap 4 for compare" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Compare Selected" }));
+
+    expect(window.location.pathname).toBe("/compare");
+    expect(
+      (await screen.findAllByText("Silverstone L3")).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText("Silverstone L4").length).toBeGreaterThan(0);
+    expect(telemetryApiMock.getLapChannelsForBasketEntry).toHaveBeenCalledTimes(
+      2,
+    );
   });
 
   it("renders development memory warnings in the shared notice area", () => {

@@ -42,6 +42,7 @@ function renderTimingBoard(
   const isLapPinned = vi.fn().mockReturnValue(false);
   const onPinLap = vi.fn();
   const onUnpinLap = vi.fn();
+  const onCompareSelectedLaps = vi.fn();
 
   const utils = render(
     <TimingBoard
@@ -57,6 +58,7 @@ function renderTimingBoard(
       isLapPinned={isLapPinned}
       onPinLap={onPinLap}
       onUnpinLap={onUnpinLap}
+      onCompareSelectedLaps={onCompareSelectedLaps}
       onStartReplay={onStartReplay}
       onStopReplay={onStopReplay}
       onReplayStateChange={onReplayStateChange}
@@ -74,6 +76,7 @@ function renderTimingBoard(
     isLapPinned,
     onPinLap,
     onUnpinLap,
+    onCompareSelectedLaps,
   };
 }
 
@@ -188,6 +191,7 @@ describe("TimingBoard", () => {
         isLapPinned={rendered.isLapPinned}
         onPinLap={rendered.onPinLap}
         onUnpinLap={rendered.onUnpinLap}
+        onCompareSelectedLaps={rendered.onCompareSelectedLaps}
         onStartReplay={rendered.onStartReplay}
         onStopReplay={rendered.onStopReplay}
         onReplayStateChange={rendered.onReplayStateChange}
@@ -271,6 +275,17 @@ describe("TimingBoard", () => {
       sessionId: session.id,
       lapNumber: 3,
       label: "Silverstone L3",
+      session: {
+        game: "SectorForge Sim",
+        sourceName: "Fake telemetry",
+        trackName: "Silverstone",
+        carName: "GT3 Evo",
+        startedAt: "2026-05-03T11:45:00.000Z",
+        lastSeenAt: "2026-05-03T12:05:00.000Z",
+        weather: "Dry",
+        trackTemperatureC: 31.2,
+        airTemperatureC: 22.4,
+      },
     });
 
     pinnedKeys.add(`${session.id}:3`);
@@ -288,6 +303,7 @@ describe("TimingBoard", () => {
         isLapPinned={isLapPinned}
         onPinLap={rendered.onPinLap}
         onUnpinLap={rendered.onUnpinLap}
+        onCompareSelectedLaps={rendered.onCompareSelectedLaps}
         onStartReplay={rendered.onStartReplay}
         onStopReplay={rendered.onStopReplay}
         onReplayStateChange={rendered.onReplayStateChange}
@@ -304,6 +320,72 @@ describe("TimingBoard", () => {
     await user.click(unpinLap);
 
     expect(rendered.onUnpinLap).toHaveBeenCalledWith(session.id, 3);
+  });
+
+  it("sends selected stored laps to Compare in one action", async () => {
+    const user = userEvent.setup();
+    const session = createSessionSummary();
+
+    timingBoardApiMock.getSessionDetails.mockResolvedValue(
+      createSessionDetails(),
+    );
+
+    const rendered = renderTimingBoard({ sessions: [session], sample: null });
+
+    await user.click(getSessionCaptureButton("Silverstone"));
+    await screen.findByText(/recorded laps/i);
+
+    const compareSelected = screen.getByRole("button", {
+      name: "Compare Selected",
+    });
+    expect(compareSelected).toBeDisabled();
+
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select lap 3 for compare" }),
+    );
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select lap 4 for compare" }),
+    );
+
+    expect(compareSelected).toBeEnabled();
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+
+    await user.click(compareSelected);
+
+    expect(rendered.onCompareSelectedLaps).toHaveBeenCalledWith([
+      {
+        sessionId: session.id,
+        lapNumber: 3,
+        label: "Silverstone L3",
+        session: {
+          game: "SectorForge Sim",
+          sourceName: "Fake telemetry",
+          trackName: "Silverstone",
+          carName: "GT3 Evo",
+          startedAt: "2026-05-03T11:45:00.000Z",
+          lastSeenAt: "2026-05-03T12:05:00.000Z",
+          weather: "Dry",
+          trackTemperatureC: 31.2,
+          airTemperatureC: 22.4,
+        },
+      },
+      {
+        sessionId: session.id,
+        lapNumber: 4,
+        label: "Silverstone L4",
+        session: {
+          game: "SectorForge Sim",
+          sourceName: "Fake telemetry",
+          trackName: "Silverstone",
+          carName: "GT3 Evo",
+          startedAt: "2026-05-03T11:45:00.000Z",
+          lastSeenAt: "2026-05-03T12:05:00.000Z",
+          weather: "Dry",
+          trackTemperatureC: 31.2,
+          airTemperatureC: 22.4,
+        },
+      },
+    ]);
   });
 
   it("reloads selected-session details when the selected capture summary changes", async () => {
@@ -339,6 +421,7 @@ describe("TimingBoard", () => {
         isLapPinned={rendered.isLapPinned}
         onPinLap={rendered.onPinLap}
         onUnpinLap={rendered.onUnpinLap}
+        onCompareSelectedLaps={rendered.onCompareSelectedLaps}
         onStartReplay={rendered.onStartReplay}
         onStopReplay={rendered.onStopReplay}
         onReplayStateChange={rendered.onReplayStateChange}

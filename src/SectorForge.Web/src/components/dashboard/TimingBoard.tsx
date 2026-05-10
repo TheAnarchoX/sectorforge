@@ -16,6 +16,7 @@ import type {
   CollectorStatus,
   CurrentLapTelemetrySeries,
   DashboardReplayState,
+  LapBasketSessionContext,
   ParticipantState,
   TelemetrySample,
   TelemetrySessionDetails,
@@ -46,17 +47,19 @@ type TimingBoardProps = {
   isLapPinned: (sessionId: string, lapNumber: number) => boolean;
   onPinLap: (lap: LapComparePinInput) => void;
   onUnpinLap: (sessionId: string, lapNumber: number) => void;
+  onCompareSelectedLaps: (laps: LapComparePinInput[]) => void;
   onStartReplay: (sessionId: string) => Promise<boolean>;
   onStopReplay: () => Promise<void> | void;
   onReplayStateChange: Dispatch<SetStateAction<DashboardReplayState | null>>;
   onSessionDeleted?: () => void | Promise<void>;
 };
 
-type LapComparePinInput = {
+export type LapComparePinInput = {
   sessionId: string;
   lapNumber: number;
   label?: string;
   color?: string;
+  session?: LapBasketSessionContext;
 };
 
 function isAbortError(error: unknown) {
@@ -291,6 +294,55 @@ function getLapCompareLabel(
   return `${context} L${lapNumber}`;
 }
 
+function getLapSelectionKey(sessionId: string, lapNumber: number) {
+  return `${sessionId}:${lapNumber}`;
+}
+
+function getLapComparePinInput(
+  session: TelemetrySessionDetails,
+  lapNumber: number,
+) {
+  return {
+    sessionId: session.session.id,
+    lapNumber,
+    label: getLapCompareLabel(session.session, lapNumber),
+    session: getLapCompareSessionContext(session, lapNumber),
+  } satisfies LapComparePinInput;
+}
+
+function getLapContextSample(
+  session: TelemetrySessionDetails,
+  lapNumber: number,
+) {
+  for (let index = session.samples.length - 1; index >= 0; index -= 1) {
+    const sample = session.samples[index];
+    if (sample?.lap.lapNumber === lapNumber) {
+      return sample;
+    }
+  }
+
+  return session.samples.at(-1) ?? null;
+}
+
+function getLapCompareSessionContext(
+  session: TelemetrySessionDetails,
+  lapNumber: number,
+) {
+  const sample = getLapContextSample(session, lapNumber);
+
+  return {
+    game: session.session.game,
+    sourceName: session.session.sourceName,
+    trackName: session.session.trackName ?? sample?.track.trackName ?? null,
+    carName: session.session.carName ?? sample?.vehicle.carName ?? null,
+    startedAt: session.session.startedAt,
+    lastSeenAt: session.session.lastSeenAt,
+    weather: sample?.track.weather ?? null,
+    trackTemperatureC: sample?.track.trackTemperatureC ?? null,
+    airTemperatureC: sample?.track.airTemperatureC ?? null,
+  } satisfies LapBasketSessionContext;
+}
+
 export function TimingBoard({
   collectorStatus,
   sample,
@@ -304,6 +356,7 @@ export function TimingBoard({
   isLapPinned,
   onPinLap,
   onUnpinLap,
+  onCompareSelectedLaps,
   onStartReplay,
   onStopReplay,
   onReplayStateChange,
@@ -325,6 +378,9 @@ export function TimingBoard({
   const [sortMode, setSortMode] = useState<"recent" | "best" | "samples">(
     "recent",
   );
+  const [selectedCompareLapKeys, setSelectedCompareLapKeys] = useState<
+    Set<string>
+  >(() => new Set());
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -608,6 +664,39 @@ export function TimingBoard({
             ? "Select"
             : "Empty";
 
+  const selectedCompareLaps = useMemo(() => {
+    if (visibleSession === null) {
+      return [];
+    }
+
+    return visibleSession.laps.filter((lap) =>
+      selectedCompareLapKeys.has(
+        getLapSelectionKey(lap.sessionId, lap.lapNumber),
+      ),
+    );
+  }, [selectedCompareLapKeys, visibleSession]);
+  const selectedCompareNewLapCount = useMemo(
+    () =>
+      selectedCompareLaps.filter(
+        (lap) => !isLapPinned(lap.sessionId, lap.lapNumber),
+      ).length,
+    [isLapPinned, selectedCompareLaps],
+  );
+  const compareSelectionAvailableSlots = Math.max(
+    0,
+    maxPinnedLaps - pinnedLapCount,
+  );
+  const isCompareSelectionOverLimit =
+    selectedCompareNewLapCount > compareSelectionAvailableSlots;
+  const canCompareSelectedLaps =
+    selectedCompareLaps.length > 0 && !isCompareSelectionOverLimit;
+  const compareSelectedTitle =
+    selectedCompareLaps.length === 0
+      ? "Select laps to compare"
+      : isCompareSelectionOverLimit
+        ? `Compare basket has room for ${compareSelectionAvailableSlots} more laps`
+        : "Send selected laps to Compare";
+
   const handleSelectSession = (sessionId: string) => {
     if (activeReplaySessionId !== null && activeReplaySessionId !== sessionId) {
       return;
@@ -619,8 +708,41 @@ export function TimingBoard({
     setReplayIndex((current) =>
       selectedSessionId === sessionId ? current : 0,
     );
+    if (selectedSessionId !== sessionId) {
+      setSelectedCompareLapKeys(new Set());
+    }
     setSelectedSession((current) =>
       current?.session.id === sessionId ? current : null,
+    );
+  };
+
+  const handleToggleCompareLapSelection = (
+    sessionId: string,
+    lapNumber: number,
+  ) => {
+    const lapKey = getLapSelectionKey(sessionId, lapNumber);
+
+    setSelectedCompareLapKeys((current) => {
+      const next = new Set(current);
+      if (next.has(lapKey)) {
+        next.delete(lapKey);
+      } else {
+        next.add(lapKey);
+      }
+
+      return next;
+    });
+  };
+
+  const handleCompareSelectedLaps = () => {
+    if (visibleSession === null || !canCompareSelectedLaps) {
+      return;
+    }
+
+    onCompareSelectedLaps(
+      selectedCompareLaps.map((lap) =>
+        getLapComparePinInput(visibleSession, lap.lapNumber),
+      ),
     );
   };
 
@@ -881,8 +1003,22 @@ export function TimingBoard({
                     {visibleSession.laps.length} recorded laps
                   </h3>
                 </div>
-                <div className="session-detail-note mono">
-                  Best {formatTime(visibleSession.session.bestLapTime)}
+                <div className="session-detail-heading-actions">
+                  <div className="session-detail-note mono">
+                    {selectedCompareLaps.length > 0
+                      ? `${selectedCompareLaps.length} selected`
+                      : `Best ${formatTime(visibleSession.session.bestLapTime)}`}
+                  </div>
+                  <button
+                    type="button"
+                    className="icon-button primary session-compare-selected-button"
+                    onClick={handleCompareSelectedLaps}
+                    disabled={!canCompareSelectedLaps}
+                    title={compareSelectedTitle}
+                  >
+                    <Pin size={14} />
+                    Compare Selected
+                  </button>
                 </div>
               </div>
 
@@ -890,6 +1026,7 @@ export function TimingBoard({
                 <table className="dense-table session-lap-table">
                   <thead>
                     <tr>
+                      <th>Select</th>
                       <th>Lap</th>
                       <th>Lap time</th>
                       <th>Δ best</th>
@@ -901,7 +1038,7 @@ export function TimingBoard({
                   <tbody>
                     {visibleSession.laps.length === 0 ? (
                       <tr className="table-row-empty">
-                        <td colSpan={6}>
+                        <td colSpan={7}>
                           <div className="table-empty-state">
                             <span>No lap summaries yet</span>
                             <span className="table-subvalue muted">
@@ -941,6 +1078,9 @@ export function TimingBoard({
                         );
                         const isPinLimitReached =
                           !isPinnedToCompare && pinnedLapCount >= maxPinnedLaps;
+                        const isSelectedForCompare = selectedCompareLapKeys.has(
+                          getLapSelectionKey(lap.sessionId, lap.lapNumber),
+                        );
                         const pinLabel = isPinnedToCompare
                           ? `Unpin lap ${lap.lapNumber} from compare`
                           : `Pin lap ${lap.lapNumber} for compare`;
@@ -949,11 +1089,31 @@ export function TimingBoard({
                           : isPinLimitReached
                             ? `Compare basket holds ${maxPinnedLaps} laps`
                             : "Pin lap to Compare";
+                        const rowClass = [
+                          isBest ? "table-row-active" : null,
+                          isSelectedForCompare ? "table-row-selected" : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" ");
                         return (
                           <tr
-                            className={isBest ? "table-row-active" : undefined}
+                            className={rowClass || undefined}
                             key={`${lap.sessionId}-${lap.lapNumber}`}
                           >
+                            <td className="session-lap-select-cell">
+                              <input
+                                type="checkbox"
+                                className="session-lap-select-checkbox"
+                                aria-label={`Select lap ${lap.lapNumber} for compare`}
+                                checked={isSelectedForCompare}
+                                onChange={() =>
+                                  handleToggleCompareLapSelection(
+                                    lap.sessionId,
+                                    lap.lapNumber,
+                                  )
+                                }
+                              />
+                            </td>
                             <td className="mono">{lap.lapNumber}</td>
                             <td className="mono">{formatTime(lap.lapTime)}</td>
                             <td className="mono">
@@ -989,10 +1149,8 @@ export function TimingBoard({
                                   }
 
                                   onPinLap({
-                                    sessionId: lap.sessionId,
-                                    lapNumber: lap.lapNumber,
-                                    label: getLapCompareLabel(
-                                      visibleSession.session,
+                                    ...getLapComparePinInput(
+                                      visibleSession,
                                       lap.lapNumber,
                                     ),
                                   });

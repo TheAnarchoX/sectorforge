@@ -459,6 +459,39 @@ public sealed class CollectorEndpointsTests
         });
     }
 
+    [Fact]
+    public async Task LapChannelsConcurrentRequestsKeepPerLapManifestIndependent()
+    {
+        await WithApiClientAsync(async (client, connectionString) =>
+        {
+            var richSessionId = Guid.NewGuid();
+            var sparseSessionId = Guid.NewGuid();
+            var adapter = new FakeTelemetryAdapter();
+            var sparseSample = adapter.CreateSample(TimeSpan.FromSeconds(5), 1, sparseSessionId);
+            await SaveSamplesAsync(connectionString, [.. CreateLapChannelSamples(richSessionId), sparseSample]);
+
+            var richRequest = client.GetFromJsonAsync<LapChannelsResponse>(
+                $"/api/sessions/{richSessionId}/laps/2/channels",
+                JsonOptions);
+            var sparseRequest = client.GetFromJsonAsync<LapChannelsResponse>(
+                $"/api/sessions/{sparseSessionId}/laps/1/channels",
+                JsonOptions);
+
+            var responses = await Task.WhenAll(richRequest, sparseRequest);
+            var richChannels = responses[0];
+            var sparseChannels = responses[1];
+
+            Assert.NotNull(richChannels);
+            Assert.NotNull(sparseChannels);
+            Assert.Equal(richSessionId, richChannels.SessionId);
+            Assert.Equal(sparseSessionId, sparseChannels.SessionId);
+            Assert.Contains(richChannels.Manifest, channel => channel.Key == "ersStoreJoules");
+            Assert.DoesNotContain(sparseChannels.Manifest, channel => channel.Key == "ersStoreJoules");
+            Assert.NotNull(richChannels.Channels.ErsStoreJoules);
+            Assert.Null(sparseChannels.Channels.ErsStoreJoules);
+        });
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(string connectionString, int? retainedSampleBlobLimit = null)
     {
         var configuration = new Dictionary<string, string?>

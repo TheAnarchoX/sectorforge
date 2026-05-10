@@ -53,6 +53,16 @@ This is intentionally simple. The `ITelemetrySessionStore` abstraction leaves ro
 
 The endpoint reads from retained `telemetry_sample_blobs`, not replay output. Unknown sessions and unknown laps return `404`. If a lap summary still exists but all raw blobs for that lap were pruned by `Storage:RetainedSampleBlobLimit`, the endpoint returns `410 Gone` with a clear problem response so the UI can explain that the lap is no longer retained for channel comparison.
 
+## Compare Workflow
+
+The Compare workspace is the first user-facing lap analysis workflow built on the lap channel API. Users pin laps from stored session lap rows, then open the Compare workspace through the rail or the `/compare` URL. The pinned laps form a small lap basket in the React app: each entry carries `sessionId`, `lapNumber`, display `label`, color, and per-panel channel selections. The basket persists in browser `localStorage` under `sectorforge.lapBasket.v1`, deduplicates by session/lap, and is capped at six entries so compare views stay readable and API fan-out remains bounded.
+
+The first basket entry is the reference lap. Reassigning the reference moves that entry to the front of the basket without losing the other pinned laps. Compare fetches each lap through `GET /api/sessions/{sessionId}/laps/{lapNumber}/channels` and caches successful in-flight results in memory by session/lap, so workspace switches and chart updates do not repeatedly download the same stored lap.
+
+The current Compare workspace renders one selected overlay channel at a time: speed, RPM, throttle, brake, steering, or an optional manifest-backed channel such as lateral G, longitudinal G, DRS active, or ERS store. Traces align by `lapDistance` when every selected lap exposes it, with time fallback for older or sparse captures. A delta-time plot compares each non-reference lap against the reference across the shared distance range; positive deltas mean the comparison lap is losing time, negative deltas mean it is gaining. A sector split table summarizes lap time and S1/S2/S3 deltas, and the synchronized cursor keeps overlay values, delta values, and sector labels lined up while hovering or focusing a chart.
+
+Current limits are intentional. Compare depends on retained raw sample blobs, so old laps can be unavailable even when their lap summary still exists if sample pruning has removed the underlying telemetry. The workspace has one overlay chart selector today; multi-channel panels are queued separately. Cross-session comparisons can be pinned, but richer session context and import/export are later backlog items.
+
 ## Development Defaults
 
 - API: `http://localhost:5221`

@@ -616,9 +616,10 @@ Execution Phase 2: first usable compare workflow.
 
 ### PRE-SF-056: Add support for multiple compare panels in the lap channel API and lap basket, configurable per-panel channel selection, and a shared distance cursor state in the Compare workspace so the groundwork is laid for synchronized multi-channel compare views in SF-058
 
-- Status: `ready`
+- Status: `done`
 - Type: backend and frontend feature
 - Goal: Ensure the lap channel API and lap basket can support multiple compare panels with different channel selections, and that the Compare workspace can track a shared distance cursor state to synchronize those panels in future tasks.
+- Notes: Completed on 2026-05-04. Added basket-level per-panel channel metadata with backwards-compatible localStorage hydration, wired the Compare overlay channel selector through the basket, added shared Compare workspace distance cursor state consumed by overlay and delta panels, and covered concurrent lap-channel manifest independence in the API tests.
 - Suggested files: `src/SectorForge.Api/Services/*`, `src/SectorForge.Web/src/hooks/*`, `src/SectorForge.Web/src/components/dashboard/CompareWorkspace.tsx`, `src/SectorForge.Web/src/components/dashboard/LapTelemetryChart.tsx`
 - Acceptance criteria:
   - Lap channel API supports multiple concurrent requests for different channels without interference.
@@ -628,9 +629,10 @@ Execution Phase 2: first usable compare workflow.
 
 ### SF-056: Sync Cursor Across Compare Panels
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend interaction
 - Goal: When the user hovers over the overlay chart or the delta plot, all compare panels track the same distance cursor so values line up across views.
+- Notes: Completed on 2026-05-04. Added synchronized overlay/delta cursor readouts with per-lap selected-channel values, delta-time values, and sector labels at the active distance; hover, pointer clear, and keyboard focus behavior are covered in Compare workspace tests.
 - Suggested files: `src/SectorForge.Web/src/components/dashboard/CompareWorkspace.tsx`, `src/SectorForge.Web/src/components/dashboard/LapTelemetryChart.tsx`
 - Acceptance criteria:
   - Hovering or focusing one chart moves a vertical cursor on every compare panel at the same distance.
@@ -640,9 +642,10 @@ Execution Phase 2: first usable compare workflow.
 
 ### SF-057: Document Compare Workflow
 
-- Status: `ready`
+- Status: `done`
 - Type: documentation
 - Goal: Document the first usable compare workflow after SF-050 through SF-056 land: pin laps, switch reference laps, read deltas, and understand comparison limits.
+- Notes: Completed on 2026-05-04. Added architecture documentation for the lap channel API contract, persistent lap basket model, compare workspace flow, reference switching, overlay/delta/sector reading, synchronized cursor behavior, and current limits around single-channel overlays plus retained sample blobs. README now points readers at the compare workflow and reflects that the compare slice is usable.
 - Suggested files: `docs/architecture.md`, `README.md`, `docs/agent-tasks.md`
 - Acceptance criteria:
   - Architecture doc covers the lap channel API contract from SF-050 and the basket model from SF-051.
@@ -653,9 +656,10 @@ Execution Phase 3: compare workspace expansion.
 
 ### SF-058: Add Multi-Channel Compare Views
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend feature
 - Goal: Expand the Compare workspace from one selected overlay to multiple synchronized overlay charts for different channels (e.g. speed, rpm, throttle) so users can analyze how different aspects of the lap interact with each other.
+- Notes: Completed on 2026-05-04. The Compare workspace now supports multiple stacked overlay charts with independent channel selectors, an Add chart action, per-chart remove controls that leave the lap basket untouched, and the existing shared distance cursor synchronized across every overlay plus the delta plot.
 - Suggested files: `src/SectorForge.Web/src/components/dashboard/CompareWorkspace.tsx`, `src/SectorForge.Web/src/components/dashboard/LapTelemetryChart.tsx`
 - Acceptance criteria:
   - Compare workspace allows users to add multiple `LapTelemetryChart` components, each with its own channel selector.
@@ -665,9 +669,10 @@ Execution Phase 3: compare workspace expansion.
 
 ### SF-05G: Add Session Comparison Feature To Compare Multiple Sessions
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend feature
 - Goal: Harden the Compare workspace for laps from different sessions so users can analyze how performance evolves over time or under different conditions.
+- Notes: Completed on 2026-05-10. Lap basket entries now preserve optional session context from pinned session-history laps, Compare renders a session context strip plus per-lap session badges/conditions across the basket, overlay legend, sector table, and cursor readout, and cross-session comparisons with identical lap numbers are covered by focused frontend tests.
 - Suggested files: `src/SectorForge.Web/src/components/dashboard/CompareWorkspace.tsx`, `src/SectorForge.Web/src/utils/*`
 - Acceptance criteria:
   - Compare workspace allows users to select laps from different sessions in the lap basket.
@@ -677,10 +682,11 @@ Execution Phase 3: compare workspace expansion.
 
 ### SF-05A: Add Lap Comparison To Session History View
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend feature
 - Goal: In the Session History view for a completed session, allow users to select multiple laps and send them into the Compare workspace in one action, without needing to pin them first, so they can quickly analyze differences between laps from the same session.
-- Suggested files: `src/SectorForge.Web/src/components/dashboard/SessionHistoryView.tsx`, `src/SectorForge.Web/src/components/dashboard/LapTelemetryChart.tsx`
+- Notes: Completed on 2026-05-10. The Sessions lap board now has per-lap selection checkboxes, a compare-selection count, and a Compare Selected action that bulk-adds selected laps to the existing compare basket with session context before navigating to the Compare workspace. Focused TimingBoard and App tests cover the selection action, route change, basket population, and Compare rendering.
+- Suggested files: `src/SectorForge.Web/src/components/dashboard/TimingBoard.tsx`, `src/SectorForge.Web/src/App.tsx`, `src/SectorForge.Web/src/App.css`, frontend tests
 - Acceptance criteria:
   - Session History view allows users to select multiple laps (e.g. with checkboxes) and includes a "Compare Selected" button.
   - Clicking "Compare Selected" navigates to the Compare workspace with the selected laps pinned in the basket.

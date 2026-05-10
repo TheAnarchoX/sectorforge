@@ -2,15 +2,21 @@ import {
   AlertTriangle,
   GitCompareArrows,
   LoaderCircle,
+  Plus,
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useId, useMemo, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import type { CSSProperties, PointerEvent, ReactNode } from "react";
 import { getLapChannelsForBasketEntry } from "../../api/telemetryApi";
+import {
+  DEFAULT_COMPARE_PANEL_CHANNEL,
+  DEFAULT_COMPARE_PANEL_ID,
+} from "../../types/telemetry";
 import type {
   LapBasketEntry,
   LapChannelsResponse,
+  LapCompareChannelKey,
 } from "../../types/telemetry";
 import {
   buildDeltaTimeModel,
@@ -20,11 +26,20 @@ import {
 } from "../../utils/lapDelta";
 import {
   formatDeltaSeconds,
+  formatShortTimestamp,
   formatTime,
   parseDurationSeconds,
 } from "../../utils/telemetryFormat";
 
-type OverlayChannelKey = "speedKph" | "rpm" | "throttle" | "brake" | "steering";
+const OVERLAY_CHANNEL_KEYS = [
+  "speedKph",
+  "rpm",
+  "throttle",
+  "brake",
+  "steering",
+] as const;
+
+type OverlayChannelKey = (typeof OVERLAY_CHANNEL_KEYS)[number];
 
 type OverlayChannelOption = {
   key: OverlayChannelKey;
@@ -72,7 +87,17 @@ const OVERLAY_CHANNEL_OPTIONS: OverlayChannelOption[] = [
   },
 ];
 
-const DEFAULT_OVERLAY_CHANNEL: OverlayChannelKey = "speedKph";
+const DEFAULT_OVERLAY_CHANNEL: OverlayChannelKey =
+  DEFAULT_COMPARE_PANEL_CHANNEL as OverlayChannelKey;
+const OVERLAY_COMPARE_PANEL_ID = DEFAULT_COMPARE_PANEL_ID;
+const OVERLAY_PANEL_ID_PREFIX = "overlay-";
+const MAX_COMPARE_OVERLAY_PANELS = OVERLAY_CHANNEL_KEYS.length;
+const DELTA_COMPARE_PANEL_ID = "delta-time";
+
+type CompareOverlayPanel = {
+  id: string;
+  channelKey: OverlayChannelKey;
+};
 
 export type CompareWorkspaceFrame =
   | {
@@ -100,6 +125,10 @@ type CompareWorkspaceProps = {
   basketEntries?: LapBasketEntry[];
   onRemoveLap?: (sessionId: string, lapNumber: number) => void;
   onSetReferenceLap?: (sessionId: string, lapNumber: number) => void;
+  onSetPanelChannel?: (
+    panelId: string,
+    channelKey: LapCompareChannelKey,
+  ) => void;
   onClearBasket?: () => void;
   onOpenSessions: () => void;
 };
@@ -109,15 +138,270 @@ type LapChannelLoadState =
   | { status: "ready"; response: LapChannelsResponse }
   | { status: "error"; message: string };
 
+type CompareDistanceCursorState = {
+  distanceMeters: number | null;
+  sourcePanelId: string | null;
+};
+
+type CompareDistanceCursorControls = {
+  distanceCursor: CompareDistanceCursorState;
+  onDistanceCursorChange: (
+    sourcePanelId: string,
+    distanceMeters: number,
+  ) => void;
+  onDistanceCursorClear: (sourcePanelId: string) => void;
+};
+
+const EMPTY_DISTANCE_CURSOR: CompareDistanceCursorState = {
+  distanceMeters: null,
+  sourcePanelId: null,
+};
+
 const DEFAULT_EMPTY_TITLE = "No comparison set loaded";
 const DEFAULT_EMPTY_MESSAGE =
   "Pinned laps will appear here with reusable compare frames for overlays, deltas, and sector tables.";
+
+type CompareSessionContextSummary = {
+  sessionId: string;
+  shortId: string;
+  title: string;
+  subtitle: string;
+  conditions: string;
+  laps: number[];
+};
+
+function compactParts(parts: Array<string | null | undefined>) {
+  return parts
+    .map((part) => part?.trim() ?? "")
+    .filter((part) => part.length > 0);
+}
+
+function formatSessionTemperature(
+  label: string,
+  value: number | null | undefined,
+) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? `${label} ${value.toFixed(0)}C`
+    : null;
+}
+
+function getShortSessionId(sessionId: string) {
+  return sessionId.slice(0, 8);
+}
+
+function getEntrySessionTitle(entry: LapBasketEntry) {
+  return (
+    entry.session?.trackName ??
+    entry.session?.game ??
+    `Session ${getShortSessionId(entry.sessionId)}`
+  );
+}
+
+function getEntrySessionBadge(entry: LapBasketEntry) {
+  return `${getEntrySessionTitle(entry)} / ${getShortSessionId(entry.sessionId)}`;
+}
+
+function getEntrySessionDetails(entry: LapBasketEntry) {
+  const session = entry.session;
+  if (session === undefined) {
+    return `session ${getShortSessionId(entry.sessionId)}`;
+  }
+
+  const conditions = compactParts([
+    session.weather,
+    formatSessionTemperature("track", session.trackTemperatureC),
+    formatSessionTemperature("air", session.airTemperatureC),
+  ]).join(" / ");
+  const details = compactParts([session.carName, conditions]).join(" / ");
+
+  return details || `session ${getShortSessionId(entry.sessionId)}`;
+}
+
+function getEntrySessionMeta(entry: LapBasketEntry) {
+  const session = entry.session;
+  if (session === undefined) {
+    return `session ${getShortSessionId(entry.sessionId)} / lap ${entry.lapNumber}`;
+  }
+
+  return compactParts([
+    `session ${getShortSessionId(entry.sessionId)}`,
+    session.sourceName ?? session.game,
+    session.startedAt ? formatShortTimestamp(session.startedAt) : null,
+    `lap ${entry.lapNumber}`,
+  ]).join(" / ");
+}
+
+function buildCompareSessionSummaries(entries: LapBasketEntry[]) {
+  const summaries = new Map<string, CompareSessionContextSummary>();
+
+  for (const entry of entries) {
+    const existing = summaries.get(entry.sessionId);
+    if (existing !== undefined) {
+      if (!existing.laps.includes(entry.lapNumber)) {
+        existing.laps.push(entry.lapNumber);
+      }
+      continue;
+    }
+
+    const session = entry.session;
+    const title = getEntrySessionTitle(entry);
+    const subtitle = compactParts([
+      session?.game,
+      session?.sourceName,
+      session?.carName,
+    ]).join(" / ");
+    const conditions = compactParts([
+      session?.weather,
+      formatSessionTemperature("track", session?.trackTemperatureC),
+      formatSessionTemperature("air", session?.airTemperatureC),
+      session?.startedAt
+        ? `start ${formatShortTimestamp(session.startedAt)}`
+        : null,
+    ]).join(" / ");
+
+    summaries.set(entry.sessionId, {
+      sessionId: entry.sessionId,
+      shortId: getShortSessionId(entry.sessionId),
+      title,
+      subtitle: subtitle || "Session context pending",
+      conditions: conditions || "Conditions not captured",
+      laps: [entry.lapNumber],
+    });
+  }
+
+  return Array.from(summaries.values()).map((summary) => ({
+    ...summary,
+    laps: [...summary.laps].sort((firstLap, secondLap) => firstLap - secondLap),
+  }));
+}
+
+function isOverlayChannelKey(value: unknown): value is OverlayChannelKey {
+  return OVERLAY_CHANNEL_KEYS.includes(value as OverlayChannelKey);
+}
+
+function getSelectedOverlayChannel(entries: LapBasketEntry[]) {
+  for (const entry of entries) {
+    const selection = entry.channelSelections?.find(
+      (candidate) => candidate.panelId === OVERLAY_COMPARE_PANEL_ID,
+    );
+    if (selection !== undefined && isOverlayChannelKey(selection.channelKey)) {
+      return selection.channelKey;
+    }
+  }
+
+  return DEFAULT_OVERLAY_CHANNEL;
+}
+
+function getOverlayPanelChannels(entries: LapBasketEntry[]) {
+  const channelsByPanelId = new Map<string, OverlayChannelKey>();
+
+  for (const entry of entries) {
+    for (const selection of entry.channelSelections ?? []) {
+      if (
+        !channelsByPanelId.has(selection.panelId) &&
+        isOverlayChannelKey(selection.channelKey)
+      ) {
+        channelsByPanelId.set(selection.panelId, selection.channelKey);
+      }
+    }
+  }
+
+  return channelsByPanelId;
+}
+
+function getOverlayPanelsFromEntries(entries: LapBasketEntry[]) {
+  const channelsByPanelId = getOverlayPanelChannels(entries);
+  const panels: CompareOverlayPanel[] = [
+    {
+      id: OVERLAY_COMPARE_PANEL_ID,
+      channelKey:
+        channelsByPanelId.get(OVERLAY_COMPARE_PANEL_ID) ??
+        getSelectedOverlayChannel(entries),
+    },
+  ];
+
+  for (const [panelId, channelKey] of channelsByPanelId) {
+    if (panelId !== OVERLAY_COMPARE_PANEL_ID) {
+      panels.push({ id: panelId, channelKey });
+    }
+  }
+
+  return panels.slice(0, MAX_COMPARE_OVERLAY_PANELS);
+}
+
+function createNextOverlayPanel(currentPanels: CompareOverlayPanel[]) {
+  const usedPanelIds = new Set(currentPanels.map((panel) => panel.id));
+  const usedChannels = new Set(currentPanels.map((panel) => panel.channelKey));
+  let nextId = `${OVERLAY_PANEL_ID_PREFIX}2`;
+  for (let index = 2; usedPanelIds.has(nextId); index += 1) {
+    nextId = `${OVERLAY_PANEL_ID_PREFIX}${index}`;
+  }
+
+  return {
+    id: nextId,
+    channelKey:
+      OVERLAY_CHANNEL_KEYS.find(
+        (channelKey) => !usedChannels.has(channelKey),
+      ) ?? DEFAULT_OVERLAY_CHANNEL,
+  } satisfies CompareOverlayPanel;
+}
+
+function getCursorReadoutChannel(
+  panels: CompareOverlayPanel[],
+  distanceCursor: CompareDistanceCursorState,
+) {
+  const sourcePanel = panels.find(
+    (panel) => panel.id === distanceCursor.sourcePanelId,
+  );
+
+  return (
+    sourcePanel?.channelKey ?? panels[0]?.channelKey ?? DEFAULT_OVERLAY_CHANNEL
+  );
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getDomainXFromPointer(
+  event: PointerEvent<SVGSVGElement>,
+  chartWidth: number,
+  padding: { left: number; right: number },
+  domainMin: number,
+  domainMax: number,
+) {
+  const rect = event.currentTarget.getBoundingClientRect();
+  if (rect.width <= 0) {
+    return null;
+  }
+
+  const plotLeft = padding.left;
+  const plotRight = chartWidth - padding.right;
+  const chartX = ((event.clientX - rect.left) / rect.width) * chartWidth;
+  const clampedX = clamp(chartX, plotLeft, plotRight);
+  const ratio = (clampedX - plotLeft) / Math.max(plotRight - plotLeft, 1);
+  return domainMin + ratio * (domainMax - domainMin);
+}
+
+function getCursorChartX(
+  cursor: CompareDistanceCursorState,
+  domainMin: number,
+  domainMax: number,
+  toChartX: (value: number) => number,
+) {
+  if (cursor.distanceMeters === null) {
+    return null;
+  }
+
+  return toChartX(clamp(cursor.distanceMeters, domainMin, domainMax));
+}
 
 export function CompareWorkspace({
   frame,
   basketEntries = [],
   onRemoveLap,
   onSetReferenceLap,
+  onSetPanelChannel,
   onClearBasket,
   onOpenSessions,
 }: CompareWorkspaceProps) {
@@ -127,6 +411,7 @@ export function CompareWorkspace({
         entries={basketEntries}
         onRemoveLap={onRemoveLap}
         onSetReferenceLap={onSetReferenceLap}
+        onSetPanelChannel={onSetPanelChannel}
         onClearBasket={onClearBasket}
       />
     );
@@ -149,19 +434,80 @@ function CompareBasketView({
   entries,
   onRemoveLap,
   onSetReferenceLap,
+  onSetPanelChannel,
   onClearBasket,
 }: {
   entries: LapBasketEntry[];
   onRemoveLap?: (sessionId: string, lapNumber: number) => void;
   onSetReferenceLap?: (sessionId: string, lapNumber: number) => void;
+  onSetPanelChannel?: (
+    panelId: string,
+    channelKey: LapCompareChannelKey,
+  ) => void;
   onClearBasket?: () => void;
 }) {
   const [channelStates, setChannelStates] = useState<
     Record<string, LapChannelLoadState>
   >({});
-  const [selectedChannel, setSelectedChannel] = useState<OverlayChannelKey>(
-    DEFAULT_OVERLAY_CHANNEL,
+  const [overlayPanels, setOverlayPanels] = useState<CompareOverlayPanel[]>(
+    () => getOverlayPanelsFromEntries(entries),
   );
+  const [distanceCursor, setDistanceCursor] =
+    useState<CompareDistanceCursorState>(EMPTY_DISTANCE_CURSOR);
+  const sessionSummaries = useMemo(
+    () => buildCompareSessionSummaries(entries),
+    [entries],
+  );
+
+  const handleSelectPanelChannel = useCallback(
+    (panelId: string, channel: OverlayChannelKey) => {
+      setOverlayPanels((currentPanels) =>
+        currentPanels.map((panel) =>
+          panel.id === panelId ? { ...panel, channelKey: channel } : panel,
+        ),
+      );
+      onSetPanelChannel?.(panelId, channel);
+    },
+    [onSetPanelChannel],
+  );
+
+  const handleAddOverlayPanel = useCallback(() => {
+    if (overlayPanels.length >= MAX_COMPARE_OVERLAY_PANELS) {
+      return;
+    }
+
+    const nextPanel = createNextOverlayPanel(overlayPanels);
+    setOverlayPanels((currentPanels) => [...currentPanels, nextPanel]);
+    onSetPanelChannel?.(nextPanel.id, nextPanel.channelKey);
+  }, [onSetPanelChannel, overlayPanels]);
+
+  const handleRemoveOverlayPanel = useCallback((panelId: string) => {
+    setOverlayPanels((currentPanels) =>
+      currentPanels.length <= 1
+        ? currentPanels
+        : currentPanels.filter((panel) => panel.id !== panelId),
+    );
+    setDistanceCursor((currentCursor) =>
+      currentCursor.sourcePanelId === panelId
+        ? EMPTY_DISTANCE_CURSOR
+        : currentCursor,
+    );
+  }, []);
+
+  const handleDistanceCursorChange = useCallback(
+    (sourcePanelId: string, distanceMeters: number) => {
+      setDistanceCursor({ sourcePanelId, distanceMeters });
+    },
+    [],
+  );
+
+  const handleDistanceCursorClear = useCallback((sourcePanelId: string) => {
+    setDistanceCursor((currentCursor) =>
+      currentCursor.sourcePanelId === sourcePanelId
+        ? EMPTY_DISTANCE_CURSOR
+        : currentCursor,
+    );
+  }, []);
 
   useEffect(() => {
     let isCancelled = false;
@@ -214,7 +560,19 @@ function CompareBasketView({
           </span>
         </div>
         <div className="zone-bar-meta">
+          <span className="mono">
+            {sessionSummaries.length}{" "}
+            {sessionSummaries.length === 1 ? "session" : "sessions"}
+          </span>
           <span className="mono">reference {entries[0].label}</span>
+          <button
+            type="button"
+            className="icon-button"
+            disabled={overlayPanels.length >= MAX_COMPARE_OVERLAY_PANELS}
+            onClick={handleAddOverlayPanel}
+          >
+            <Plus size={13} /> Add chart
+          </button>
           <button
             type="button"
             className="icon-button danger"
@@ -225,18 +583,46 @@ function CompareBasketView({
           </button>
         </div>
       </header>
-      <CompareOverlayChart
-        entries={entries}
-        channelStates={channelStates}
-        selectedChannel={selectedChannel}
-        onSelectChannel={setSelectedChannel}
-        onSetReferenceLap={onSetReferenceLap}
-      />
+      <CompareSessionContextStrip summaries={sessionSummaries} />
+      <div
+        className="compare-overlay-stack"
+        aria-label="Compare overlay charts"
+      >
+        {overlayPanels.map((panel, index) => (
+          <CompareOverlayChart
+            key={panel.id}
+            panelId={panel.id}
+            panelNumber={index + 1}
+            entries={entries}
+            channelStates={channelStates}
+            selectedChannel={panel.channelKey}
+            canRemove={overlayPanels.length > 1}
+            onSelectChannel={handleSelectPanelChannel}
+            onRemovePanel={handleRemoveOverlayPanel}
+            onSetReferenceLap={onSetReferenceLap}
+            distanceCursor={distanceCursor}
+            onDistanceCursorChange={handleDistanceCursorChange}
+            onDistanceCursorClear={handleDistanceCursorClear}
+          />
+        ))}
+      </div>
       <CompareSectorSplitTable
         entries={entries}
         channelStates={channelStates}
       />
-      <CompareDeltaTimeChart entries={entries} channelStates={channelStates} />
+      <CompareDeltaTimeChart
+        entries={entries}
+        channelStates={channelStates}
+        distanceCursor={distanceCursor}
+        onDistanceCursorChange={handleDistanceCursorChange}
+        onDistanceCursorClear={handleDistanceCursorClear}
+      />
+      <CompareDistanceCursorReadout
+        entries={entries}
+        channelStates={channelStates}
+        selectedChannel={getCursorReadoutChannel(overlayPanels, distanceCursor)}
+        distanceCursor={distanceCursor}
+      />
       <div className="compare-basket-list">
         {entries.map((entry, index) => {
           const key = getEntryKey(entry);
@@ -253,7 +639,10 @@ function CompareBasketView({
                   {entry.label}
                 </span>
                 <span className="compare-lap-meta mono">
-                  session {entry.sessionId.slice(0, 8)} / lap {entry.lapNumber}
+                  {getEntrySessionMeta(entry)}
+                </span>
+                <span className="compare-lap-context">
+                  {getEntrySessionDetails(entry)}
                 </span>
               </div>
               {renderChannelStatus(channelStates[key])}
@@ -271,6 +660,39 @@ function CompareBasketView({
           );
         })}
       </div>
+    </section>
+  );
+}
+
+function CompareSessionContextStrip({
+  summaries,
+}: {
+  summaries: CompareSessionContextSummary[];
+}) {
+  return (
+    <section
+      className="compare-session-strip"
+      aria-label="Compared session context"
+    >
+      {summaries.map((summary) => (
+        <article className="compare-session-chip" key={summary.sessionId}>
+          <div className="compare-session-chip-header">
+            <span className="compare-session-chip-title">{summary.title}</span>
+            <span className="compare-session-chip-id mono">
+              {summary.shortId}
+            </span>
+          </div>
+          <div className="compare-session-chip-subtitle">
+            {summary.subtitle}
+          </div>
+          <div className="compare-session-chip-meta mono">
+            {summary.conditions}
+          </div>
+          <div className="compare-session-chip-laps mono">
+            laps {summary.laps.join(", ")}
+          </div>
+        </article>
+      ))}
     </section>
   );
 }
@@ -510,6 +932,9 @@ function CompareSectorSplitRow({
               Lap {row.entry.lapNumber}
             </span>
             <span className="compare-sector-lap-label">{row.entry.label}</span>
+            <span className="compare-sector-lap-session">
+              {getEntrySessionBadge(row.entry)}
+            </span>
           </span>
         </span>
       </th>
@@ -578,6 +1003,363 @@ function getSectorCellAriaLabel(
   return `${entry.label} ${cell.label}, ${time}, ${delta}${best}`;
 }
 
+type CursorReadoutRow = {
+  entry: LapBasketEntry;
+  status: "loading" | "ready" | "error";
+  statusMessage: string | null;
+  formattedValue: string;
+  deltaSeconds: number | null;
+  sectorLabel: string;
+};
+
+type NumericDistancePoint = {
+  distanceMeters: number;
+  value: number;
+};
+
+function isFiniteNumber(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function interpolateByDistance(
+  distances: Array<number | null> | null | undefined,
+  values: Array<number | null> | null | undefined,
+  distanceMeters: number,
+) {
+  if (!Array.isArray(distances) || !Array.isArray(values)) {
+    return null;
+  }
+
+  const sampleCount = Math.min(distances.length, values.length);
+  const points: NumericDistancePoint[] = [];
+  for (let index = 0; index < sampleCount; index += 1) {
+    const sampleDistance = distances[index];
+    const sampleValue = values[index];
+    if (isFiniteNumber(sampleDistance) && isFiniteNumber(sampleValue)) {
+      points.push({ distanceMeters: sampleDistance, value: sampleValue });
+    }
+  }
+
+  if (points.length === 0) {
+    return null;
+  }
+
+  points.sort(
+    (firstPoint, secondPoint) =>
+      firstPoint.distanceMeters - secondPoint.distanceMeters,
+  );
+
+  const firstPoint = points[0];
+  if (distanceMeters <= firstPoint.distanceMeters) {
+    return firstPoint.value;
+  }
+
+  for (let index = 1; index < points.length; index += 1) {
+    const previousPoint = points[index - 1];
+    const nextPoint = points[index];
+    if (distanceMeters > nextPoint.distanceMeters) {
+      continue;
+    }
+
+    const distanceSpan =
+      nextPoint.distanceMeters - previousPoint.distanceMeters;
+    if (distanceSpan <= Number.EPSILON) {
+      return nextPoint.value;
+    }
+
+    const ratio =
+      (distanceMeters - previousPoint.distanceMeters) / distanceSpan;
+    return (
+      previousPoint.value + (nextPoint.value - previousPoint.value) * ratio
+    );
+  }
+
+  return points[points.length - 1].value;
+}
+
+function getChannelValueAtDistance(
+  response: LapChannelsResponse,
+  channelKey: OverlayChannelKey,
+  distanceMeters: number,
+) {
+  return interpolateByDistance(
+    response.channels.lapDistance,
+    response.channels[channelKey],
+    distanceMeters,
+  );
+}
+
+function getElapsedSecondsAtDistance(
+  response: LapChannelsResponse,
+  distanceMeters: number,
+) {
+  return interpolateByDistance(
+    response.channels.lapDistance,
+    response.channels.time,
+    distanceMeters,
+  );
+}
+
+function getSectorLabelAtDistance(
+  response: LapChannelsResponse,
+  distanceMeters: number,
+) {
+  const elapsedSeconds = getElapsedSecondsAtDistance(response, distanceMeters);
+  if (elapsedSeconds === null) {
+    return null;
+  }
+
+  const sectorOneSeconds = parseDurationSeconds(response.sector1Time);
+  const sectorTwoSeconds = parseDurationSeconds(response.sector2Time);
+  const sectorThreeSeconds = parseDurationSeconds(response.sector3Time);
+  if (sectorOneSeconds !== null && elapsedSeconds <= sectorOneSeconds) {
+    return "S1";
+  }
+
+  if (
+    sectorOneSeconds !== null &&
+    sectorTwoSeconds !== null &&
+    elapsedSeconds <= sectorOneSeconds + sectorTwoSeconds
+  ) {
+    return "S2";
+  }
+
+  if (
+    sectorOneSeconds !== null &&
+    sectorTwoSeconds !== null &&
+    sectorThreeSeconds !== null
+  ) {
+    return "S3";
+  }
+
+  return null;
+}
+
+function interpolateDeltaAtDistance(
+  points: DeltaTimePoint[],
+  distanceMeters: number,
+) {
+  return interpolateByDistance(
+    points.map((point) => point.distanceMeters),
+    points.map((point) => point.deltaSeconds),
+    distanceMeters,
+  );
+}
+
+function buildDeltaLookupAtDistance(
+  entries: LapBasketEntry[],
+  channelStates: Record<string, LapChannelLoadState>,
+  distanceMeters: number,
+) {
+  const deltaByEntryKey = new Map<string, number | null>();
+  const referenceEntry = entries[0];
+  if (referenceEntry === undefined) {
+    return deltaByEntryKey;
+  }
+
+  const referenceState = channelStates[getEntryKey(referenceEntry)];
+  if (referenceState?.status !== "ready") {
+    return deltaByEntryKey;
+  }
+
+  const comparisonInputs = entries
+    .slice(1)
+    .map((entry) => {
+      const state = channelStates[getEntryKey(entry)];
+      return state?.status === "ready"
+        ? toDeltaSeriesInput(entry, state.response)
+        : null;
+    })
+    .filter((input): input is DeltaSeriesInput => input !== null);
+
+  const deltaModel = buildDeltaTimeModel(
+    toDeltaSeriesInput(referenceEntry, referenceState.response),
+    comparisonInputs,
+  );
+  if (deltaModel === null) {
+    return deltaByEntryKey;
+  }
+
+  for (const trace of deltaModel.traces) {
+    deltaByEntryKey.set(
+      trace.id,
+      interpolateDeltaAtDistance(trace.points, distanceMeters),
+    );
+  }
+
+  return deltaByEntryKey;
+}
+
+function buildCursorReadoutRows(
+  entries: LapBasketEntry[],
+  channelStates: Record<string, LapChannelLoadState>,
+  channelKey: OverlayChannelKey,
+  distanceMeters: number,
+) {
+  const channelOption =
+    OVERLAY_CHANNEL_OPTIONS.find((option) => option.key === channelKey) ??
+    OVERLAY_CHANNEL_OPTIONS[0];
+  const deltaByEntryKey = buildDeltaLookupAtDistance(
+    entries,
+    channelStates,
+    distanceMeters,
+  );
+
+  return entries.map((entry, index) => {
+    const state = channelStates[getEntryKey(entry)];
+    if (state === undefined || state.status === "loading") {
+      return {
+        entry,
+        status: "loading",
+        statusMessage: "Loading lap channels",
+        formattedValue: "-",
+        deltaSeconds: null,
+        sectorLabel: "-",
+      } satisfies CursorReadoutRow;
+    }
+
+    if (state.status === "error") {
+      return {
+        entry,
+        status: "error",
+        statusMessage: state.message,
+        formattedValue: "-",
+        deltaSeconds: null,
+        sectorLabel: "-",
+      } satisfies CursorReadoutRow;
+    }
+
+    const channelValue = getChannelValueAtDistance(
+      state.response,
+      channelKey,
+      distanceMeters,
+    );
+    return {
+      entry,
+      status: "ready",
+      statusMessage: null,
+      formattedValue:
+        channelValue === null ? "-" : channelOption.formatValue(channelValue),
+      deltaSeconds:
+        index === 0 ? null : (deltaByEntryKey.get(getEntryKey(entry)) ?? null),
+      sectorLabel:
+        getSectorLabelAtDistance(state.response, distanceMeters) ?? "-",
+    } satisfies CursorReadoutRow;
+  });
+}
+
+function CompareDistanceCursorReadout({
+  entries,
+  channelStates,
+  selectedChannel,
+  distanceCursor,
+}: {
+  entries: LapBasketEntry[];
+  channelStates: Record<string, LapChannelLoadState>;
+  selectedChannel: OverlayChannelKey;
+  distanceCursor: CompareDistanceCursorState;
+}) {
+  const distanceMeters = distanceCursor.distanceMeters;
+  const channelOption =
+    OVERLAY_CHANNEL_OPTIONS.find((option) => option.key === selectedChannel) ??
+    OVERLAY_CHANNEL_OPTIONS[0];
+  const rows = useMemo(
+    () =>
+      distanceMeters === null
+        ? []
+        : buildCursorReadoutRows(
+            entries,
+            channelStates,
+            selectedChannel,
+            distanceMeters,
+          ),
+    [channelStates, distanceMeters, entries, selectedChannel],
+  );
+
+  if (distanceMeters === null) {
+    return null;
+  }
+
+  const roundedDistance = Math.round(distanceMeters);
+
+  return (
+    <section className="compare-cursor-readout" aria-label="Cursor values">
+      <header className="compare-overlay-header">
+        <div className="compare-overlay-title">
+          <span className="zone-kicker">Cursor</span>
+          <span className="compare-overlay-channel-label">
+            {roundedDistance.toLocaleString()} m
+          </span>
+        </div>
+        <span className="compare-delta-reference mono">
+          {channelOption.label}
+        </span>
+      </header>
+      <div className="table-panel-body compare-cursor-table-region">
+        <table
+          className="dense-table compare-cursor-table"
+          aria-label={`Cursor values at ${roundedDistance.toLocaleString()} m`}
+        >
+          <thead>
+            <tr>
+              <th scope="col">Lap</th>
+              <th scope="col">{channelOption.label}</th>
+              <th scope="col">Delta</th>
+              <th scope="col">Sector</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr
+                key={getEntryKey(row.entry)}
+                className={
+                  index === 0 ? "compare-cursor-reference-row" : undefined
+                }
+              >
+                <th scope="row">
+                  <span className="compare-sector-lap">
+                    <span
+                      className="compare-sector-lap-swatch"
+                      style={
+                        { "--lap-color": row.entry.color } as CSSProperties
+                      }
+                      aria-hidden="true"
+                    />
+                    <span className="compare-sector-lap-text">
+                      <span className="compare-sector-lap-number mono">
+                        Lap {row.entry.lapNumber}
+                      </span>
+                      <span className="compare-sector-lap-label">
+                        {row.entry.label}
+                      </span>
+                      <span className="compare-sector-lap-session">
+                        {getEntrySessionBadge(row.entry)}
+                      </span>
+                    </span>
+                  </span>
+                </th>
+                <td className="mono" title={row.statusMessage ?? undefined}>
+                  <span
+                    className={`compare-cursor-value compare-cursor-${row.status}`}
+                  >
+                    {row.formattedValue}
+                  </span>
+                </td>
+                <td className={getSectorDeltaClass(row.deltaSeconds)}>
+                  {index === 0 ? "REF" : formatDeltaSeconds(row.deltaSeconds)}
+                </td>
+                <td className="mono compare-cursor-sector">
+                  {row.sectorLabel}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 const OVERLAY_CHART_WIDTH = 860;
 const OVERLAY_CHART_HEIGHT = 280;
 const OVERLAY_CHART_PADDING = {
@@ -597,6 +1379,8 @@ type OverlayChartModel = {
   traces: OverlayTrace[];
   xAxis: "lapDistance" | "time";
   xAxisLabel: string;
+  xDomainMin: number;
+  xDomainMax: number;
   xTicks: number[];
   yTicks: number[];
   formatXTick: (value: number) => string;
@@ -798,6 +1582,8 @@ function buildOverlayChartModel(
     traces,
     xAxis,
     xAxisLabel,
+    xDomainMin: finalXMin,
+    xDomainMax: finalXMax,
     xTicks,
     yTicks: [...yTicks].reverse(),
     formatXTick,
@@ -814,18 +1600,29 @@ function formatChartSeconds(value: number) {
 }
 
 function CompareOverlayChart({
+  panelId,
+  panelNumber,
   entries,
   channelStates,
   selectedChannel,
+  canRemove,
   onSelectChannel,
+  onRemovePanel,
   onSetReferenceLap,
+  distanceCursor,
+  onDistanceCursorChange,
+  onDistanceCursorClear,
 }: {
+  panelId: string;
+  panelNumber: number;
   entries: LapBasketEntry[];
   channelStates: Record<string, LapChannelLoadState>;
   selectedChannel: OverlayChannelKey;
-  onSelectChannel: (channel: OverlayChannelKey) => void;
+  canRemove: boolean;
+  onSelectChannel: (panelId: string, channel: OverlayChannelKey) => void;
+  onRemovePanel: (panelId: string) => void;
   onSetReferenceLap?: (sessionId: string, lapNumber: number) => void;
-}) {
+} & CompareDistanceCursorControls) {
   const selectId = useId();
   const ready = useMemo(
     () => pickReadyEntries(entries, channelStates),
@@ -838,6 +1635,45 @@ function CompareOverlayChart({
     () => buildOverlayChartModel(ready, selectedChannel),
     [ready, selectedChannel],
   );
+  const cursorX =
+    model !== null && model.xAxis === "lapDistance"
+      ? getCursorChartX(
+          distanceCursor,
+          model.xDomainMin,
+          model.xDomainMax,
+          model.toChartX,
+        )
+      : null;
+  const handlePointerMove = useCallback(
+    (event: PointerEvent<SVGSVGElement>) => {
+      if (model === null || model.xAxis !== "lapDistance") {
+        return;
+      }
+
+      const distanceMeters = getDomainXFromPointer(
+        event,
+        OVERLAY_CHART_WIDTH,
+        OVERLAY_CHART_PADDING,
+        model.xDomainMin,
+        model.xDomainMax,
+      );
+      if (distanceMeters !== null) {
+        onDistanceCursorChange(panelId, distanceMeters);
+      }
+    },
+    [model, onDistanceCursorChange, panelId],
+  );
+  const handleFocus = useCallback(() => {
+    if (model === null || model.xAxis !== "lapDistance") {
+      return;
+    }
+
+    onDistanceCursorChange(
+      panelId,
+      distanceCursor.distanceMeters ??
+        model.xDomainMin + (model.xDomainMax - model.xDomainMin) / 2,
+    );
+  }, [distanceCursor.distanceMeters, model, onDistanceCursorChange, panelId]);
 
   const totalLaps = entries.length;
   const readyLaps = ready.length;
@@ -858,32 +1694,51 @@ function CompareOverlayChart({
   return (
     <section
       className="compare-overlay-chart"
-      aria-label={`Lap overlay (${channelOption.label})`}
+      aria-label={`Lap overlay ${panelNumber} (${channelOption.label})`}
     >
       <header className="compare-overlay-header">
         <div className="compare-overlay-title">
-          <span className="zone-kicker">Overlay</span>
+          <span className="zone-kicker">Overlay {panelNumber}</span>
           <span className="compare-overlay-channel-label">
             {channelOption.label}
           </span>
         </div>
-        <label className="compare-overlay-channel-control" htmlFor={selectId}>
-          <span className="compare-overlay-channel-control-label">Channel</span>
-          <select
-            id={selectId}
-            className="compare-overlay-channel-select"
-            value={selectedChannel}
-            onChange={(event) =>
-              onSelectChannel(event.target.value as OverlayChannelKey)
-            }
-          >
-            {OVERLAY_CHANNEL_OPTIONS.map((option) => (
-              <option key={option.key} value={option.key}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="compare-overlay-actions">
+          <label className="compare-overlay-channel-control" htmlFor={selectId}>
+            <span className="compare-overlay-channel-control-label">
+              Channel
+            </span>
+            <select
+              id={selectId}
+              className="compare-overlay-channel-select"
+              aria-label={`Overlay ${panelNumber} channel`}
+              value={selectedChannel}
+              onChange={(event) =>
+                onSelectChannel(
+                  panelId,
+                  event.target.value as OverlayChannelKey,
+                )
+              }
+            >
+              {OVERLAY_CHANNEL_OPTIONS.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {canRemove && (
+            <button
+              type="button"
+              className="icon-button compare-row-action"
+              aria-label={`Remove overlay ${panelNumber}`}
+              title={`Remove overlay ${panelNumber}`}
+              onClick={() => onRemovePanel(panelId)}
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
       </header>
 
       {model === null ? (
@@ -900,7 +1755,11 @@ function CompareOverlayChart({
             className="compare-overlay-svg"
             viewBox={`0 0 ${OVERLAY_CHART_WIDTH} ${OVERLAY_CHART_HEIGHT}`}
             role="img"
-            aria-label={`Lap overlay chart for ${channelOption.label}`}
+            aria-label={`Lap overlay chart for ${channelOption.label} overlay ${panelNumber}`}
+            tabIndex={model.xAxis === "lapDistance" ? 0 : undefined}
+            onFocus={handleFocus}
+            onPointerMove={handlePointerMove}
+            onPointerLeave={() => onDistanceCursorClear(panelId)}
           >
             {model.yTicks.map((tick) => {
               const y = model.toChartY(tick);
@@ -978,6 +1837,15 @@ function CompareOverlayChart({
                 d={trace.pathData}
               />
             ))}
+            {cursorX !== null && (
+              <line
+                className="compare-distance-cursor-line"
+                x1={cursorX}
+                x2={cursorX}
+                y1={OVERLAY_CHART_PADDING.top}
+                y2={OVERLAY_CHART_HEIGHT - OVERLAY_CHART_PADDING.bottom}
+              />
+            )}
             <text
               className="compare-overlay-axis-label"
               x={OVERLAY_CHART_PADDING.left}
@@ -1016,6 +1884,12 @@ function CompareOverlayChart({
               />
               <span className="compare-overlay-legend-label">
                 {entry.label}
+              </span>
+              <span
+                className="compare-overlay-legend-session mono"
+                title={getEntrySessionDetails(entry)}
+              >
+                {getEntrySessionBadge(entry)}
               </span>
               {index === 0 && (
                 <span
@@ -1080,6 +1954,8 @@ type DeltaChartTrace = {
 
 type DeltaChartModel = {
   traces: DeltaChartTrace[];
+  xDomainMin: number;
+  xDomainMax: number;
   xTicks: number[];
   yTicks: number[];
   toChartX: (value: number) => number;
@@ -1192,6 +2068,8 @@ function buildDeltaChartModel(
       trace,
       segments: buildDeltaSegments(trace.points),
     })),
+    xDomainMin: 0,
+    xDomainMax: finalXMax,
     xTicks,
     yTicks,
     toChartX,
@@ -1251,10 +2129,13 @@ function getDeltaPlaceholderMessage(
 function CompareDeltaTimeChart({
   entries,
   channelStates,
+  distanceCursor,
+  onDistanceCursorChange,
+  onDistanceCursorClear,
 }: {
   entries: LapBasketEntry[];
   channelStates: Record<string, LapChannelLoadState>;
-}) {
+} & CompareDistanceCursorControls) {
   const referenceEntry = entries[0] ?? null;
   const deltaModel = useMemo(() => {
     if (referenceEntry === null) {
@@ -1288,6 +2169,46 @@ function CompareDeltaTimeChart({
   );
   const placeholderMessage = getDeltaPlaceholderMessage(entries, channelStates);
   const clippedTraceCount = deltaModel?.clippedTraceCount ?? 0;
+  const cursorX =
+    chartModel === null
+      ? null
+      : getCursorChartX(
+          distanceCursor,
+          chartModel.xDomainMin,
+          chartModel.xDomainMax,
+          chartModel.toChartX,
+        );
+  const handlePointerMove = useCallback(
+    (event: PointerEvent<SVGSVGElement>) => {
+      if (chartModel === null) {
+        return;
+      }
+
+      const distanceMeters = getDomainXFromPointer(
+        event,
+        OVERLAY_CHART_WIDTH,
+        DELTA_CHART_PADDING,
+        chartModel.xDomainMin,
+        chartModel.xDomainMax,
+      );
+      if (distanceMeters !== null) {
+        onDistanceCursorChange(DELTA_COMPARE_PANEL_ID, distanceMeters);
+      }
+    },
+    [chartModel, onDistanceCursorChange],
+  );
+  const handleFocus = useCallback(() => {
+    if (chartModel === null) {
+      return;
+    }
+
+    onDistanceCursorChange(
+      DELTA_COMPARE_PANEL_ID,
+      distanceCursor.distanceMeters ??
+        chartModel.xDomainMin +
+          (chartModel.xDomainMax - chartModel.xDomainMin) / 2,
+    );
+  }, [chartModel, distanceCursor.distanceMeters, onDistanceCursorChange]);
 
   return (
     <section className="compare-delta-chart" aria-label="Delta time">
@@ -1317,6 +2238,12 @@ function CompareDeltaTimeChart({
               viewBox={`0 0 ${OVERLAY_CHART_WIDTH} ${DELTA_CHART_HEIGHT}`}
               role="img"
               aria-label={`Delta time plot vs ${referenceEntry.label}`}
+              tabIndex={0}
+              onFocus={handleFocus}
+              onPointerMove={handlePointerMove}
+              onPointerLeave={() =>
+                onDistanceCursorClear(DELTA_COMPARE_PANEL_ID)
+              }
             >
               {chartModel.yTicks.map((tick) => {
                 const y = chartModel.toChartY(tick);
@@ -1408,6 +2335,15 @@ function CompareDeltaTimeChart({
                   ))}
                 </g>
               ))}
+              {cursorX !== null && (
+                <line
+                  className="compare-distance-cursor-line"
+                  x1={cursorX}
+                  x2={cursorX}
+                  y1={DELTA_CHART_PADDING.top}
+                  y2={DELTA_CHART_HEIGHT - DELTA_CHART_PADDING.bottom}
+                />
+              )}
               <text
                 className="compare-overlay-axis-label"
                 x={DELTA_CHART_PADDING.left}
