@@ -292,6 +292,8 @@ function App() {
             activeSource={displaySource}
             runMode={runMode}
             sample={displaySample}
+            lapTrace={displayLapTrace}
+            sessions={sessions}
           />
         )}
 

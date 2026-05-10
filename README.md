@@ -85,7 +85,7 @@ The API host reads its runtime configuration from `src\SectorForge.Api\appsettin
 | --- | --- | --- |
 | `Collector:AutoStart` | `false` | Start the collector automatically with `Collector:AdapterId` when the API host boots. |
 | `Collector:AdapterId` | `fake` | Adapter id selected when autostart is enabled. |
-| `Storage:RetainedSampleBlobLimit` | `1800` | Per-session raw sample blob cap; older blobs are pruned, summaries are kept. |
+| `Storage:RetainedSampleBlobLimit` | `120000` | Per-session raw sample blob cap; older blobs are pruned, summaries are kept. |
 | `Adapters:<id>:Enabled` | `true` for `fake`, `false` for real-game adapters | Enable flag per adapter id (e.g. `fake`, `f1-25-udp`, `acc-shared-memory`, `ams2-project-cars`, `lmu-plugin-udp`). |
 | `Adapters:fake:SampleRateHz` | `60` | Fake adapter emit rate in Hertz. |
 | `Adapters:<id>:BindAddress` | `127.0.0.1` for UDP adapters | UDP/socket bind address for adapters that bind a listener. |

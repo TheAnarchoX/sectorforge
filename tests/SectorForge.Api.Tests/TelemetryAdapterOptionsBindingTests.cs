@@ -20,7 +20,7 @@ public sealed class TelemetryAdapterOptionsBindingTests
 
         Assert.False(collector.AutoStart);
         Assert.Equal("fake", collector.AdapterId);
-        Assert.Equal(1800, storage.RetainedSampleBlobLimit);
+        Assert.Equal(120_000, storage.RetainedSampleBlobLimit);
         Assert.Empty(adapters.Items);
 
         var unknown = adapters.For("not-configured");

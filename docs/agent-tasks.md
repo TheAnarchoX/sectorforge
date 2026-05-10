@@ -138,7 +138,7 @@ This backlog is written for coding agents and human contributors. Each task is i
 - Type: storage
 - Goal: Avoid unbounded high-frequency sample growth during long fake telemetry runs.
 - Suggested files: `src/SectorForge.Infrastructure/Storage/*`, `src/SectorForge.Api/appsettings*.json`, docs
-- Notes: Added per-session raw sample blob pruning on 2026-05-02 with a configurable `Storage:RetainedSampleBlobLimit` default of 1,800. Session summaries and lap summaries remain intact when older raw blobs are trimmed.
+- Notes: Added per-session raw sample blob pruning on 2026-05-02 with a configurable `Storage:RetainedSampleBlobLimit`; the default was raised to 120,000 on 2026-05-10 so long F1 25 captures can be replayed and compared without hitting the old short local window. Session summaries and lap summaries remain intact when older raw blobs are trimmed.
 - Acceptance criteria:
   - Storage has configurable retention or batch pruning for raw sample blobs.
   - Defaults are safe for local development.
@@ -725,9 +725,10 @@ Execution Phase 4: session analysis surfaces.
 
 ### SF-05F: Add Lap Comparison To Driver View
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend feature
 - Goal: In the Driver View workspace, allow users to select a reference lap and compare their current live lap against it in real time with overlay charts and delta plots, so they can get immediate feedback on their performance during a session.
+- Notes: Completed on 2026-05-10. Driver View now includes a live-vs-reference lap comparison section that loads session-history laps, lets the driver switch reference sessions/laps, overlays current live speed against the selected reference lap, and renders a real-time distance-based delta plot when both traces expose lap distance. Live/replay lap traces now preserve optional lap distance so F1 25 samples can drive delta comparison while adapters without distance show a clear unavailable state.
 - Suggested files: `src/SectorForge.Web/src/components/dashboard/DriverView.tsx`, `src/SectorForge.Web/src/components/dashboard/LapTelemetryChart.tsx`
 - Acceptance criteria:
   - Driver View includes a section for lap comparison where users can select a reference lap from their session history.
@@ -750,16 +751,21 @@ Execution Phase 5: sharing, notes, and external analysis.
   - Importing a valid JSON file populates the lap basket and reference selection accordingly, with error handling for invalid formats.
   - Lint and frontend build pass.
 
-### SF-05H: Add Annotations And Notes To Laps In Compare Views
+### SF-05H: Add Annotations And Notes To Sessions, Laps, And Telemetry Moments
 
 - Status: `ready`
 - Type: frontend feature
-- Goal: Allow users to add annotations or notes to specific laps in the Compare workspace, so they can document observations or insights about particular laps for future reference.
-- Suggested files: `src/SectorForge.Web/src/components/dashboard/CompareWorkspace.tsx`, `src/SectorForge.Web/src/utils/*`
+- Goal: Allow users to add annotations or notes at multiple levels—session-wide, lap-specific, and moment-specific (single points or time spans in telemetry)—in the Compare workspace and Driver View, and provide discovery features to surface past annotations so insights can be retrieved and built upon.
+- Suggested files: `src/SectorForge.Web/src/components/dashboard/CompareWorkspace.tsx`, `src/SectorForge.Web/src/components/dashboard/DriverView.tsx`, `src/SectorForge.Web/src/components/annotations/*`, `src/SectorForge.Web/src/utils/*`
 - Acceptance criteria:
-  - Users can click on a lap in the Compare workspace to open an annotation editor.
-  - Annotations can include text notes and are saved to local storage or the backend for persistence.
-  - Annotated laps display an indicator in the overlay charts and delta plots, and users can view the annotations when hovering over or selecting the lap.
+  - Users can add session-level notes (visible in session overview or metadata).
+  - Users can click on a lap in the Compare workspace or Driver View to add lap-level annotations.
+  - Users can annotate specific telemetry moments by selecting a single data point or a time span on charts, opening a moment annotation editor.
+  - Annotations can include text notes and optional tags or categories (e.g. "setup change", "track condition", "driver feedback") to aid discovery.
+  - Annotations are saved to local storage or the backend for persistence.
+  - A discovery/search panel allows users to browse, filter, and search past annotations across sessions and laps by date, tags, or text.
+  - Annotated laps and moments display indicators in the overlay charts, delta plots, and telemetry timeline; users can view annotations by hovering over or selecting them.
+  - Discovery panel shows context (session ID, lap number, time within lap) for each annotation to help users jump to relevant comparisons.
   - Lint and frontend build pass.
 
 ### SF-05C: External Export Of Comparison Data

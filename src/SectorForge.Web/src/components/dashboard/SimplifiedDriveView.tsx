@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import type {
+  CurrentLapTelemetrySeries,
   TelemetryRunMode,
   TelemetrySample,
+  TelemetrySessionSummary,
   TelemetrySource,
 } from "../../types/telemetry";
 import {
@@ -10,11 +12,14 @@ import {
   formatNumber,
   formatTime,
 } from "../../utils/telemetryFormat";
+import { DriverLapCompare } from "./DriverLapCompare";
 
 type SimplifiedDriveViewProps = {
   activeSource: TelemetrySource | null;
   runMode: TelemetryRunMode;
   sample: TelemetrySample | null;
+  lapTrace: CurrentLapTelemetrySeries;
+  sessions: TelemetrySessionSummary[];
 };
 
 type DeltaTone = "improving" | "losing" | "neutral";
@@ -29,6 +34,8 @@ export function SimplifiedDriveView({
   activeSource,
   runMode,
   sample,
+  lapTrace,
+  sessions,
 }: SimplifiedDriveViewProps) {
   const playerParticipant =
     sample?.participants?.find((participant) => participant.isPlayer) ?? null;
@@ -207,6 +214,12 @@ export function SimplifiedDriveView({
       </div>
 
       <ThermalStrip sample={sample} />
+
+      <DriverLapCompare
+        sample={sample}
+        lapTrace={lapTrace}
+        sessions={sessions}
+      />
     </section>
   );
 }

@@ -150,6 +150,31 @@ public sealed class SqliteTelemetrySessionStoreTests
     }
 
     [Fact]
+    public async Task GetSessionReturnsAllRetainedSamplesForReplayAnalysis()
+    {
+        const int retainedSampleCount = 320;
+        var databasePath = Path.Combine(Path.GetTempPath(), "SectorForge.Tests", $"{Guid.NewGuid():N}.db");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath }.ToString();
+        var store = new SqliteTelemetrySessionStore(connectionString, retainedSampleBlobLimit: retainedSampleCount);
+        var adapter = new FakeTelemetryAdapter();
+        var sessionId = Guid.NewGuid();
+
+        for (var sequence = 1L; sequence <= retainedSampleCount; sequence++)
+        {
+            var sample = adapter.CreateSample(TimeSpan.FromSeconds(sequence), sequence, sessionId);
+            await store.SaveSampleAsync(sample);
+        }
+
+        var details = await store.GetSessionAsync(sessionId);
+
+        Assert.NotNull(details);
+        Assert.Equal(retainedSampleCount, details.Samples.Count);
+        Assert.Equal(
+            Enumerable.Range(1, retainedSampleCount).Select(sequence => (long)sequence).ToArray(),
+            details.Samples.Select(sample => sample.Sequence).ToArray());
+    }
+
+    [Fact]
     public async Task GetLapSamplesDistinguishesUnknownLapAndPrunedLap()
     {
         var databasePath = Path.Combine(Path.GetTempPath(), "SectorForge.Tests", $"{Guid.NewGuid():N}.db");

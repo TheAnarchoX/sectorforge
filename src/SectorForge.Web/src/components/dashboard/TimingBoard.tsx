@@ -189,7 +189,11 @@ function buildReplayLapTrace(
       continue;
     }
 
-    points.push({ elapsedSeconds, value: speedKph });
+    points.push({
+      elapsedSeconds,
+      value: speedKph,
+      lapDistanceMeters: nextSample.lap.lapDistanceMeters ?? null,
+    });
   }
 
   return {

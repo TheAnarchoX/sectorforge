@@ -9,7 +9,7 @@ namespace SectorForge.Infrastructure.Storage;
 
 public sealed class SqliteTelemetrySessionStore : ITelemetrySessionStore
 {
-    public const int DefaultRetainedSampleBlobLimit = 1800;
+    public const int DefaultRetainedSampleBlobLimit = 120_000;
 
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
     private readonly string _connectionString;
@@ -135,7 +135,7 @@ public sealed class SqliteTelemetrySessionStore : ITelemetrySessionStore
         }
 
         var laps = await GetLapSummariesAsync(connection, sessionId, cancellationToken);
-        var samples = await GetRecentSamplesAsync(connection, sessionId, cancellationToken);
+        var samples = await GetStoredSamplesAsync(connection, sessionId, cancellationToken);
 
         return new TelemetrySessionDetails(session, laps, samples);
     }
@@ -479,7 +479,7 @@ public sealed class SqliteTelemetrySessionStore : ITelemetrySessionStore
         return samples;
     }
 
-    private static async Task<IReadOnlyList<TelemetrySample>> GetRecentSamplesAsync(
+    private static async Task<IReadOnlyList<TelemetrySample>> GetStoredSamplesAsync(
         SqliteConnection connection,
         Guid sessionId,
         CancellationToken cancellationToken)
@@ -489,8 +489,7 @@ public sealed class SqliteTelemetrySessionStore : ITelemetrySessionStore
             SELECT payload_json
             FROM telemetry_sample_blobs
             WHERE session_id = $sessionId
-            ORDER BY sequence DESC
-            LIMIT 300;
+            ORDER BY sequence ASC, id ASC;
             """;
         Add(command, "$sessionId", sessionId.ToString());
 
@@ -505,7 +504,6 @@ public sealed class SqliteTelemetrySessionStore : ITelemetrySessionStore
             }
         }
 
-        samples.Reverse();
         return samples;
     }
 

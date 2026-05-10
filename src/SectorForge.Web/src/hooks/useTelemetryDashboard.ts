@@ -419,7 +419,11 @@ export function useTelemetryDashboard() {
           lapRef.lapNumber !== nextLapNumber ||
           (lastPoint !== null &&
             elapsedSeconds + 0.05 < lastPoint.elapsedSeconds);
-        const nextPoint = { elapsedSeconds, value: speedKph };
+        const nextPoint = {
+          elapsedSeconds,
+          value: speedKph,
+          lapDistanceMeters: nextSample.lap.lapDistanceMeters ?? null,
+        };
 
         if (shouldReset) {
           lapRef.sessionId = nextSample.session.id;

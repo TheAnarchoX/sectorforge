@@ -129,6 +129,7 @@ export function createTelemetrySample(
         lastLapTime: "00:01:03.100",
         bestLapTime: "00:01:01.900",
         sectorIndex: 1,
+        lapDistanceMeters: 1240,
       },
       vehicle: {
         carName: "GT3 Evo",
@@ -208,6 +209,7 @@ export function createTelemetrySamples(
           lap: {
             lapNumber: 4,
             currentLapTime: formatDuration((index + 1) * 0.5),
+            lapDistanceMeters: (index + 1) * 120,
           },
           vehicle: {
             speedKph: 148 + index * 4,
@@ -303,6 +305,12 @@ export function createLapChannelsResponse(
           valueKind: "Number",
           unit: "ratio",
         },
+        {
+          key: "lapDistance",
+          label: "Lap distance",
+          valueKind: "Number",
+          unit: "m",
+        },
       ],
       channels: {
         time: [1, 2, 3],
@@ -311,6 +319,7 @@ export function createLapChannelsResponse(
         throttle: [0.55, 0.61, 0.72],
         brake: [0.03, 0.05, 0.08],
         steering: [0.12, -0.04, 0.12],
+        lapDistance: [120, 240, 360],
       },
     } satisfies LapChannelsResponse,
     override,
@@ -359,9 +368,9 @@ export function createLapTrace(
       sessionId: "session-1",
       lapNumber: 4,
       points: [
-        { elapsedSeconds: 0.5, value: 148 },
-        { elapsedSeconds: 1, value: 152 },
-        { elapsedSeconds: 1.5, value: 156 },
+        { elapsedSeconds: 0.5, value: 148, lapDistanceMeters: 120 },
+        { elapsedSeconds: 1, value: 152, lapDistanceMeters: 240 },
+        { elapsedSeconds: 1.5, value: 156, lapDistanceMeters: 360 },
       ],
     } satisfies CurrentLapTelemetrySeries,
     override,

@@ -83,7 +83,7 @@ public sealed class StorageOptions
     /// Per-session raw sample blob retention cap. Older blobs beyond this count are pruned;
     /// session and lap summaries remain intact.
     /// </summary>
-    public int RetainedSampleBlobLimit { get; set; } = 1800;
+    public int RetainedSampleBlobLimit { get; set; } = 120_000;
 }
 
 /// <summary>

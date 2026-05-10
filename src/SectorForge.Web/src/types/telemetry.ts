@@ -373,6 +373,7 @@ export type TelemetryTraceSeries = {
 export type LapTelemetryPoint = {
   elapsedSeconds: number;
   value: number;
+  lapDistanceMeters?: number | null;
 };
 
 export type CurrentLapTelemetrySeries = {

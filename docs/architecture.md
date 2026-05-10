@@ -47,6 +47,8 @@ The MVP stores:
 
 This is intentionally simple. The `ITelemetrySessionStore` abstraction leaves room for batching, chunk files, DuckDB, Parquet export, or a dedicated time-series layout later.
 
+Stored-session detail and replay read the full retained raw sample set for a capture, so long laps are bounded by `Storage:RetainedSampleBlobLimit` pruning rather than by a separate preview-frame cap. The default retention is 120,000 raw samples per session, which keeps local storage bounded while leaving enough headroom for long F1 25 laps and multi-lap replay analysis.
+
 ## Lap Channel API
 
 `GET /api/sessions/{sessionId}/laps/{lapNumber}/channels` returns one stored lap as aligned arrays for compare overlays. The response includes lap metadata (`sessionId`, `lapNumber`, `lapTime`, `bestLapTime`, `sector1Time`, `sector2Time`, `sector3Time`, `sampleCount`), a stable `manifest`, and `channels` arrays for `time`, `speedKph`, `rpm`, `throttle`, `brake`, and `steering`. When retained samples contain the values, the manifest and channels also include `lapDistance`, `lateralG`, `longitudinalG`, `drsActive`, and `ersStoreJoules`.

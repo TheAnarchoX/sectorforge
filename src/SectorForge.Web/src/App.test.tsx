@@ -264,7 +264,7 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: /sessions/i }));
     await user.click(screen.getByText("Silverstone"));
-    await screen.findByText(/recorded laps/i);
+    await screen.findByRole("heading", { name: "Lap-focused session view" });
 
     await user.click(
       screen.getByRole("checkbox", { name: "Select lap 3 for compare" }),
