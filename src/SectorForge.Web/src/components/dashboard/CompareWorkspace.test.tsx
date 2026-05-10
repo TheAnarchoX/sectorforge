@@ -17,6 +17,16 @@ vi.mock("../../api/telemetryApi", () => ({
   getLapChannelsForBasketEntry: getLapChannelsForBasketEntryMock,
 }));
 
+function readBlobText(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("Blob read failed."));
+    reader.readAsText(blob);
+  });
+}
+
 describe("CompareWorkspace", () => {
   beforeEach(() => {
     getLapChannelsForBasketEntryMock.mockReset();
@@ -154,6 +164,133 @@ describe("CompareWorkspace", () => {
       4,
     );
     expect(onClearBasket).toHaveBeenCalledTimes(1);
+  });
+
+  it("exports pinned laps as a JSON comparison set", async () => {
+    const user = userEvent.setup();
+    const createObjectURLMock = vi.fn((blob: Blob) => {
+      void blob;
+      return "blob:sectorforge-compare";
+    });
+    const revokeObjectURLMock = vi.fn();
+    const clickMock = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: createObjectURLMock,
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectURLMock,
+    });
+    getLapChannelsForBasketEntryMock.mockResolvedValue(
+      createLapChannelsResponse({ sampleCount: 3 }),
+    );
+
+    render(
+      <CompareWorkspace
+        basketEntries={[
+          {
+            sessionId: "11111111-1111-1111-1111-111111111111",
+            lapNumber: 4,
+            label: "Practice lap 4",
+            color: "#63b8d6",
+          },
+          {
+            sessionId: "22222222-2222-2222-2222-222222222222",
+            lapNumber: 5,
+            label: "Practice lap 5",
+            color: "#d9b04a",
+          },
+        ]}
+        onImportComparisonSet={vi.fn()}
+        onOpenSessions={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Export" }));
+
+    expect(clickMock).toHaveBeenCalledTimes(1);
+    expect(createObjectURLMock).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURLMock).toHaveBeenCalledWith(
+      "blob:sectorforge-compare",
+    );
+    const exportedBlob = createObjectURLMock.mock.calls[0][0] as Blob;
+    await expect(readBlobText(exportedBlob)).resolves.toContain(
+      '"schema": "sectorforge.lapComparisonSet"',
+    );
+    await expect(readBlobText(exportedBlob)).resolves.toContain(
+      '"role": "reference"',
+    );
+    expect(screen.getByText("Exported 2 laps to JSON.")).toBeInTheDocument();
+  });
+
+  it("imports a valid comparison set and reports invalid files", async () => {
+    const user = userEvent.setup();
+    const onImportComparisonSet = vi.fn();
+    render(
+      <CompareWorkspace
+        onImportComparisonSet={onImportComparisonSet}
+        maxBasketEntries={6}
+        onOpenSessions={vi.fn()}
+      />,
+    );
+
+    await user.upload(
+      screen.getByLabelText("Import comparison JSON"),
+      new File(
+        [
+          JSON.stringify({
+            version: 1,
+            reference: {
+              sessionId: "22222222-2222-2222-2222-222222222222",
+              lapNumber: 5,
+            },
+            entries: [
+              {
+                sessionId: "11111111-1111-1111-1111-111111111111",
+                lapNumber: 4,
+                label: "Practice lap 4",
+                color: "#63b8d6",
+              },
+              {
+                sessionId: "22222222-2222-2222-2222-222222222222",
+                lapNumber: 5,
+                label: "Practice lap 5",
+                color: "#d9b04a",
+              },
+            ],
+          }),
+        ],
+        "compare.json",
+        { type: "application/json" },
+      ),
+    );
+
+    await waitFor(() => {
+      expect(onImportComparisonSet).toHaveBeenCalledTimes(1);
+    });
+    expect(onImportComparisonSet.mock.calls[0][0]).toMatchObject([
+      { label: "Practice lap 5", lapNumber: 5 },
+      { label: "Practice lap 4", lapNumber: 4 },
+    ]);
+    expect(onImportComparisonSet.mock.calls[0][1]).toEqual({
+      sessionId: "22222222-2222-2222-2222-222222222222",
+      lapNumber: 5,
+    });
+    expect(screen.getByText("Imported 2 laps from JSON.")).toBeInTheDocument();
+
+    await user.upload(
+      screen.getByLabelText("Import comparison JSON"),
+      new File(["not-json"], "broken.json", { type: "application/json" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Import failed: The selected file is not valid JSON.",
+      ),
+    ).toHaveAttribute("role", "alert");
   });
 
   it("allows a comparison lap to be reassigned as the reference from the legend", async () => {

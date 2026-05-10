@@ -741,9 +741,10 @@ Execution Phase 5: sharing, notes, and external analysis.
 
 ### SF-05B: Import/Export Lap Comparison Sets
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend feature
 - Goal: Allow users to export their pinned lap sets and reference selections as a JSON file that can be shared or re-imported later, so they can save interesting comparisons or share them without relying on the persistence of `localStorage`.
+- Notes: Completed on 2026-05-10. Compare now exports pinned lap comparison sets as versioned SectorForge JSON with lap entries, labels, colors, session context, panel channel selections, and reference metadata; the Compare workspace can import those files from the empty or populated state, replace the lap basket, restore the selected reference, and report invalid JSON or unsupported formats inline.
 - Suggested files: `src/SectorForge.Web/src/components/dashboard/CompareWorkspace.tsx`, `src/SectorForge.Web/src/utils/*`
 - Acceptance criteria:
   - Compare workspace includes "Export" and "Import" buttons that trigger file download and upload dialogs.
@@ -766,6 +767,8 @@ Execution Phase 5: sharing, notes, and external analysis.
   - A discovery/search panel allows users to browse, filter, and search past annotations across sessions and laps by date, tags, or text.
   - Annotated laps and moments display indicators in the overlay charts, delta plots, and telemetry timeline; users can view annotations by hovering over or selecting them.
   - Discovery panel shows context (session ID, lap number, time within lap) for each annotation to help users jump to relevant comparisons.
+  - Annotations can be edited or deleted by the user.
+  - Annotations are exported and imported as part of the lap comparison sets in SF-05B.
   - Lint and frontend build pass.
 
 ### SF-05C: External Export Of Comparison Data

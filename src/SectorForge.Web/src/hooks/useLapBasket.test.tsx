@@ -266,6 +266,44 @@ describe("useLapBasket", () => {
     expect(result.current.entries).toHaveLength(2);
   });
 
+  it("replaces the basket with imported entries and restores the reference", () => {
+    const { result } = renderHook(() => useLapBasket());
+
+    act(() => {
+      result.current.addLap({ sessionId: FIRST_SESSION_ID, lapNumber: 1 });
+    });
+
+    act(() => {
+      result.current.replace(
+        [
+          {
+            sessionId: FIRST_SESSION_ID,
+            lapNumber: 4,
+            label: "Silverstone L4",
+            color: "#63b8d6",
+          },
+          {
+            sessionId: SECOND_SESSION_ID,
+            lapNumber: 5,
+            label: "Spa L5",
+            color: "#d9b04a",
+            channelSelections: [
+              { panelId: DEFAULT_COMPARE_PANEL_ID, channelKey: "rpm" },
+            ],
+          },
+        ],
+        { sessionId: SECOND_SESSION_ID, lapNumber: 5 },
+      );
+    });
+
+    expect(result.current.reference?.label).toBe("Spa L5");
+    expect(result.current.entries.map((entry) => entry.label)).toEqual([
+      "Spa L5",
+      "Silverstone L4",
+    ]);
+    expect(result.current.comparisons).toHaveLength(1);
+  });
+
   it("tracks compare panel channel selections across pinned laps", async () => {
     const { result } = renderHook(() => useLapBasket());
 

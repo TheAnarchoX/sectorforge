@@ -303,7 +303,9 @@ function App() {
             onRemoveLap={lapBasket.removeLap}
             onSetReferenceLap={lapBasket.setReference}
             onSetPanelChannel={lapBasket.setPanelChannel}
+            onImportComparisonSet={lapBasket.replace}
             onClearBasket={lapBasket.clear}
+            maxBasketEntries={lapBasket.maxEntries}
             onOpenSessions={handleOpenSessions}
           />
         )}

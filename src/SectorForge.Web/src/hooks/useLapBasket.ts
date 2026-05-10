@@ -42,6 +42,11 @@ export type LapBasketAddInput = Pick<
     Pick<LapBasketEntry, "label" | "color" | "channelSelections" | "session">
   >;
 
+export type LapBasketReferenceInput = Pick<
+  LapBasketEntry,
+  "sessionId" | "lapNumber"
+>;
+
 export type UseLapBasketOptions = {
   storageKey?: string;
   maxEntries?: number;
@@ -241,6 +246,31 @@ function normalizeEntries(values: unknown[], maxEntries: number) {
   return entries;
 }
 
+function moveReferenceFirst(
+  entries: LapBasketEntry[],
+  reference: LapBasketReferenceInput | null | undefined,
+) {
+  if (reference === null || reference === undefined) {
+    return entries;
+  }
+
+  const referenceIndex = entries.findIndex(
+    (entry) =>
+      entry.sessionId === reference.sessionId &&
+      entry.lapNumber === reference.lapNumber,
+  );
+
+  if (referenceIndex <= 0) {
+    return entries;
+  }
+
+  return [
+    entries[referenceIndex],
+    ...entries.slice(0, referenceIndex),
+    ...entries.slice(referenceIndex + 1),
+  ];
+}
+
 function readStoredBasket(storageKey: string, maxEntries: number) {
   if (typeof window === "undefined") {
     return [];
@@ -399,6 +429,19 @@ export function useLapBasket(options: UseLapBasketOptions = {}) {
     [],
   );
 
+  const replace = useCallback(
+    (
+      nextEntries: LapBasketEntry[],
+      reference?: LapBasketReferenceInput | null,
+    ) => {
+      setEntries(() => {
+        const normalizedEntries = normalizeEntries(nextEntries, maxEntries);
+        return moveReferenceFirst(normalizedEntries, reference);
+      });
+    },
+    [maxEntries],
+  );
+
   const clear = useCallback(() => {
     setEntries([]);
   }, []);
@@ -422,6 +465,7 @@ export function useLapBasket(options: UseLapBasketOptions = {}) {
       removeLap,
       setReference,
       setPanelChannel,
+      replace,
       clear,
       isPinned,
     }),
@@ -431,6 +475,7 @@ export function useLapBasket(options: UseLapBasketOptions = {}) {
       entries,
       isPinned,
       maxEntries,
+      replace,
       removeLap,
       setPanelChannel,
       setReference,

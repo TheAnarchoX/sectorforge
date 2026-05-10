@@ -408,6 +408,41 @@
   animation: spin 800ms linear infinite;
 }
 
+.compare-import-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.compare-empty-transfer-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.compare-transfer-status {
+  max-width: 320px;
+  overflow: hidden;
+  font-family: var(--font-label);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.compare-transfer-status-success {
+  color: var(--accent-green);
+}
+
+.compare-transfer-status-error {
+  color: var(--accent-red);
+}
+
 @keyframes spin {
   from {
     transform: rotate(0deg);

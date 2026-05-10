@@ -1,13 +1,28 @@
 import {
   AlertTriangle,
+  Download,
   GitCompareArrows,
   LoaderCircle,
   Plus,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
-import type { CSSProperties, PointerEvent, ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type {
+  ChangeEvent,
+  CSSProperties,
+  PointerEvent,
+  ReactNode,
+  RefObject,
+} from "react";
 import { getLapChannelsForBasketEntry } from "../../api/telemetryApi";
 import {
   DEFAULT_COMPARE_PANEL_CHANNEL,
@@ -24,6 +39,12 @@ import {
   type DeltaTimePoint,
   type DeltaTimeTrace,
 } from "../../utils/lapDelta";
+import {
+  buildLapComparisonSetFilename,
+  parseLapComparisonSetJson,
+  serializeLapComparisonSet,
+  type LapComparisonSetReference,
+} from "../../utils/lapComparisonSetTransfer";
 import {
   formatDeltaSeconds,
   formatShortTimestamp,
@@ -130,7 +151,12 @@ type CompareWorkspaceProps = {
     panelId: string,
     channelKey: LapCompareChannelKey,
   ) => void;
+  onImportComparisonSet?: (
+    entries: LapBasketEntry[],
+    reference: LapComparisonSetReference | null,
+  ) => void;
   onClearBasket?: () => void;
+  maxBasketEntries?: number;
   onOpenSessions: () => void;
 };
 
@@ -151,6 +177,11 @@ type CompareDistanceCursorControls = {
     distanceMeters: number,
   ) => void;
   onDistanceCursorClear: (sourcePanelId: string) => void;
+};
+
+type CompareSetTransferStatus = {
+  tone: "success" | "error";
+  message: string;
 };
 
 const EMPTY_DISTANCE_CURSOR: CompareDistanceCursorState = {
@@ -404,9 +435,96 @@ export function CompareWorkspace({
   onRemoveLap,
   onSetReferenceLap,
   onSetPanelChannel,
+  onImportComparisonSet,
   onClearBasket,
+  maxBasketEntries,
   onOpenSessions,
 }: CompareWorkspaceProps) {
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [transferStatus, setTransferStatus] =
+    useState<CompareSetTransferStatus | null>(null);
+  const canImport = onImportComparisonSet !== undefined;
+
+  const handleImportClick = useCallback(() => {
+    importInputRef.current?.click();
+  }, []);
+
+  const handleExportComparisonSet = useCallback(() => {
+    if (basketEntries.length === 0) {
+      return;
+    }
+
+    try {
+      const exportedAt = new Date();
+      downloadTextFile(
+        buildLapComparisonSetFilename(exportedAt),
+        serializeLapComparisonSet(basketEntries, exportedAt),
+        "application/json",
+      );
+      setTransferStatus({
+        tone: "success",
+        message: `Exported ${basketEntries.length} ${
+          basketEntries.length === 1 ? "lap" : "laps"
+        } to JSON.`,
+      });
+    } catch (error: unknown) {
+      setTransferStatus({
+        tone: "error",
+        message: getTransferErrorMessage(error, "Export failed."),
+      });
+    }
+  }, [basketEntries]);
+
+  const handleImportFileChange = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0] ?? null;
+      event.target.value = "";
+      if (file === null || onImportComparisonSet === undefined) {
+        return;
+      }
+
+      try {
+        const rawJson = await readTextFile(file);
+        const result = parseLapComparisonSetJson(rawJson, {
+          maxEntries: maxBasketEntries,
+        });
+        if (!result.ok) {
+          setTransferStatus({
+            tone: "error",
+            message: `Import failed: ${result.message}`,
+          });
+          return;
+        }
+
+        onImportComparisonSet(result.entries, result.reference);
+        setTransferStatus({
+          tone: "success",
+          message: `Imported ${result.entries.length} ${
+            result.entries.length === 1 ? "lap" : "laps"
+          } from JSON.`,
+        });
+      } catch (error: unknown) {
+        setTransferStatus({
+          tone: "error",
+          message: getTransferErrorMessage(error, "Import failed."),
+        });
+      }
+    },
+    [maxBasketEntries, onImportComparisonSet],
+  );
+
+  const transferActions =
+    !canImport && basketEntries.length === 0 ? null : (
+      <CompareSetTransferActions
+        canExport={basketEntries.length > 0}
+        canImport={canImport}
+        importInputRef={importInputRef}
+        onExport={handleExportComparisonSet}
+        onImportClick={handleImportClick}
+        onImportFileChange={handleImportFileChange}
+      />
+    );
+
   if (basketEntries.length > 0 && frame === undefined) {
     return (
       <CompareBasketView
@@ -416,6 +534,8 @@ export function CompareWorkspace({
         onSetReferenceLap={onSetReferenceLap}
         onSetPanelChannel={onSetPanelChannel}
         onClearBasket={onClearBasket}
+        transferActions={variant === "workspace" ? transferActions : null}
+        transferStatus={variant === "workspace" ? transferStatus : null}
       />
     );
   }
@@ -430,7 +550,13 @@ export function CompareWorkspace({
       onAction: onOpenSessions,
     } satisfies CompareWorkspaceFrame);
 
-  return <CompareWorkspaceFrameView frame={resolvedFrame} />;
+  return (
+    <CompareWorkspaceFrameView
+      frame={resolvedFrame}
+      transferActions={variant === "workspace" ? transferActions : null}
+      transferStatus={variant === "workspace" ? transferStatus : null}
+    />
+  );
 }
 
 function CompareBasketView({
@@ -440,6 +566,8 @@ function CompareBasketView({
   onSetReferenceLap,
   onSetPanelChannel,
   onClearBasket,
+  transferActions,
+  transferStatus,
 }: {
   entries: LapBasketEntry[];
   variant: "workspace" | "inline";
@@ -450,6 +578,8 @@ function CompareBasketView({
     channelKey: LapCompareChannelKey,
   ) => void;
   onClearBasket?: () => void;
+  transferActions: ReactNode;
+  transferStatus: CompareSetTransferStatus | null;
 }) {
   const isInline = variant === "inline";
   const [channelStates, setChannelStates] = useState<
@@ -577,6 +707,9 @@ function CompareBasketView({
             {sessionSummaries.length === 1 ? "session" : "sessions"}
           </span>
           <span className="mono">reference {entries[0].label}</span>
+          {transferStatus && (
+            <CompareSetTransferStatusView status={transferStatus} />
+          )}
           {!isInline && (
             <>
               <button
@@ -587,6 +720,7 @@ function CompareBasketView({
               >
                 <Plus size={13} /> Add chart
               </button>
+              {transferActions}
               <button
                 type="button"
                 className="icon-button danger"
@@ -677,6 +811,66 @@ function CompareBasketView({
         })}
       </div>
     </section>
+  );
+}
+
+function CompareSetTransferActions({
+  canExport,
+  canImport,
+  importInputRef,
+  onExport,
+  onImportClick,
+  onImportFileChange,
+}: {
+  canExport: boolean;
+  canImport: boolean;
+  importInputRef: RefObject<HTMLInputElement | null>;
+  onExport: () => void;
+  onImportClick: () => void;
+  onImportFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        className="icon-button"
+        disabled={!canExport}
+        onClick={onExport}
+      >
+        <Download size={13} /> Export
+      </button>
+      <button
+        type="button"
+        className="icon-button"
+        disabled={!canImport}
+        onClick={onImportClick}
+      >
+        <Upload size={13} /> Import
+      </button>
+      <input
+        ref={importInputRef}
+        className="compare-import-input"
+        type="file"
+        accept="application/json,.json"
+        aria-label="Import comparison JSON"
+        onChange={onImportFileChange}
+      />
+    </>
+  );
+}
+
+function CompareSetTransferStatusView({
+  status,
+}: {
+  status: CompareSetTransferStatus;
+}) {
+  return (
+    <span
+      className={`compare-transfer-status compare-transfer-status-${status.tone}`}
+      role={status.tone === "error" ? "alert" : "status"}
+    >
+      {status.message}
+    </span>
   );
 }
 
@@ -2422,10 +2616,56 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Lap channels unavailable";
 }
 
+function getTransferErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? `${fallback} ${error.message}` : fallback;
+}
+
+function readTextFile(file: File) {
+  if (typeof file.text === "function") {
+    return file.text();
+  }
+
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("File read failed."));
+    reader.readAsText(file);
+  });
+}
+
+function downloadTextFile(filename: string, content: string, type: string) {
+  if (
+    typeof document === "undefined" ||
+    typeof URL === "undefined" ||
+    typeof URL.createObjectURL !== "function"
+  ) {
+    throw new Error("File downloads are unavailable in this browser.");
+  }
+
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+}
+
 function CompareWorkspaceFrameView({
   frame,
+  transferActions,
+  transferStatus,
 }: {
   frame: CompareWorkspaceFrame;
+  transferActions?: ReactNode;
+  transferStatus?: CompareSetTransferStatus | null;
 }) {
   const icon = getFrameIcon(frame.kind);
   const kicker = frame.kind === "error" ? "Compare error" : "Compare";
@@ -2454,6 +2694,12 @@ function CompareWorkspaceFrameView({
         >
           {frame.actionLabel}
         </button>
+      )}
+      {transferActions && (
+        <div className="compare-empty-transfer-actions">{transferActions}</div>
+      )}
+      {transferStatus && (
+        <CompareSetTransferStatusView status={transferStatus} />
       )}
     </section>
   );
