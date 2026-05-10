@@ -16,6 +16,10 @@ type LapTelemetryChartProps = {
   lapNumber: number | null;
   currentValue: number | null | undefined;
   isActive: boolean;
+  referenceTrace?: {
+    label: string;
+    points: Array<{ elapsedSeconds: number; value: number }>;
+  } | null;
 };
 
 function formatAxisSeconds(value: number) {
@@ -70,6 +74,7 @@ function LapTelemetryChartImpl({
   lapNumber,
   currentValue,
   isActive,
+  referenceTrace = null,
 }: LapTelemetryChartProps) {
   if (points.length === 0) {
     return (
@@ -101,12 +106,26 @@ function LapTelemetryChartImpl({
   const plotWidth = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
   const plotHeight = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
   const lastPoint = points[points.length - 1];
-  const maxElapsedSeconds = Math.max(lastPoint?.elapsedSeconds ?? 0, 5);
+  const referencePoints = referenceTrace?.points ?? [];
+  const hasReferenceTrace = referencePoints.length > 1;
+  let maxElapsedSeconds = Math.max(lastPoint?.elapsedSeconds ?? 0, 5);
+  if (hasReferenceTrace) {
+    maxElapsedSeconds = Math.max(
+      maxElapsedSeconds,
+      referencePoints.at(-1)?.elapsedSeconds ?? 0,
+    );
+  }
   const xStep = getNiceStep(maxElapsedSeconds / GRID_TICK_COUNT);
   const maxX = Math.max(xStep * GRID_TICK_COUNT, maxElapsedSeconds);
   let rawMaxY = currentValue ?? 0;
   for (let i = 0; i < points.length; i += 1) {
     const value = points[i].value;
+    if (value > rawMaxY) {
+      rawMaxY = value;
+    }
+  }
+  for (let i = 0; i < referencePoints.length; i += 1) {
+    const value = referencePoints[i].value;
     if (value > rawMaxY) {
       rawMaxY = value;
     }
@@ -125,12 +144,20 @@ function LapTelemetryChartImpl({
   const toChartY = (value: number) =>
     CHART_PADDING.top + (1 - value / maxY) * plotHeight;
 
-  const pathData = points
-    .map((point, index) => {
-      const command = index === 0 ? "M" : "L";
-      return `${command} ${toChartX(point.elapsedSeconds).toFixed(2)} ${toChartY(point.value).toFixed(2)}`;
-    })
-    .join(" ");
+  const buildPathData = (
+    chartPoints: Array<{ elapsedSeconds: number; value: number }>,
+  ) =>
+    chartPoints
+      .map((point, index) => {
+        const command = index === 0 ? "M" : "L";
+        return `${command} ${toChartX(point.elapsedSeconds).toFixed(2)} ${toChartY(point.value).toFixed(2)}`;
+      })
+      .join(" ");
+
+  const pathData = buildPathData(points);
+  const referencePathData = hasReferenceTrace
+    ? buildPathData(referencePoints)
+    : null;
 
   const latestPoint = points.at(-1)!;
 
@@ -143,6 +170,15 @@ function LapTelemetryChartImpl({
         <div className="lap-chart-legend">
           <span className="lap-chart-legend-swatch" aria-hidden="true" />
           <span>Speed trace</span>
+          {referencePathData !== null && referenceTrace !== null && (
+            <>
+              <span
+                className="lap-chart-legend-swatch lap-chart-reference-swatch"
+                aria-hidden="true"
+              />
+              <span>{referenceTrace.label}</span>
+            </>
+          )}
         </div>
         <div className="lap-chart-caption mono">
           lap {lapNumber ?? "-"} // {points.length} points
@@ -227,6 +263,12 @@ function LapTelemetryChartImpl({
               y1={CHART_HEIGHT - CHART_PADDING.bottom}
               y2={CHART_HEIGHT - CHART_PADDING.bottom}
             />
+            {referencePathData !== null && (
+              <path
+                className="lap-chart-reference-path"
+                d={referencePathData}
+              />
+            )}
             <path className="lap-chart-path" d={pathData} />
             <circle
               className="lap-chart-point"

@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CollectorStatus } from "./types/telemetry";
@@ -132,7 +132,12 @@ describe("App", () => {
       1,
     );
 
-    await user.click(screen.getByRole("button", { name: /live/i }));
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Workspaces" })).getByRole(
+        "button",
+        { name: /live/i },
+      ),
+    );
     expect(window.location.pathname).toBe("/");
 
     await user.click(screen.getByRole("button", { name: /driver/i }));
@@ -253,6 +258,54 @@ describe("App", () => {
     });
 
     expect(within(compareButton).getByText("1")).toBeInTheDocument();
+    expect(
+      telemetryApiMock.getLapChannelsForBasketEntry,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("sets a stored session lap as the explicit Live reference", async () => {
+    const user = userEvent.setup();
+    const session = createSessionSummary();
+    dashboardHookMock.current = {
+      ...createDashboardState({
+        collectorStatus: createCollectorStatus(),
+        sample: createTelemetrySample(),
+        sessions: [session],
+      }),
+      traceSeries: createTraceSeries(),
+      lapTrace: createLapTrace(),
+    };
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: /sessions/i }));
+    const captures = screen.getByLabelText("Stored captures");
+    const captureButton = within(captures)
+      .getByText("Silverstone")
+      .closest("button");
+    if (captureButton === null) {
+      throw new Error("Could not find Silverstone capture button.");
+    }
+    await user.click(captureButton);
+    await screen.findByRole("heading", { name: "Lap-focused session view" });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /set lap 3 as live reference/i,
+      }),
+    );
+
+    await waitFor(() =>
+      expect(
+        telemetryApiMock.getLapChannelsForBasketEntry,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionId: session.id, lapNumber: 3 }),
+      ),
+    );
+
+    expect(
+      screen.getByRole("button", { name: /lap 3 is the live reference/i }),
+    ).toHaveAttribute("aria-pressed", "true");
   });
 
   it("opens Compare with laps selected from Session History", async () => {

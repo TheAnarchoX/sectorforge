@@ -1,4 +1,4 @@
-import { memo, type CSSProperties } from "react";
+import { memo, type CSSProperties, type PointerEvent } from "react";
 import type { ConnectionState, TelemetryRunMode } from "../../types/telemetry";
 
 type StripCellTone = "neutral" | "accent" | "warning" | "success" | "danger";
@@ -86,18 +86,23 @@ export function StripCell({
   label,
   value,
   unit,
+  reference,
   tone = "neutral",
 }: {
   label: string;
   value: string;
   unit: string;
   tone?: StripCellTone;
+  reference?: string | null;
 }) {
   return (
     <div className={`strip-cell strip-cell-${tone}`}>
       <div className="strip-label">{label}</div>
       <div className="strip-value mono">{value}</div>
       <div className="strip-unit">{unit}</div>
+      {reference ? (
+        <div className="strip-reference mono">{reference}</div>
+      ) : null}
     </div>
   );
 }
@@ -109,35 +114,80 @@ function TraceLaneImpl({
   value,
   unit,
   values,
+  xValues,
+  xMax,
   min,
   max,
   color,
   centerValue,
+  reference,
+  cursorRatio = null,
+  onCursorRatioChange,
+  onCursorClear,
+  expanded = false,
 }: {
   label: string;
   value: string;
   unit: string;
   values: number[];
+  xValues?: number[];
+  xMax?: number | null;
   min: number;
   max: number;
   color: string;
   centerValue?: number;
+  reference?: string | null;
+  cursorRatio?: number | null;
+  onCursorRatioChange?: (ratio: number) => void;
+  onCursorClear?: () => void;
+  expanded?: boolean;
 }) {
   const width = 760;
-  const height = 58;
-  const paddingX = 10;
+  const height = expanded ? 96 : 58;
+  const paddingX = 0;
   const paddingY = 6;
   const laneStyle = { "--trace-color": color } as CSSProperties;
 
   let polylinePoints = "";
   let centerLineY: number | null = null;
+  const cursorX =
+    cursorRatio === null
+      ? null
+      : Math.min(Math.max(cursorRatio, 0), 1) * width;
+
+  const handlePointerMove = (event: PointerEvent<SVGSVGElement>) => {
+    if (onCursorRatioChange === undefined) {
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0) {
+      return;
+    }
+
+    onCursorRatioChange(
+      Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1),
+    );
+  };
 
   if (values.length > 1) {
     const range = Math.max(1, max - min);
+    const plotWidth = width - paddingX * 2;
+    const hasTimeDomain =
+      xValues !== undefined &&
+      xValues.length === values.length &&
+      xMax !== null &&
+      xMax !== undefined &&
+      Number.isFinite(xMax) &&
+      xMax > 0;
     const xStep = (width - paddingX * 2) / Math.max(1, values.length - 1);
     polylinePoints = values
       .map((nextValue, index) => {
-        const x = paddingX + index * xStep;
+        const x = hasTimeDomain
+          ? paddingX +
+            (Math.min(Math.max(xValues[index] ?? 0, 0), xMax) / xMax) *
+              plotWidth
+          : paddingX + index * xStep;
         const normalized = (nextValue - min) / range;
         const y = height - paddingY - normalized * (height - paddingY * 2);
 
@@ -153,10 +203,20 @@ function TraceLaneImpl({
   }
 
   return (
-    <div className="trace-lane" style={laneStyle}>
+    <div
+      className={`trace-lane${expanded ? " trace-lane-expanded" : ""}`}
+      style={laneStyle}
+    >
       <div className="trace-label-block">
         <div className="trace-label">{label}</div>
         <div className="trace-label-unit">{unit}</div>
+        <div className="trace-reading mono">
+          <span className="trace-reading-value">{value}</span>
+          <span className="trace-reading-unit">{unit}</span>
+          {reference ? (
+            <span className="trace-reading-reference">{reference}</span>
+          ) : null}
+        </div>
       </div>
 
       <div className="trace-canvas-wrap">
@@ -166,17 +226,30 @@ function TraceLaneImpl({
           <svg
             className="trace-canvas"
             viewBox={`0 0 ${width} ${height}`}
+            preserveAspectRatio="none"
             role="img"
             aria-label={`${label} trace`}
+            onPointerMove={handlePointerMove}
+            onPointerLeave={onCursorClear}
           >
             {[0.25, 0.5, 0.75].map((line) => (
               <line
-                key={line}
+                key={`h-${line}`}
                 className="trace-grid-line"
                 x1={paddingX}
                 x2={width - paddingX}
                 y1={paddingY + (height - paddingY * 2) * line}
                 y2={paddingY + (height - paddingY * 2) * line}
+              />
+            ))}
+            {[0.25, 0.5, 0.75].map((line) => (
+              <line
+                key={`v-${line}`}
+                className="trace-grid-line"
+                x1={paddingX + (width - paddingX * 2) * line}
+                x2={paddingX + (width - paddingX * 2) * line}
+                y1={paddingY}
+                y2={height - paddingY}
               />
             ))}
             {centerLineY !== null && (
@@ -188,14 +261,18 @@ function TraceLaneImpl({
                 y2={centerLineY}
               />
             )}
+            {cursorX !== null && (
+              <line
+                className="trace-cursor-line"
+                x1={cursorX}
+                x2={cursorX}
+                y1={0}
+                y2={height}
+              />
+            )}
             <polyline className="trace-line" points={polylinePoints} />
           </svg>
         )}
-      </div>
-
-      <div className="trace-reading mono">
-        <span className="trace-reading-value">{value}</span>
-        <span className="trace-reading-unit">{unit}</span>
       </div>
     </div>
   );

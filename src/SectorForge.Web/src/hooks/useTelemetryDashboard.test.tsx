@@ -136,6 +136,13 @@ async function flushStartup() {
   });
 }
 
+function formatLapTime(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds - minutes * 60;
+
+  return `00:${String(minutes).padStart(2, "0")}:${seconds.toFixed(3).padStart(6, "0")}`;
+}
+
 describe("useTelemetryDashboard", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -248,10 +255,10 @@ describe("useTelemetryDashboard", () => {
 
     expect(result.current.error).toBeNull();
     expect(result.current.sample?.sequence).toBe(4);
-    expect(result.current.traceSeries.speed).toEqual([150, 151, 152, 160]);
+    expect(result.current.traceSeries.speed).toEqual([160]);
     expect(result.current.lapTrace.lapNumber).toBe(4);
     expect(result.current.lapTrace.points).toEqual([
-      { elapsedSeconds: 1.5, value: 160 },
+      { elapsedSeconds: 1.5, value: 160, lapDistanceMeters: 1240 },
     ]);
 
     act(() => {
@@ -308,6 +315,52 @@ describe("useTelemetryDashboard", () => {
     unmount();
 
     expect(signalRMock.connection.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps current lap traces anchored after more than 720 samples", async () => {
+    const { result } = renderHook(() => useTelemetryDashboard());
+
+    await flushStartup();
+
+    act(() => {
+      signalRMock.emitCollectorStatus(createCollectorStatus());
+      for (let sampleIndex = 0; sampleIndex < 730; sampleIndex += 1) {
+        const elapsedSeconds = sampleIndex * 0.1;
+        signalRMock.emitTelemetrySample(
+          createTelemetrySample({
+            sequence: sampleIndex + 1,
+            lap: {
+              lapNumber: 5,
+              currentLapTime: formatLapTime(elapsedSeconds),
+              lapDistanceMeters: sampleIndex * 7,
+            },
+            vehicle: {
+              speedKph: 140 + (sampleIndex % 80),
+            },
+          }),
+        );
+      }
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(16);
+    });
+
+    expect(result.current.lapTrace.lapNumber).toBe(5);
+    expect(result.current.lapTrace.points).toHaveLength(730);
+    expect(result.current.lapTrace.points[0]).toMatchObject({
+      elapsedSeconds: 0,
+      lapDistanceMeters: 0,
+    });
+    expect(result.current.lapTrace.points.at(-1)).toMatchObject({
+      elapsedSeconds: 72.9,
+      lapDistanceMeters: 5103,
+    });
+    expect(result.current.traceSeries.speed).toHaveLength(730);
+    expect(result.current.traceSeries.speed[0]).toBe(140);
+    expect(result.current.traceSeries.speed.at(-1)).toBe(149);
+    expect(result.current.traceSeries.throttle).toHaveLength(730);
   });
 
   it("refreshes data and completes collector control actions", async () => {

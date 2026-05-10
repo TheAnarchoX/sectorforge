@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   CurrentLapTelemetrySeries,
   TelemetryRunMode,
@@ -11,6 +11,7 @@ import {
   formatGear,
   formatNumber,
   formatTime,
+  parseDurationSeconds,
 } from "../../utils/telemetryFormat";
 import { DriverLapCompare } from "./DriverLapCompare";
 
@@ -23,12 +24,20 @@ type SimplifiedDriveViewProps = {
 };
 
 type DeltaTone = "improving" | "losing" | "neutral";
+type SectorTones = [DeltaTone, DeltaTone, DeltaTone];
+type SectorSnapshot = {
+  sessionId: string;
+  lapNumber: number | null;
+  sectorIndex: number | null;
+  sectorTone: DeltaTone;
+};
 
 const SHIFT_LIGHT_COUNT = 15;
 const SHIFT_BEGIN = 0.7;
 const SHIFT_AMBER = 0.86;
 const SHIFT_RED = 0.94;
 const SHIFT_BLINK = 0.985;
+const SECTOR_DELTA_EPSILON = 0.0005;
 
 export function SimplifiedDriveView({
   activeSource,
@@ -45,6 +54,9 @@ export function SimplifiedDriveView({
   const sectorDeltaRaw = sample?.timing.sectorDelta;
   const deltaTone = getDeltaTone(deltaRaw);
   const sectorTone = getDeltaTone(sectorDeltaRaw);
+  const storedSectorTones = useCompletedSectorTones(sample);
+  const splitSectorTones = getSplitSectorTones(sample);
+  const sectorTones = mergeSectorTones(splitSectorTones, storedSectorTones);
 
   const sectorIndex = sample?.lap.sectorIndex ?? null;
 
@@ -180,7 +192,8 @@ export function SimplifiedDriveView({
           <span className="hud-label">SECTOR</span>
           <SectorTrio
             activeIndex={sectorIndex}
-            sectorDelta={sectorDeltaRaw ?? null}
+            activeTone={sectorTone}
+            sectorTones={sectorTones}
           />
           <span className="hud-cell-unit">
             {sectorDeltaRaw ? `Δ ${formatDelta(sectorDeltaRaw)}` : "ACTIVE"}
@@ -261,25 +274,182 @@ function RpmGauge({ pct, rpm }: { pct: number; rpm: number | null }) {
 
 function SectorTrio({
   activeIndex,
-  sectorDelta,
+  activeTone,
+  sectorTones,
 }: {
   activeIndex: number | null;
-  sectorDelta: string | null;
+  activeTone: DeltaTone;
+  sectorTones: SectorTones;
 }) {
-  const sectorTone = getDeltaTone(sectorDelta);
   return (
     <div className="hud-sector-trio">
-      {[0, 1, 2].map((i) => {
-        const isActive = activeIndex === i;
-        const cls = isActive ? `active hud-sector-${sectorTone}` : "";
+      {[0, 1, 2].map((sectorIndexValue) => {
+        const isActive = activeIndex === sectorIndexValue;
+        const tone = isActive
+          ? activeTone
+          : (sectorTones[sectorIndexValue] ?? "neutral");
+        const cls = `hud-sector-${tone}${isActive ? " active" : ""}`;
         return (
-          <span key={i} className={`hud-sector-pip ${cls}`}>
-            S{i + 1}
+          <span key={sectorIndexValue} className={`hud-sector-pip ${cls}`}>
+            S{sectorIndexValue + 1}
           </span>
         );
       })}
     </div>
   );
+}
+
+function useCompletedSectorTones(sample: TelemetrySample | null) {
+  const [completedSectorTones, setCompletedSectorTones] =
+    useState<SectorTones>(createNeutralSectorTones);
+  const previousSectorRef = useRef<SectorSnapshot | null>(null);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    const snapshot = getSectorSnapshot(sample);
+    const previous = previousSectorRef.current;
+
+    if (snapshot === null) {
+      previousSectorRef.current = null;
+      setCompletedSectorTones(createNeutralSectorTones);
+      return;
+    }
+
+    if (
+      previous === null ||
+      previous.sessionId !== snapshot.sessionId ||
+      previous.lapNumber !== snapshot.lapNumber
+    ) {
+      previousSectorRef.current = snapshot;
+      setCompletedSectorTones(() => getInitialCompletedSectorTones(snapshot));
+      return;
+    }
+
+    if (
+      previous.sectorIndex !== null &&
+      snapshot.sectorIndex !== null &&
+      snapshot.sectorIndex > previous.sectorIndex
+    ) {
+      const completedSectorIndex = previous.sectorIndex;
+      const completedSectorTone =
+        previous.sectorTone === "neutral"
+          ? snapshot.sectorTone
+          : previous.sectorTone;
+
+      setCompletedSectorTones((currentTones) => {
+        if (currentTones[completedSectorIndex] === completedSectorTone) {
+          return currentTones;
+        }
+
+        const nextTones = [...currentTones] as SectorTones;
+        nextTones[completedSectorIndex] = completedSectorTone;
+        return nextTones;
+      });
+    } else if (
+      previous.sectorIndex !== null &&
+      snapshot.sectorIndex !== null &&
+      snapshot.sectorIndex < previous.sectorIndex
+    ) {
+      setCompletedSectorTones(createNeutralSectorTones);
+    }
+
+    previousSectorRef.current = snapshot;
+  }, [sample]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  return completedSectorTones;
+}
+
+function getSectorSnapshot(sample: TelemetrySample | null): SectorSnapshot | null {
+  if (sample === null) {
+    return null;
+  }
+
+  return {
+    sessionId: sample.session.id || sample.sessionId,
+    lapNumber: sample.lap.lapNumber ?? null,
+    sectorIndex: sample.lap.sectorIndex ?? null,
+    sectorTone: getDeltaTone(sample.timing.sectorDelta),
+  };
+}
+
+function getInitialCompletedSectorTones(snapshot: SectorSnapshot) {
+  const tones = createNeutralSectorTones();
+
+  if (snapshot.sectorIndex !== null && snapshot.sectorIndex > 0) {
+    tones[snapshot.sectorIndex - 1] = snapshot.sectorTone;
+  }
+
+  return tones;
+}
+
+function getSplitSectorTones(sample: TelemetrySample | null) {
+  const tones = createNeutralSectorTones();
+
+  if (sample === null) {
+    return tones;
+  }
+
+  const lap = sample.lap;
+  const splits: Array<{
+    sectorIndex: number;
+    current: string | null | undefined;
+    previous: string | null | undefined;
+  }> = [
+    {
+      sectorIndex: 0,
+      current: lap.sector1Time,
+      previous: lap.lastSector1Time,
+    },
+    {
+      sectorIndex: 1,
+      current: lap.sector2Time,
+      previous: lap.lastSector2Time,
+    },
+    {
+      sectorIndex: 2,
+      current: lap.sector3Time,
+      previous: lap.lastSector3Time,
+    },
+  ];
+
+  for (const split of splits) {
+    const splitTone = getSectorSplitTone(split.current, split.previous);
+    if (splitTone !== null) {
+      tones[split.sectorIndex] = splitTone;
+    }
+  }
+
+  return tones;
+}
+
+function getSectorSplitTone(
+  current: string | null | undefined,
+  previous: string | null | undefined,
+) {
+  const currentSeconds = parseDurationSeconds(current);
+  const previousSeconds = parseDurationSeconds(previous);
+
+  if (currentSeconds === null || previousSeconds === null) {
+    return null;
+  }
+
+  const deltaSeconds = currentSeconds - previousSeconds;
+  if (Math.abs(deltaSeconds) <= SECTOR_DELTA_EPSILON) {
+    return "neutral";
+  }
+
+  return deltaSeconds < 0 ? "improving" : "losing";
+}
+
+function mergeSectorTones(primaryTones: SectorTones, fallbackTones: SectorTones) {
+  return primaryTones.map((tone, sectorIndexValue) =>
+    tone === "neutral" ? fallbackTones[sectorIndexValue] : tone,
+  ) as SectorTones;
+}
+
+function createNeutralSectorTones(): SectorTones {
+  return ["neutral", "neutral", "neutral"];
 }
 
 function ThermalStrip({ sample }: { sample: TelemetrySample }) {

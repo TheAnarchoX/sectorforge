@@ -22,8 +22,13 @@ import {
 } from "./components/dashboard/WorkspaceRail";
 import { useDevelopmentMemoryMonitor } from "./hooks/useDevelopmentMemoryMonitor";
 import { useLapBasket } from "./hooks/useLapBasket";
+import { useReferenceLapChannels } from "./hooks/useReferenceLapChannels";
 import { useTelemetryDashboard } from "./hooks/useTelemetryDashboard";
-import type { DashboardReplayState, TelemetrySource } from "./types/telemetry";
+import type {
+  DashboardReplayState,
+  ReferenceLapSelection,
+  TelemetrySource,
+} from "./types/telemetry";
 import "./App.css";
 
 const WORKSPACE_ROUTES: Record<Workspace, string> = {
@@ -82,8 +87,11 @@ function App() {
   const [replayState, setReplayState] = useState<DashboardReplayState | null>(
     null,
   );
+  const [liveReferenceLap, setLiveReferenceLap] =
+    useState<ReferenceLapSelection | null>(null);
   const lapBasket = useLapBasket();
   const addLapToBasket = lapBasket.addLap;
+  const liveReferenceChannelsState = useReferenceLapChannels(liveReferenceLap);
   const memoryNotice = useDevelopmentMemoryMonitor();
   const {
     connectionState,
@@ -189,6 +197,20 @@ function App() {
     },
     [addLapToBasket, handleWorkspaceSelect],
   );
+  const handleSetLiveReferenceLap = useCallback(
+    (referenceLap: ReferenceLapSelection) => {
+      setLiveReferenceLap(referenceLap);
+    },
+    [],
+  );
+  const handleClearLiveReferenceLap = useCallback(() => {
+    setLiveReferenceLap(null);
+  }, []);
+
+  const liveReferenceChannels =
+    liveReferenceChannelsState.status === "ready"
+      ? liveReferenceChannelsState.response
+      : null;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -217,7 +239,10 @@ function App() {
         lapNumber={displaySample?.lap.lapNumber ?? null}
         flag={isReplayRunning ? "yellow" : "green"}
       />
-      <LiveStatusPanels sample={displaySample} />
+      <LiveStatusPanels
+        sample={displaySample}
+        referenceChannels={liveReferenceChannels}
+      />
       <div className="pitwall-grid">
         <MainTelemetryColumn
           activeSource={displaySource}
@@ -225,6 +250,9 @@ function App() {
           sample={displaySample}
           traceSeries={displayTraceSeries}
           lapTrace={displayLapTrace}
+          referenceLap={liveReferenceLap}
+          referenceChannelsState={liveReferenceChannelsState}
+          onClearReferenceLap={handleClearLiveReferenceLap}
         />
         <TelemetrySidebar
           sample={displaySample}
@@ -340,9 +368,11 @@ function App() {
               isApiOffline={isApiOffline}
               isBusy={isBusy}
               activeReplaySessionId={activeReplaySessionId}
+              referenceLap={liveReferenceLap}
               isLapPinned={lapBasket.isPinned}
               onPinLap={lapBasket.addLap}
               onUnpinLap={lapBasket.removeLap}
+              onSetReferenceLap={handleSetLiveReferenceLap}
               onCompareSelectedLaps={handleCompareSelectedLaps}
               onStartReplay={startReplay}
               onStopReplay={stopCollector}

@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
-import type { CSSProperties, ChangeEvent } from "react";
-import { GitCompareArrows, LoaderCircle } from "lucide-react";
+import type { CSSProperties, ChangeEvent, MouseEvent } from "react";
+import {
+  GitCompareArrows,
+  LoaderCircle,
+  MessageSquareText,
+} from "lucide-react";
+import {
+  AnnotationPanel,
+  type AnnotationContextOption,
+  type AnnotationDraft,
+} from "../annotations/AnnotationPanel";
 import {
   getLapChannelsForBasketEntry,
   getSessionDetails,
 } from "../../api/telemetryApi";
+import { useTelemetryAnnotations } from "../../hooks/useTelemetryAnnotations";
 import type {
   CurrentLapTelemetrySeries,
   LapChannelsResponse,
@@ -19,6 +29,14 @@ import {
   type DeltaTimePoint,
   type DeltaTimeTrace,
 } from "../../utils/lapDelta";
+import {
+  createAnnotationContextId,
+  filterAnnotationsByEntries,
+  formatAnnotationMoment,
+  matchesAnnotationContext,
+  type TelemetryAnnotation,
+  type TelemetryAnnotationInput,
+} from "../../utils/telemetryAnnotations";
 import {
   formatDeltaSeconds,
   formatShortTimestamp,
@@ -56,7 +74,10 @@ type OverlayTrace = {
 
 type OverlayChartModel = {
   traces: OverlayTrace[];
+  xAxis: "lapDistance" | "time";
   xAxisLabel: string;
+  xDomainMin: number;
+  xDomainMax: number;
   xTicks: number[];
   yTicks: number[];
   formatXTick: (value: number) => string;
@@ -75,6 +96,8 @@ type DeltaSegment = {
 type DriverDeltaChartModel = {
   trace: DeltaTimeTrace;
   segments: DeltaSegment[];
+  xDomainMin: number;
+  xDomainMax: number;
   xTicks: number[];
   yTicks: number[];
   toChartX: (value: number) => number;
@@ -95,6 +118,87 @@ const CHART_PADDING = {
 };
 const GRID_TICK_COUNT = 4;
 const DELTA_TONE_EPSILON = 0.0005;
+
+type ChartPointerLikeEvent = {
+  currentTarget: SVGSVGElement;
+  clientX: number;
+};
+
+function getDomainXFromPointer(
+  event: ChartPointerLikeEvent,
+  chartWidth: number,
+  padding: { left: number; right: number },
+  domainMin: number,
+  domainMax: number,
+) {
+  const rect = event.currentTarget.getBoundingClientRect();
+  if (rect.width <= 0) {
+    return null;
+  }
+
+  const plotLeft = padding.left;
+  const plotRight = chartWidth - padding.right;
+  const chartX = ((event.clientX - rect.left) / rect.width) * chartWidth;
+  const clampedX = Math.min(Math.max(chartX, plotLeft), plotRight);
+  const ratio = (clampedX - plotLeft) / Math.max(plotRight - plotLeft, 1);
+  return domainMin + ratio * (domainMax - domainMin);
+}
+
+function buildDriverSessionAnnotationOption(
+  session: TelemetrySessionSummary,
+): AnnotationContextOption {
+  return {
+    id: createAnnotationContextId({ scope: "session", sessionId: session.id }),
+    label: `Session ${getSessionOptionLabel(session)}`,
+    scope: "session",
+    sessionId: session.id,
+    lapNumber: null,
+  };
+}
+
+function buildDriverLapAnnotationOption(
+  sessionId: string,
+  lapNumber: number,
+  label: string,
+): AnnotationContextOption {
+  return {
+    id: createAnnotationContextId({ scope: "lap", sessionId, lapNumber }),
+    label,
+    scope: "lap",
+    sessionId,
+    lapNumber,
+  };
+}
+
+function buildDriverMomentDraft(
+  sessionId: string,
+  lapNumber: number,
+  distanceMeters: number,
+): AnnotationDraft {
+  return {
+    id: createAnnotationContextId({
+      scope: "moment",
+      sessionId,
+      lapNumber,
+      distanceMeters,
+    }),
+    label: `Current lap ${lapNumber} moment / ${Math.round(distanceMeters).toLocaleString()} m`,
+    scope: "moment",
+    sessionId,
+    lapNumber,
+    distanceMeters,
+  };
+}
+
+function getDriverAnnotationCount(
+  annotations: TelemetryAnnotation[],
+  sessionId: string,
+  lapNumber: number | null,
+) {
+  return annotations.filter((annotation) =>
+    matchesAnnotationContext(annotation, { sessionId, lapNumber }),
+  ).length;
+}
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Reference lap unavailable";
@@ -308,6 +412,7 @@ function buildOverlayChartModel(
   if (xMin === xMax) {
     xMax = xMin + 1;
   }
+  xMin = Math.min(xMin, 0);
   if (yMin === yMax) {
     yMin -= 1;
     yMax += 1;
@@ -344,7 +449,10 @@ function buildOverlayChartModel(
         })
         .join(" "),
     })),
+    xAxis,
     xAxisLabel: xAxis === "lapDistance" ? "Lap distance (m)" : "Lap time",
+    xDomainMin: finalXMin,
+    xDomainMax: finalXMax,
     xTicks,
     yTicks: [...yTicks].reverse(),
     formatXTick:
@@ -461,6 +569,8 @@ function buildDeltaChartModel(
   return {
     trace,
     segments: buildDeltaSegments(trace.points),
+    xDomainMin: 0,
+    xDomainMax: finalXMax,
     xTicks,
     yTicks,
     toChartX: (value: number) =>
@@ -480,6 +590,7 @@ export function DriverLapCompare({
   lapTrace,
   sessions,
 }: DriverLapCompareProps) {
+  const annotationStore = useTelemetryAnnotations();
   const sessionOptions = useMemo(
     () => buildSessionOptions(sample, sessions),
     [sample, sessions],
@@ -497,6 +608,8 @@ export function DriverLapCompare({
   const [channelsState, setChannelsState] = useState<
     LoadState<LapChannelsResponse>
   >({ status: "idle" });
+  const [annotationDraft, setAnnotationDraft] =
+    useState<AnnotationDraft | null>(null);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -604,6 +717,99 @@ export function DriverLapCompare({
   const selectedSession = sessionOptions.find(
     (session) => session.id === selectedSessionId,
   );
+  const annotationEntries = useMemo(() => {
+    const entries: Array<{ sessionId: string; lapNumber: number }> = [];
+    if (currentLapNumber !== null) {
+      entries.push({
+        sessionId: sample.session.id,
+        lapNumber: currentLapNumber,
+      });
+    }
+    if (referenceLapNumber !== null) {
+      entries.push({
+        sessionId: selectedSessionId,
+        lapNumber: referenceLapNumber,
+      });
+    }
+    return entries;
+  }, [
+    currentLapNumber,
+    referenceLapNumber,
+    sample.session.id,
+    selectedSessionId,
+  ]);
+  const relevantAnnotations = useMemo(
+    () =>
+      filterAnnotationsByEntries(
+        annotationStore.annotations,
+        annotationEntries,
+      ),
+    [annotationEntries, annotationStore.annotations],
+  );
+  const annotationContextOptions = useMemo(() => {
+    const options = [...sessionOptions.map(buildDriverSessionAnnotationOption)];
+    if (currentLapNumber !== null) {
+      options.push(
+        buildDriverLapAnnotationOption(
+          sample.session.id,
+          currentLapNumber,
+          `Current lap ${currentLapNumber}`,
+        ),
+      );
+    }
+    if (referenceLapNumber !== null) {
+      options.push(
+        buildDriverLapAnnotationOption(
+          selectedSessionId,
+          referenceLapNumber,
+          `Reference lap ${referenceLapNumber}`,
+        ),
+      );
+    }
+    return options;
+  }, [
+    currentLapNumber,
+    referenceLapNumber,
+    sample.session.id,
+    selectedSessionId,
+    sessionOptions,
+  ]);
+
+  const handleAddAnnotation = (input: TelemetryAnnotationInput) => {
+    annotationStore.addAnnotation(input);
+  };
+
+  const handleDraftConsumed = () => {
+    setAnnotationDraft(null);
+  };
+
+  const handleCreateCurrentLapAnnotation = () => {
+    if (currentLapNumber === null) {
+      return;
+    }
+
+    setAnnotationDraft(
+      buildDriverLapAnnotationOption(
+        sample.session.id,
+        currentLapNumber,
+        `Current lap ${currentLapNumber}`,
+      ),
+    );
+  };
+
+  const handleCreateMomentAnnotation = (distanceMeters: number) => {
+    if (currentLapNumber === null) {
+      return;
+    }
+
+    setAnnotationDraft(
+      buildDriverMomentDraft(
+        sample.session.id,
+        currentLapNumber,
+        distanceMeters,
+      ),
+    );
+  };
 
   const handleSessionChange = (event: ChangeEvent<HTMLSelectElement>) => {
     setSelectedSessionId(event.target.value);
@@ -705,13 +911,55 @@ export function DriverLapCompare({
 
       {referenceSeries !== null && (
         <>
-          <DriverSpeedOverlayChart model={overlayModel} />
+          <DriverSpeedOverlayChart
+            model={overlayModel}
+            annotations={relevantAnnotations}
+            onCreateMomentAnnotation={handleCreateMomentAnnotation}
+          />
           <DriverDeltaPlot
             model={deltaModel}
             referenceLabel={referenceSeries.label}
+            annotations={relevantAnnotations}
+            onCreateMomentAnnotation={handleCreateMomentAnnotation}
           />
         </>
       )}
+
+      <AnnotationPanel
+        title="Driver notes"
+        annotations={relevantAnnotations}
+        contextOptions={annotationContextOptions}
+        draft={annotationDraft}
+        onDraftConsumed={handleDraftConsumed}
+        onAddAnnotation={handleAddAnnotation}
+        onUpdateAnnotation={annotationStore.updateAnnotation}
+        onDeleteAnnotation={annotationStore.deleteAnnotation}
+        onSelectAnnotation={() => undefined}
+        headerAction={
+          <button
+            type="button"
+            className="icon-button"
+            disabled={currentLapNumber === null}
+            onClick={handleCreateCurrentLapAnnotation}
+          >
+            <MessageSquareText size={13} /> Note lap
+            {currentLapNumber !== null &&
+              getDriverAnnotationCount(
+                relevantAnnotations,
+                sample.session.id,
+                currentLapNumber,
+              ) > 0 && (
+                <span className="annotation-count-badge">
+                  {getDriverAnnotationCount(
+                    relevantAnnotations,
+                    sample.session.id,
+                    currentLapNumber,
+                  )}
+                </span>
+              )}
+          </button>
+        }
+      />
     </section>
   );
 }
@@ -736,8 +984,12 @@ function DriverCompareStatus({
 
 function DriverSpeedOverlayChart({
   model,
+  annotations,
+  onCreateMomentAnnotation,
 }: {
   model: OverlayChartModel | null;
+  annotations: TelemetryAnnotation[];
+  onCreateMomentAnnotation: (distanceMeters: number) => void;
 }) {
   if (model === null) {
     return (
@@ -759,6 +1011,28 @@ function DriverSpeedOverlayChart({
     );
   }
 
+  const momentAnnotations = annotations.filter(
+    (annotation) =>
+      annotation.scope === "moment" &&
+      typeof annotation.distanceMeters === "number",
+  );
+  const handleChartClick = (event: MouseEvent<SVGSVGElement>) => {
+    if (model.xAxis !== "lapDistance") {
+      return;
+    }
+
+    const distanceMeters = getDomainXFromPointer(
+      event,
+      CHART_WIDTH,
+      CHART_PADDING,
+      model.xDomainMin,
+      model.xDomainMax,
+    );
+    if (distanceMeters !== null) {
+      onCreateMomentAnnotation(distanceMeters);
+    }
+  };
+
   return (
     <section
       className="compare-overlay-chart"
@@ -777,6 +1051,7 @@ function DriverSpeedOverlayChart({
           viewBox={`0 0 ${CHART_WIDTH} ${OVERLAY_HEIGHT}`}
           role="img"
           aria-label="Driver View live speed overlay against reference lap"
+          onClick={handleChartClick}
         >
           {model.yTicks.map((tick) => {
             const y = model.toChartY(tick);
@@ -850,6 +1125,42 @@ function DriverSpeedOverlayChart({
               d={trace.pathData}
             />
           ))}
+          {model.xAxis === "lapDistance" &&
+            momentAnnotations.map((annotation) => {
+              const startX = model.toChartX(annotation.distanceMeters ?? 0);
+              const endX =
+                typeof annotation.endDistanceMeters === "number"
+                  ? model.toChartX(annotation.endDistanceMeters)
+                  : null;
+              return (
+                <g key={`driver-speed-annotation-${annotation.id}`}>
+                  {endX !== null && (
+                    <rect
+                      className="annotation-chart-span"
+                      x={Math.min(startX, endX)}
+                      y={CHART_PADDING.top}
+                      width={Math.max(Math.abs(endX - startX), 2)}
+                      height={
+                        OVERLAY_HEIGHT -
+                        CHART_PADDING.top -
+                        CHART_PADDING.bottom
+                      }
+                    />
+                  )}
+                  <line
+                    className="annotation-chart-marker"
+                    x1={startX}
+                    x2={startX}
+                    y1={CHART_PADDING.top}
+                    y2={OVERLAY_HEIGHT - CHART_PADDING.bottom}
+                  >
+                    <title>
+                      {annotation.note} {formatAnnotationMoment(annotation)}
+                    </title>
+                  </line>
+                </g>
+              );
+            })}
           <text
             className="compare-overlay-axis-label"
             x={CHART_PADDING.left}
@@ -889,9 +1200,13 @@ function DriverSpeedOverlayChart({
 function DriverDeltaPlot({
   model,
   referenceLabel,
+  annotations,
+  onCreateMomentAnnotation,
 }: {
   model: DriverDeltaChartModel | null;
   referenceLabel: string;
+  annotations: TelemetryAnnotation[];
+  onCreateMomentAnnotation: (distanceMeters: number) => void;
 }) {
   if (model === null) {
     return (
@@ -912,6 +1227,24 @@ function DriverDeltaPlot({
     );
   }
 
+  const momentAnnotations = annotations.filter(
+    (annotation) =>
+      annotation.scope === "moment" &&
+      typeof annotation.distanceMeters === "number",
+  );
+  const handleChartClick = (event: MouseEvent<SVGSVGElement>) => {
+    const distanceMeters = getDomainXFromPointer(
+      event,
+      CHART_WIDTH,
+      CHART_PADDING,
+      model.xDomainMin,
+      model.xDomainMax,
+    );
+    if (distanceMeters !== null) {
+      onCreateMomentAnnotation(distanceMeters);
+    }
+  };
+
   return (
     <section className="compare-delta-chart" aria-label="Driver delta time">
       <header className="compare-overlay-header">
@@ -929,6 +1262,7 @@ function DriverDeltaPlot({
           viewBox={`0 0 ${CHART_WIDTH} ${DELTA_HEIGHT}`}
           role="img"
           aria-label={`Driver View delta time plot vs ${referenceLabel}`}
+          onClick={handleChartClick}
         >
           {model.yTicks.map((tick) => {
             const y = model.toChartY(tick);
@@ -1012,6 +1346,39 @@ function DriverDeltaPlot({
               y2={model.toChartY(segment.to.deltaSeconds)}
             />
           ))}
+          {momentAnnotations.map((annotation) => {
+            const startX = model.toChartX(annotation.distanceMeters ?? 0);
+            const endX =
+              typeof annotation.endDistanceMeters === "number"
+                ? model.toChartX(annotation.endDistanceMeters)
+                : null;
+            return (
+              <g key={`driver-delta-annotation-${annotation.id}`}>
+                {endX !== null && (
+                  <rect
+                    className="annotation-chart-span"
+                    x={Math.min(startX, endX)}
+                    y={CHART_PADDING.top}
+                    width={Math.max(Math.abs(endX - startX), 2)}
+                    height={
+                      DELTA_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom
+                    }
+                  />
+                )}
+                <line
+                  className="annotation-chart-marker"
+                  x1={startX}
+                  x2={startX}
+                  y1={CHART_PADDING.top}
+                  y2={DELTA_HEIGHT - CHART_PADDING.bottom}
+                >
+                  <title>
+                    {annotation.note} {formatAnnotationMoment(annotation)}
+                  </title>
+                </line>
+              </g>
+            );
+          })}
           <text
             className="compare-overlay-axis-label"
             x={CHART_PADDING.left}

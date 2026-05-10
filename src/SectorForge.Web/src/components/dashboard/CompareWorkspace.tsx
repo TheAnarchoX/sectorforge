@@ -3,6 +3,7 @@ import {
   Download,
   GitCompareArrows,
   LoaderCircle,
+  MessageSquareText,
   Plus,
   Trash2,
   Upload,
@@ -19,11 +20,18 @@ import {
 import type {
   ChangeEvent,
   CSSProperties,
+  MouseEvent,
   PointerEvent,
   ReactNode,
   RefObject,
 } from "react";
+import {
+  AnnotationPanel,
+  type AnnotationContextOption,
+  type AnnotationDraft,
+} from "../annotations/AnnotationPanel";
 import { getLapChannelsForBasketEntry } from "../../api/telemetryApi";
+import { useTelemetryAnnotations } from "../../hooks/useTelemetryAnnotations";
 import {
   DEFAULT_COMPARE_PANEL_CHANNEL,
   DEFAULT_COMPARE_PANEL_ID,
@@ -45,6 +53,14 @@ import {
   serializeLapComparisonSet,
   type LapComparisonSetReference,
 } from "../../utils/lapComparisonSetTransfer";
+import {
+  filterAnnotationsByEntries,
+  formatAnnotationMoment,
+  createAnnotationContextId,
+  matchesAnnotationContext,
+  type TelemetryAnnotation,
+  type TelemetryAnnotationInput,
+} from "../../utils/telemetryAnnotations";
 import {
   formatDeltaSeconds,
   formatShortTimestamp,
@@ -179,6 +195,11 @@ type CompareDistanceCursorControls = {
   onDistanceCursorClear: (sourcePanelId: string) => void;
 };
 
+type ChartPointerLikeEvent = {
+  currentTarget: SVGSVGElement;
+  clientX: number;
+};
+
 type CompareSetTransferStatus = {
   tone: "success" | "error";
   message: string;
@@ -307,6 +328,93 @@ function buildCompareSessionSummaries(entries: LapBasketEntry[]) {
   }));
 }
 
+function buildSessionAnnotationOption(
+  summary: CompareSessionContextSummary,
+): AnnotationContextOption {
+  return {
+    id: createAnnotationContextId({
+      scope: "session",
+      sessionId: summary.sessionId,
+    }),
+    label: `Session ${summary.title} / ${summary.shortId}`,
+    scope: "session",
+    sessionId: summary.sessionId,
+    lapNumber: null,
+  };
+}
+
+function buildLapAnnotationOption(
+  entry: LapBasketEntry,
+): AnnotationContextOption {
+  return {
+    id: createAnnotationContextId({
+      scope: "lap",
+      sessionId: entry.sessionId,
+      lapNumber: entry.lapNumber,
+    }),
+    label: `${entry.label} / ${getEntrySessionBadge(entry)}`,
+    scope: "lap",
+    sessionId: entry.sessionId,
+    lapNumber: entry.lapNumber,
+  };
+}
+
+function buildMomentAnnotationDraft(
+  entry: LapBasketEntry,
+  distanceMeters: number,
+  endDistanceMeters?: number | null,
+): AnnotationDraft {
+  const roundedDistance = Math.round(distanceMeters);
+  const roundedEndDistance =
+    typeof endDistanceMeters === "number"
+      ? Math.round(endDistanceMeters)
+      : null;
+  const label =
+    roundedEndDistance === null
+      ? `${entry.label} moment / ${roundedDistance.toLocaleString()} m`
+      : `${entry.label} span / ${roundedDistance.toLocaleString()}-${roundedEndDistance.toLocaleString()} m`;
+
+  return {
+    id: createAnnotationContextId({
+      scope: "moment",
+      sessionId: entry.sessionId,
+      lapNumber: entry.lapNumber,
+      distanceMeters,
+    }),
+    label,
+    scope: "moment",
+    sessionId: entry.sessionId,
+    lapNumber: entry.lapNumber,
+    distanceMeters,
+    endDistanceMeters: roundedEndDistance === null ? null : endDistanceMeters,
+  };
+}
+
+function getAnnotationCountForContext(
+  annotations: TelemetryAnnotation[],
+  context: { sessionId: string; lapNumber?: number | null },
+) {
+  return annotations.filter((annotation) =>
+    matchesAnnotationContext(annotation, context),
+  ).length;
+}
+
+function getMomentAnnotationsForEntries(
+  annotations: TelemetryAnnotation[],
+  entries: LapBasketEntry[],
+) {
+  const lapKeys = new Set(
+    entries.map((entry) => `${entry.sessionId}:${entry.lapNumber}`),
+  );
+
+  return annotations.filter(
+    (annotation) =>
+      annotation.scope === "moment" &&
+      typeof annotation.distanceMeters === "number" &&
+      lapKeys.has(`${annotation.sessionId}:${annotation.lapNumber}`),
+  );
+}
+
 function isOverlayChannelKey(value: unknown): value is OverlayChannelKey {
   return OVERLAY_CHANNEL_KEYS.includes(value as OverlayChannelKey);
 }
@@ -396,7 +504,7 @@ function clamp(value: number, min: number, max: number) {
 }
 
 function getDomainXFromPointer(
-  event: PointerEvent<SVGSVGElement>,
+  event: ChartPointerLikeEvent,
   chartWidth: number,
   padding: { left: number; right: number },
   domainMin: number,
@@ -444,6 +552,12 @@ export function CompareWorkspace({
   const [transferStatus, setTransferStatus] =
     useState<CompareSetTransferStatus | null>(null);
   const canImport = onImportComparisonSet !== undefined;
+  const annotationStore = useTelemetryAnnotations();
+  const exportAnnotations = useMemo(
+    () =>
+      filterAnnotationsByEntries(annotationStore.annotations, basketEntries),
+    [annotationStore.annotations, basketEntries],
+  );
 
   const handleImportClick = useCallback(() => {
     importInputRef.current?.click();
@@ -458,7 +572,7 @@ export function CompareWorkspace({
       const exportedAt = new Date();
       downloadTextFile(
         buildLapComparisonSetFilename(exportedAt),
-        serializeLapComparisonSet(basketEntries, exportedAt),
+        serializeLapComparisonSet(basketEntries, exportedAt, exportAnnotations),
         "application/json",
       );
       setTransferStatus({
@@ -473,7 +587,7 @@ export function CompareWorkspace({
         message: getTransferErrorMessage(error, "Export failed."),
       });
     }
-  }, [basketEntries]);
+  }, [basketEntries, exportAnnotations]);
 
   const handleImportFileChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -496,6 +610,7 @@ export function CompareWorkspace({
           return;
         }
 
+        annotationStore.importAnnotations(result.annotations);
         onImportComparisonSet(result.entries, result.reference);
         setTransferStatus({
           tone: "success",
@@ -510,7 +625,7 @@ export function CompareWorkspace({
         });
       }
     },
-    [maxBasketEntries, onImportComparisonSet],
+    [annotationStore, maxBasketEntries, onImportComparisonSet],
   );
 
   const transferActions =
@@ -536,6 +651,10 @@ export function CompareWorkspace({
         onClearBasket={onClearBasket}
         transferActions={variant === "workspace" ? transferActions : null}
         transferStatus={variant === "workspace" ? transferStatus : null}
+        annotations={annotationStore.annotations}
+        onAddAnnotation={annotationStore.addAnnotation}
+        onUpdateAnnotation={annotationStore.updateAnnotation}
+        onDeleteAnnotation={annotationStore.deleteAnnotation}
       />
     );
   }
@@ -568,6 +687,10 @@ function CompareBasketView({
   onClearBasket,
   transferActions,
   transferStatus,
+  annotations,
+  onAddAnnotation,
+  onUpdateAnnotation,
+  onDeleteAnnotation,
 }: {
   entries: LapBasketEntry[];
   variant: "workspace" | "inline";
@@ -580,6 +703,15 @@ function CompareBasketView({
   onClearBasket?: () => void;
   transferActions: ReactNode;
   transferStatus: CompareSetTransferStatus | null;
+  annotations: TelemetryAnnotation[];
+  onAddAnnotation: (
+    input: TelemetryAnnotationInput,
+  ) => TelemetryAnnotation | null;
+  onUpdateAnnotation: (
+    annotationId: string,
+    input: Partial<TelemetryAnnotationInput>,
+  ) => void;
+  onDeleteAnnotation: (annotationId: string) => void;
 }) {
   const isInline = variant === "inline";
   const [channelStates, setChannelStates] = useState<
@@ -590,9 +722,66 @@ function CompareBasketView({
   );
   const [distanceCursor, setDistanceCursor] =
     useState<CompareDistanceCursorState>(EMPTY_DISTANCE_CURSOR);
+  const [annotationDraft, setAnnotationDraft] =
+    useState<AnnotationDraft | null>(null);
   const sessionSummaries = useMemo(
     () => buildCompareSessionSummaries(entries),
     [entries],
+  );
+  const relevantAnnotations = useMemo(
+    () => filterAnnotationsByEntries(annotations, entries),
+    [annotations, entries],
+  );
+  const annotationContextOptions = useMemo(
+    () => [
+      ...sessionSummaries.map(buildSessionAnnotationOption),
+      ...entries.map(buildLapAnnotationOption),
+    ],
+    [entries, sessionSummaries],
+  );
+
+  const handleAddAnnotation = useCallback(
+    (input: TelemetryAnnotationInput) => {
+      onAddAnnotation(input);
+    },
+    [onAddAnnotation],
+  );
+
+  const handleDraftConsumed = useCallback(() => {
+    setAnnotationDraft(null);
+  }, []);
+
+  const handleCreateLapAnnotation = useCallback((entry: LapBasketEntry) => {
+    setAnnotationDraft(buildLapAnnotationOption(entry));
+  }, []);
+
+  const handleCreateMomentAnnotation = useCallback(
+    (
+      entry: LapBasketEntry,
+      distanceMeters: number,
+      endDistanceMeters?: number | null,
+    ) => {
+      setAnnotationDraft(
+        buildMomentAnnotationDraft(entry, distanceMeters, endDistanceMeters),
+      );
+    },
+    [],
+  );
+
+  const handleSelectAnnotation = useCallback(
+    (annotation: TelemetryAnnotation) => {
+      if (
+        annotation.scope === "moment" &&
+        typeof annotation.distanceMeters === "number"
+      ) {
+        setDistanceCursor({
+          sourcePanelId: "annotation",
+          distanceMeters: annotation.distanceMeters,
+        });
+      }
+      setAnnotationDraft(null);
+    },
+    [],
   );
 
   const handleSelectPanelChannel = useCallback(
@@ -733,7 +922,10 @@ function CompareBasketView({
           )}
         </div>
       </header>
-      <CompareSessionContextStrip summaries={sessionSummaries} />
+      <CompareSessionContextStrip
+        summaries={sessionSummaries}
+        annotations={relevantAnnotations}
+      />
       <div
         className="compare-overlay-stack"
         aria-label="Compare overlay charts"
@@ -750,6 +942,8 @@ function CompareBasketView({
             onSelectChannel={handleSelectPanelChannel}
             onRemovePanel={handleRemoveOverlayPanel}
             onSetReferenceLap={onSetReferenceLap}
+            annotations={relevantAnnotations}
+            onCreateMomentAnnotation={handleCreateMomentAnnotation}
             distanceCursor={distanceCursor}
             onDistanceCursorChange={handleDistanceCursorChange}
             onDistanceCursorClear={handleDistanceCursorClear}
@@ -763,6 +957,8 @@ function CompareBasketView({
       <CompareDeltaTimeChart
         entries={entries}
         channelStates={channelStates}
+        annotations={relevantAnnotations}
+        onCreateMomentAnnotation={handleCreateMomentAnnotation}
         distanceCursor={distanceCursor}
         onDistanceCursorChange={handleDistanceCursorChange}
         onDistanceCursorClear={handleDistanceCursorClear}
@@ -772,6 +968,7 @@ function CompareBasketView({
         channelStates={channelStates}
         selectedChannel={getCursorReadoutChannel(overlayPanels, distanceCursor)}
         distanceCursor={distanceCursor}
+        onCreateMomentAnnotation={handleCreateMomentAnnotation}
       />
       <div className="compare-basket-list">
         {entries.map((entry, index) => {
@@ -799,6 +996,21 @@ function CompareBasketView({
               <button
                 type="button"
                 className="icon-button compare-row-action"
+                aria-label={`Add note to ${entry.label}`}
+                title={`Add note to ${entry.label}`}
+                onClick={() => handleCreateLapAnnotation(entry)}
+              >
+                <MessageSquareText size={13} />
+                {getAnnotationCountForContext(relevantAnnotations, entry) >
+                  0 && (
+                  <span className="annotation-count-badge">
+                    {getAnnotationCountForContext(relevantAnnotations, entry)}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                className="icon-button compare-row-action"
                 aria-label={`Remove ${entry.label}`}
                 title={`Remove ${entry.label}`}
                 disabled={onRemoveLap === undefined}
@@ -810,6 +1022,19 @@ function CompareBasketView({
           );
         })}
       </div>
+      {!isInline && (
+        <AnnotationPanel
+          title="Compare notes"
+          annotations={relevantAnnotations}
+          contextOptions={annotationContextOptions}
+          draft={annotationDraft}
+          onDraftConsumed={handleDraftConsumed}
+          onAddAnnotation={handleAddAnnotation}
+          onUpdateAnnotation={onUpdateAnnotation}
+          onDeleteAnnotation={onDeleteAnnotation}
+          onSelectAnnotation={handleSelectAnnotation}
+        />
+      )}
     </section>
   );
 }
@@ -876,8 +1101,10 @@ function CompareSetTransferStatusView({
 
 function CompareSessionContextStrip({
   summaries,
+  annotations,
 }: {
   summaries: CompareSessionContextSummary[];
+  annotations: TelemetryAnnotation[];
 }) {
   return (
     <section
@@ -901,6 +1128,16 @@ function CompareSessionContextStrip({
           <div className="compare-session-chip-laps mono">
             laps {summary.laps.join(", ")}
           </div>
+          {getAnnotationCountForContext(annotations, {
+            sessionId: summary.sessionId,
+          }) > 0 && (
+            <div className="annotation-chip mono">
+              {getAnnotationCountForContext(annotations, {
+                sessionId: summary.sessionId,
+              })}{" "}
+              notes
+            </div>
+          )}
         </article>
       ))}
     </section>
@@ -1463,11 +1700,17 @@ function CompareDistanceCursorReadout({
   channelStates,
   selectedChannel,
   distanceCursor,
+  onCreateMomentAnnotation,
 }: {
   entries: LapBasketEntry[];
   channelStates: Record<string, LapChannelLoadState>;
   selectedChannel: OverlayChannelKey;
   distanceCursor: CompareDistanceCursorState;
+  onCreateMomentAnnotation: (
+    entry: LapBasketEntry,
+    distanceMeters: number,
+    endDistanceMeters?: number | null,
+  ) => void;
 }) {
   const distanceMeters = distanceCursor.distanceMeters;
   const channelOption =
@@ -1491,6 +1734,7 @@ function CompareDistanceCursorReadout({
   }
 
   const roundedDistance = Math.round(distanceMeters);
+  const referenceEntry = entries[0] ?? null;
 
   return (
     <section className="compare-cursor-readout" aria-label="Cursor values">
@@ -1504,6 +1748,32 @@ function CompareDistanceCursorReadout({
         <span className="compare-delta-reference mono">
           {channelOption.label}
         </span>
+        {referenceEntry !== null && (
+          <div className="compare-overlay-actions">
+            <button
+              type="button"
+              className="compare-overlay-reference-button"
+              onClick={() =>
+                onCreateMomentAnnotation(referenceEntry, distanceMeters)
+              }
+            >
+              Note point
+            </button>
+            <button
+              type="button"
+              className="compare-overlay-reference-button"
+              onClick={() =>
+                onCreateMomentAnnotation(
+                  referenceEntry,
+                  distanceMeters,
+                  distanceMeters + 50,
+                )
+              }
+            >
+              Note span
+            </button>
+          </div>
+        )}
       </header>
       <div className="table-panel-body compare-cursor-table-region">
         <table
@@ -1819,6 +2089,8 @@ function CompareOverlayChart({
   onSelectChannel,
   onRemovePanel,
   onSetReferenceLap,
+  annotations,
+  onCreateMomentAnnotation,
   distanceCursor,
   onDistanceCursorChange,
   onDistanceCursorClear,
@@ -1832,6 +2104,12 @@ function CompareOverlayChart({
   onSelectChannel: (panelId: string, channel: OverlayChannelKey) => void;
   onRemovePanel: (panelId: string) => void;
   onSetReferenceLap?: (sessionId: string, lapNumber: number) => void;
+  annotations: TelemetryAnnotation[];
+  onCreateMomentAnnotation: (
+    entry: LapBasketEntry,
+    distanceMeters: number,
+    endDistanceMeters?: number | null,
+  ) => void;
 } & CompareDistanceCursorControls) {
   const selectId = useId();
   const ready = useMemo(
@@ -1844,6 +2122,10 @@ function CompareOverlayChart({
   const model = useMemo(
     () => buildOverlayChartModel(ready, selectedChannel),
     [ready, selectedChannel],
+  );
+  const momentAnnotations = useMemo(
+    () => getMomentAnnotationsForEntries(annotations, entries),
+    [annotations, entries],
   );
   const cursorX =
     model !== null && model.xAxis === "lapDistance"
@@ -1884,6 +2166,26 @@ function CompareOverlayChart({
         model.xDomainMin + (model.xDomainMax - model.xDomainMin) / 2,
     );
   }, [distanceCursor.distanceMeters, model, onDistanceCursorChange, panelId]);
+  const handleChartClick = useCallback(
+    (event: MouseEvent<SVGSVGElement>) => {
+      if (model === null || model.xAxis !== "lapDistance") {
+        return;
+      }
+
+      const distanceMeters = getDomainXFromPointer(
+        event,
+        OVERLAY_CHART_WIDTH,
+        OVERLAY_CHART_PADDING,
+        model.xDomainMin,
+        model.xDomainMax,
+      );
+      const referenceEntry = entries[0];
+      if (distanceMeters !== null && referenceEntry !== undefined) {
+        onCreateMomentAnnotation(referenceEntry, distanceMeters);
+      }
+    },
+    [entries, model, onCreateMomentAnnotation],
+  );
 
   const totalLaps = entries.length;
   const readyLaps = ready.length;
@@ -1970,6 +2272,7 @@ function CompareOverlayChart({
             onFocus={handleFocus}
             onPointerMove={handlePointerMove}
             onPointerLeave={() => onDistanceCursorClear(panelId)}
+            onClick={handleChartClick}
           >
             {model.yTicks.map((tick) => {
               const y = model.toChartY(tick);
@@ -2047,6 +2350,42 @@ function CompareOverlayChart({
                 d={trace.pathData}
               />
             ))}
+            {model.xAxis === "lapDistance" &&
+              momentAnnotations.map((annotation) => {
+                const startX = model.toChartX(annotation.distanceMeters ?? 0);
+                const endX =
+                  typeof annotation.endDistanceMeters === "number"
+                    ? model.toChartX(annotation.endDistanceMeters)
+                    : null;
+                return (
+                  <g key={`annotation-${annotation.id}`}>
+                    {endX !== null && (
+                      <rect
+                        className="annotation-chart-span"
+                        x={Math.min(startX, endX)}
+                        y={OVERLAY_CHART_PADDING.top}
+                        width={Math.max(Math.abs(endX - startX), 2)}
+                        height={
+                          OVERLAY_CHART_HEIGHT -
+                          OVERLAY_CHART_PADDING.top -
+                          OVERLAY_CHART_PADDING.bottom
+                        }
+                      />
+                    )}
+                    <line
+                      className="annotation-chart-marker"
+                      x1={startX}
+                      x2={startX}
+                      y1={OVERLAY_CHART_PADDING.top}
+                      y2={OVERLAY_CHART_HEIGHT - OVERLAY_CHART_PADDING.bottom}
+                    >
+                      <title>
+                        {annotation.note} {formatAnnotationMoment(annotation)}
+                      </title>
+                    </line>
+                  </g>
+                );
+              })}
             {cursorX !== null && (
               <line
                 className="compare-distance-cursor-line"
@@ -2339,12 +2678,20 @@ function getDeltaPlaceholderMessage(
 function CompareDeltaTimeChart({
   entries,
   channelStates,
+  annotations,
+  onCreateMomentAnnotation,
   distanceCursor,
   onDistanceCursorChange,
   onDistanceCursorClear,
 }: {
   entries: LapBasketEntry[];
   channelStates: Record<string, LapChannelLoadState>;
+  annotations: TelemetryAnnotation[];
+  onCreateMomentAnnotation: (
+    entry: LapBasketEntry,
+    distanceMeters: number,
+    endDistanceMeters?: number | null,
+  ) => void;
 } & CompareDistanceCursorControls) {
   const referenceEntry = entries[0] ?? null;
   const deltaModel = useMemo(() => {
@@ -2378,6 +2725,10 @@ function CompareDeltaTimeChart({
     [deltaModel],
   );
   const placeholderMessage = getDeltaPlaceholderMessage(entries, channelStates);
+  const momentAnnotations = useMemo(
+    () => getMomentAnnotationsForEntries(annotations, entries),
+    [annotations, entries],
+  );
   const clippedTraceCount = deltaModel?.clippedTraceCount ?? 0;
   const cursorX =
     chartModel === null
@@ -2419,6 +2770,25 @@ function CompareDeltaTimeChart({
           (chartModel.xDomainMax - chartModel.xDomainMin) / 2,
     );
   }, [chartModel, distanceCursor.distanceMeters, onDistanceCursorChange]);
+  const handleChartClick = useCallback(
+    (event: MouseEvent<SVGSVGElement>) => {
+      if (chartModel === null || referenceEntry === null) {
+        return;
+      }
+
+      const distanceMeters = getDomainXFromPointer(
+        event,
+        OVERLAY_CHART_WIDTH,
+        DELTA_CHART_PADDING,
+        chartModel.xDomainMin,
+        chartModel.xDomainMax,
+      );
+      if (distanceMeters !== null) {
+        onCreateMomentAnnotation(referenceEntry, distanceMeters);
+      }
+    },
+    [chartModel, onCreateMomentAnnotation, referenceEntry],
+  );
 
   return (
     <section className="compare-delta-chart" aria-label="Delta time">
@@ -2454,6 +2824,7 @@ function CompareDeltaTimeChart({
               onPointerLeave={() =>
                 onDistanceCursorClear(DELTA_COMPARE_PANEL_ID)
               }
+              onClick={handleChartClick}
             >
               {chartModel.yTicks.map((tick) => {
                 const y = chartModel.toChartY(tick);
@@ -2554,6 +2925,43 @@ function CompareDeltaTimeChart({
                   y2={DELTA_CHART_HEIGHT - DELTA_CHART_PADDING.bottom}
                 />
               )}
+              {momentAnnotations.map((annotation) => {
+                const startX = chartModel.toChartX(
+                  annotation.distanceMeters ?? 0,
+                );
+                const endX =
+                  typeof annotation.endDistanceMeters === "number"
+                    ? chartModel.toChartX(annotation.endDistanceMeters)
+                    : null;
+                return (
+                  <g key={`delta-annotation-${annotation.id}`}>
+                    {endX !== null && (
+                      <rect
+                        className="annotation-chart-span"
+                        x={Math.min(startX, endX)}
+                        y={DELTA_CHART_PADDING.top}
+                        width={Math.max(Math.abs(endX - startX), 2)}
+                        height={
+                          DELTA_CHART_HEIGHT -
+                          DELTA_CHART_PADDING.top -
+                          DELTA_CHART_PADDING.bottom
+                        }
+                      />
+                    )}
+                    <line
+                      className="annotation-chart-marker"
+                      x1={startX}
+                      x2={startX}
+                      y1={DELTA_CHART_PADDING.top}
+                      y2={DELTA_CHART_HEIGHT - DELTA_CHART_PADDING.bottom}
+                    >
+                      <title>
+                        {annotation.note} {formatAnnotationMoment(annotation)}
+                      </title>
+                    </line>
+                  </g>
+                );
+              })}
               <text
                 className="compare-overlay-axis-label"
                 x={DELTA_CHART_PADDING.left}

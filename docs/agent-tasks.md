@@ -754,9 +754,10 @@ Execution Phase 5: sharing, notes, and external analysis.
 
 ### SF-05H: Add Annotations And Notes To Sessions, Laps, And Telemetry Moments
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend feature
 - Goal: Allow users to add annotations or notes at multiple levels—session-wide, lap-specific, and moment-specific (single points or time spans in telemetry)—in the Compare workspace and Driver View, and provide discovery features to surface past annotations so insights can be retrieved and built upon.
+- Notes: Completed on 2026-05-10. Compare and Driver View now share a localStorage-backed annotation store with session, lap, and telemetry-moment contexts, category/tag metadata, search/filter discovery, edit/delete controls, chart markers for annotated moments, and comparison-set import/export support for annotations. The notes panel is placed after the comparison surfaces, collapses by default so graphs remain prominent, and opens automatically when a lap or chart moment is selected for annotation.
 - Suggested files: `src/SectorForge.Web/src/components/dashboard/CompareWorkspace.tsx`, `src/SectorForge.Web/src/components/dashboard/DriverView.tsx`, `src/SectorForge.Web/src/components/annotations/*`, `src/SectorForge.Web/src/utils/*`
 - Acceptance criteria:
   - Users can add session-level notes (visible in session overview or metadata).

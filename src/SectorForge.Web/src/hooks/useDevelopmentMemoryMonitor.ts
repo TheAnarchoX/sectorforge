@@ -23,9 +23,9 @@ type UseDevelopmentMemoryMonitorOptions = {
 };
 
 const DEFAULT_SAMPLE_INTERVAL_MS = 15000;
-const WARNING_USED_BYTES = 192 * 1024 * 1024;
-const WARNING_HEAP_RATIO = 0.72;
-const WARNING_GROWTH_BYTES = 96 * 1024 * 1024;
+const WARNING_USED_BYTES = 384 * 1024 * 1024;
+const WARNING_HEAP_RATIO = 0.85;
+const WARNING_GROWTH_BYTES = 192 * 1024 * 1024;
 const HISTORY_LIMIT = 4;
 
 function formatMegabytes(bytes: number) {
@@ -44,7 +44,8 @@ function createMemoryNotice(
 
   const usedRatio = memory.usedJSHeapSize / heapLimit;
   const isHeapHot =
-    memory.usedJSHeapSize >= WARNING_USED_BYTES && usedRatio >= WARNING_HEAP_RATIO;
+    memory.usedJSHeapSize >= WARNING_USED_BYTES &&
+    usedRatio >= WARNING_HEAP_RATIO;
   const isGrowingQuickly = growthBytes >= WARNING_GROWTH_BYTES;
 
   if (!isHeapHot && !isGrowingQuickly) {
@@ -58,8 +59,7 @@ function createMemoryNotice(
 
   return {
     title: "High frontend memory usage",
-    message:
-      `JS heap is using ${formatMegabytes(memory.usedJSHeapSize)} of ${formatMegabytes(heapLimit)}.${growthLabel} Close heavy capture views, keep Sessions hidden when you do not need full capture detail, or reload the dashboard after long replay runs.`,
+    message: `JS heap is using ${formatMegabytes(memory.usedJSHeapSize)} of ${formatMegabytes(heapLimit)}.${growthLabel} Close heavy capture views, keep Sessions hidden when you do not need full capture detail, or reload the dashboard after long replay runs.`,
     tone: "warning",
   };
 }

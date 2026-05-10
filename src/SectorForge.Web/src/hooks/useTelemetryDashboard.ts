@@ -21,8 +21,6 @@ import type {
 } from "../types/telemetry";
 import { parseDurationSeconds } from "../utils/telemetryFormat";
 
-const TRACE_HISTORY_LIMIT = 180;
-const MAX_LAP_TRACE_POINTS = 720;
 const SESSION_REFRESH_INTERVAL_MS = 5000;
 const CONNECTION_RETRY_INTERVAL_MS = 1500;
 // Coalesce SignalR samples (60Hz fake adapter, higher in real games) into a
@@ -35,6 +33,14 @@ const EMPTY_LAP_TRACE: CurrentLapTelemetrySeries = {
   sessionId: null,
   lapNumber: null,
   points: [],
+};
+
+const EMPTY_TRACE_SERIES: TelemetryTraceSeries = {
+  speed: [],
+  rpm: [],
+  throttle: [],
+  brake: [],
+  steering: [],
 };
 
 type DashboardSnapshot = {
@@ -176,11 +182,16 @@ function createDashboardAlert(
 }
 
 function appendTraceValue(history: number[], nextValue: number) {
-  // Mutates history in place to keep allocations low on the 60Hz hot path.
   history.push(nextValue);
-  if (history.length > TRACE_HISTORY_LIMIT) {
-    history.splice(0, history.length - TRACE_HISTORY_LIMIT);
+}
+
+function replaceTraceValue(history: number[], nextValue: number) {
+  if (history.length === 0) {
+    history.push(nextValue);
+    return;
   }
+
+  history[history.length - 1] = nextValue;
 }
 
 function appendLapTracePoint(
@@ -198,9 +209,6 @@ function appendLapTracePoint(
   }
 
   points.push(nextPoint);
-  if (points.length > MAX_LAP_TRACE_POINTS) {
-    points.splice(0, points.length - MAX_LAP_TRACE_POINTS);
-  }
 }
 
 type TraceBuffers = {
@@ -211,8 +219,50 @@ type TraceBuffers = {
   steering: number[];
 };
 
+type TraceSampleValues = {
+  speed: number;
+  rpm: number;
+  throttle: number;
+  brake: number;
+  steering: number;
+};
+
 function createTraceBuffers(): TraceBuffers {
   return { speed: [], rpm: [], throttle: [], brake: [], steering: [] };
+}
+
+function clearTraceBuffers(buffers: TraceBuffers) {
+  buffers.speed.length = 0;
+  buffers.rpm.length = 0;
+  buffers.throttle.length = 0;
+  buffers.brake.length = 0;
+  buffers.steering.length = 0;
+}
+
+function appendTraceSample(buffers: TraceBuffers, values: TraceSampleValues) {
+  appendTraceValue(buffers.speed, values.speed);
+  appendTraceValue(buffers.rpm, values.rpm);
+  appendTraceValue(buffers.throttle, values.throttle);
+  appendTraceValue(buffers.brake, values.brake);
+  appendTraceValue(buffers.steering, values.steering);
+}
+
+function replaceTraceSample(buffers: TraceBuffers, values: TraceSampleValues) {
+  replaceTraceValue(buffers.speed, values.speed);
+  replaceTraceValue(buffers.rpm, values.rpm);
+  replaceTraceValue(buffers.throttle, values.throttle);
+  replaceTraceValue(buffers.brake, values.brake);
+  replaceTraceValue(buffers.steering, values.steering);
+}
+
+function getTraceSampleValues(sample: TelemetrySample): TraceSampleValues {
+  return {
+    speed: sample.vehicle.speedKph ?? 0,
+    rpm: sample.vehicle.rpm ?? 0,
+    throttle: (sample.driverInput.throttle ?? 0) * 100,
+    brake: (sample.driverInput.brake ?? 0) * 100,
+    steering: (sample.driverInput.steering ?? 0) * 100,
+  };
 }
 
 function snapshotTraceBuffers(buffers: TraceBuffers): TelemetryTraceSeries {
@@ -245,13 +295,8 @@ export function useTelemetryDashboard() {
   const [sample, setSample] = useState<TelemetrySample | null>(null);
   const [games, setGames] = useState<TelemetrySource[]>([]);
   const [sessions, setSessions] = useState<TelemetrySessionSummary[]>([]);
-  const [traceSeries, setTraceSeries] = useState<TelemetryTraceSeries>({
-    speed: [],
-    rpm: [],
-    throttle: [],
-    brake: [],
-    steering: [],
-  });
+  const [traceSeries, setTraceSeries] =
+    useState<TelemetryTraceSeries>(EMPTY_TRACE_SERIES);
   const [lapTrace, setLapTrace] =
     useState<CurrentLapTelemetrySeries>(EMPTY_LAP_TRACE);
   const [isBusy, setIsBusy] = useState(false);
@@ -315,6 +360,12 @@ export function useTelemetryDashboard() {
     setLapTrace(EMPTY_LAP_TRACE);
   };
 
+  const resetTraceSeries = () => {
+    traceBuffersRef.current = createTraceBuffers();
+    traceDirtyRef.current = false;
+    setTraceSeries(EMPTY_TRACE_SERIES);
+  };
+
   const applyDashboardSnapshot = (snapshot: DashboardSnapshot) => {
     setCollectorStatus(snapshot.collectorStatus);
     setGames(snapshot.games);
@@ -363,6 +414,7 @@ export function useTelemetryDashboard() {
     setApiAvailability("online");
 
     if (!status.isRunning || status.runMode === "Idle") {
+      resetTraceSeries();
       resetLapTrace();
     }
 
@@ -381,27 +433,12 @@ export function useTelemetryDashboard() {
       latestSampleRef.current = nextSample;
       sampleDirtyRef.current = true;
 
-      const buffers = traceBuffersRef.current;
-      appendTraceValue(buffers.speed, nextSample.vehicle.speedKph ?? 0);
-      appendTraceValue(buffers.rpm, nextSample.vehicle.rpm ?? 0);
-      appendTraceValue(
-        buffers.throttle,
-        (nextSample.driverInput.throttle ?? 0) * 100,
-      );
-      appendTraceValue(
-        buffers.brake,
-        (nextSample.driverInput.brake ?? 0) * 100,
-      );
-      appendTraceValue(
-        buffers.steering,
-        (nextSample.driverInput.steering ?? 0) * 100,
-      );
-      traceDirtyRef.current = true;
-
       const elapsedSeconds = parseDurationSeconds(
         nextSample.lap.currentLapTime,
       );
       const speedKph = nextSample.vehicle.speedKph;
+      let shouldResetTraceSeries = false;
+      let shouldReplaceTraceSample = false;
 
       if (
         elapsedSeconds !== null &&
@@ -419,6 +456,9 @@ export function useTelemetryDashboard() {
           lapRef.lapNumber !== nextLapNumber ||
           (lastPoint !== null &&
             elapsedSeconds + 0.05 < lastPoint.elapsedSeconds);
+        const isDuplicateLapTime =
+          lastPoint !== null &&
+          Math.abs(lastPoint.elapsedSeconds - elapsedSeconds) < 0.001;
         const nextPoint = {
           elapsedSeconds,
           value: speedKph,
@@ -430,11 +470,26 @@ export function useTelemetryDashboard() {
           lapRef.lapNumber = nextLapNumber;
           lapRef.points.length = 0;
           lapRef.points.push(nextPoint);
+          shouldResetTraceSeries = true;
         } else {
           appendLapTracePoint(lapRef.points, nextPoint);
+          shouldReplaceTraceSample = isDuplicateLapTime;
         }
         lapTraceDirtyRef.current = true;
       }
+
+      const buffers = traceBuffersRef.current;
+      if (shouldResetTraceSeries) {
+        clearTraceBuffers(buffers);
+      }
+
+      const traceValues = getTraceSampleValues(nextSample);
+      if (shouldReplaceTraceSample) {
+        replaceTraceSample(buffers, traceValues);
+      } else {
+        appendTraceSample(buffers, traceValues);
+      }
+      traceDirtyRef.current = true;
 
       if (apiAvailability !== "online") {
         setApiAvailability("online");
@@ -586,6 +641,7 @@ export function useTelemetryDashboard() {
   const startCollector = async (adapterId?: string) => {
     setIsBusy(true);
     setError(null);
+    resetTraceSeries();
     resetLapTrace();
 
     try {
@@ -612,6 +668,7 @@ export function useTelemetryDashboard() {
   const stopCollector = async () => {
     setIsBusy(true);
     setError(null);
+    resetTraceSeries();
     resetLapTrace();
 
     try {
@@ -637,6 +694,7 @@ export function useTelemetryDashboard() {
   const startReplay = async (sessionId: string) => {
     setIsBusy(true);
     setError(null);
+    resetTraceSeries();
     resetLapTrace();
 
     try {

@@ -52,6 +52,7 @@ function renderTimingBoard(
   const isLapPinned = vi.fn().mockReturnValue(false);
   const onPinLap = vi.fn();
   const onUnpinLap = vi.fn();
+  const onSetReferenceLap = vi.fn();
   const onCompareSelectedLaps = vi.fn();
 
   const utils = render(
@@ -65,9 +66,11 @@ function renderTimingBoard(
       isApiOffline={false}
       isBusy={false}
       activeReplaySessionId={null}
+      referenceLap={null}
       isLapPinned={isLapPinned}
       onPinLap={onPinLap}
       onUnpinLap={onUnpinLap}
+      onSetReferenceLap={onSetReferenceLap}
       onCompareSelectedLaps={onCompareSelectedLaps}
       onStartReplay={onStartReplay}
       onStopReplay={onStopReplay}
@@ -86,6 +89,7 @@ function renderTimingBoard(
     isLapPinned,
     onPinLap,
     onUnpinLap,
+    onSetReferenceLap,
     onCompareSelectedLaps,
   };
 }
@@ -213,9 +217,11 @@ describe("TimingBoard", () => {
         isApiOffline={false}
         isBusy={false}
         activeReplaySessionId={session.id}
+        referenceLap={null}
         isLapPinned={rendered.isLapPinned}
         onPinLap={rendered.onPinLap}
         onUnpinLap={rendered.onUnpinLap}
+        onSetReferenceLap={rendered.onSetReferenceLap}
         onCompareSelectedLaps={rendered.onCompareSelectedLaps}
         onStartReplay={rendered.onStartReplay}
         onStopReplay={rendered.onStopReplay}
@@ -294,6 +300,29 @@ describe("TimingBoard", () => {
     });
     expect(pinLap).toHaveAttribute("aria-pressed", "false");
 
+    await user.click(
+      screen.getByRole("button", {
+        name: /set lap 3 as live reference/i,
+      }),
+    );
+
+    expect(rendered.onSetReferenceLap).toHaveBeenCalledWith({
+      sessionId: session.id,
+      lapNumber: 3,
+      label: "Silverstone L3",
+      session: {
+        game: "SectorForge Sim",
+        sourceName: "Fake telemetry",
+        trackName: "Silverstone",
+        carName: "GT3 Evo",
+        startedAt: "2026-05-03T11:45:00.000Z",
+        lastSeenAt: "2026-05-03T12:05:00.000Z",
+        weather: "Dry",
+        trackTemperatureC: 31.2,
+        airTemperatureC: 22.4,
+      },
+    });
+
     await user.click(pinLap);
 
     expect(rendered.onPinLap).toHaveBeenCalledWith({
@@ -325,9 +354,11 @@ describe("TimingBoard", () => {
         isApiOffline={false}
         isBusy={false}
         activeReplaySessionId={null}
+        referenceLap={null}
         isLapPinned={isLapPinned}
         onPinLap={rendered.onPinLap}
         onUnpinLap={rendered.onUnpinLap}
+        onSetReferenceLap={rendered.onSetReferenceLap}
         onCompareSelectedLaps={rendered.onCompareSelectedLaps}
         onStartReplay={rendered.onStartReplay}
         onStopReplay={rendered.onStopReplay}
@@ -555,9 +586,11 @@ describe("TimingBoard", () => {
         isApiOffline={false}
         isBusy={false}
         activeReplaySessionId={null}
+        referenceLap={null}
         isLapPinned={rendered.isLapPinned}
         onPinLap={rendered.onPinLap}
         onUnpinLap={rendered.onUnpinLap}
+        onSetReferenceLap={rendered.onSetReferenceLap}
         onCompareSelectedLaps={rendered.onCompareSelectedLaps}
         onStartReplay={rendered.onStartReplay}
         onStopReplay={rendered.onStopReplay}

@@ -2,7 +2,10 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { LiveStatusPanels } from "./LiveStatusPanels";
-import { createTelemetrySample } from "../../test/telemetryFixtures";
+import {
+  createLapChannelsResponse,
+  createTelemetrySample,
+} from "../../test/telemetryFixtures";
 
 describe("LiveStatusPanels", () => {
   it("renders nothing when sample is null", () => {
@@ -62,6 +65,31 @@ describe("LiveStatusPanels", () => {
     expect(tiles).toHaveTextContent("S1");
     expect(tiles).toHaveTextContent("S2");
     expect(tiles).toHaveTextContent("S3");
+  });
+
+  it("adds compact reference deltas to sector split tiles", () => {
+    const sample = createTelemetrySample({
+      lap: {
+        sector1Time: "00:00:24.500",
+        sector2Time: "00:00:25.000",
+        sector3Time: null,
+      },
+    });
+
+    render(
+      <LiveStatusPanels
+        sample={sample}
+        referenceChannels={createLapChannelsResponse({
+          sector1Time: "00:00:24.700",
+          sector2Time: "00:00:24.800",
+          sector3Time: "00:00:26.000",
+        })}
+      />,
+    );
+
+    const tiles = screen.getByTestId("sector-splits-tiles");
+    expect(tiles).toHaveTextContent("REF -0.200s");
+    expect(tiles).toHaveTextContent("REF +0.200s");
   });
 
   it("renders the weather forecast strip when forecast samples exist", () => {

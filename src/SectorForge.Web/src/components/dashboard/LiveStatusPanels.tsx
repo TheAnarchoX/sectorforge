@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -11,8 +11,19 @@ import {
   Sun,
   Zap,
 } from "lucide-react";
-import type { TelemetrySample } from "../../types/telemetry";
-import { formatNumber, formatTime } from "../../utils/telemetryFormat";
+import type {
+  LapChannelsResponse,
+  TelemetrySample,
+} from "../../types/telemetry";
+import {
+  formatDeltaSeconds,
+  formatNumber,
+  formatTime,
+} from "../../utils/telemetryFormat";
+import {
+  buildLiveReferenceSectorDeltas,
+  type LiveReferenceSectorDeltas,
+} from "../../utils/liveReferenceComparison";
 
 const ERS_MAX_JOULES = 4_000_000;
 
@@ -45,6 +56,7 @@ function formatMJ(joules: number | null | undefined) {
 
 type LiveStatusPanelsProps = {
   sample: TelemetrySample | null;
+  referenceChannels?: LapChannelsResponse | null;
 };
 
 /**
@@ -54,7 +66,18 @@ type LiveStatusPanelsProps = {
  * stays compact when the F1 25 adapter has not yet observed the underlying
  * packet.
  */
-export function LiveStatusPanels({ sample }: LiveStatusPanelsProps) {
+export function LiveStatusPanels({
+  sample,
+  referenceChannels = null,
+}: LiveStatusPanelsProps) {
+  const referenceSectorDeltas = useMemo(
+    () =>
+      sample === null || referenceChannels === null
+        ? null
+        : buildLiveReferenceSectorDeltas(sample, referenceChannels),
+    [referenceChannels, sample],
+  );
+
   if (sample === null) {
     return null;
   }
@@ -62,7 +85,10 @@ export function LiveStatusPanels({ sample }: LiveStatusPanelsProps) {
   return (
     <>
       <DriverFlagsStrip sample={sample} />
-      <SectorSplitsTiles sample={sample} />
+      <SectorSplitsTiles
+        sample={sample}
+        referenceDeltas={referenceSectorDeltas}
+      />
       <DamagePanel sample={sample} />
       <ErsPanel sample={sample} />
       <WeatherForecastStrip sample={sample} />
@@ -170,7 +196,21 @@ function hasAnySectorSplit(sample: TelemetrySample) {
   );
 }
 
-export function SectorSplitsTiles({ sample }: { sample: TelemetrySample }) {
+function getReferenceDeltaTone(value: number | null | undefined) {
+  if (value === null || value === undefined || Math.abs(value) < 0.0005) {
+    return "neutral";
+  }
+
+  return value < 0 ? "gain" : "loss";
+}
+
+export function SectorSplitsTiles({
+  sample,
+  referenceDeltas,
+}: {
+  sample: TelemetrySample;
+  referenceDeltas?: LiveReferenceSectorDeltas | null;
+}) {
   if (!hasAnySectorSplit(sample)) {
     return null;
   }
@@ -180,10 +220,26 @@ export function SectorSplitsTiles({ sample }: { sample: TelemetrySample }) {
     label: string;
     current: string | null | undefined;
     last: string | null | undefined;
+    referenceDelta: number | null | undefined;
   }> = [
-    { label: "S1", current: lap.sector1Time, last: lap.lastSector1Time },
-    { label: "S2", current: lap.sector2Time, last: lap.lastSector2Time },
-    { label: "S3", current: lap.sector3Time, last: lap.lastSector3Time },
+    {
+      label: "S1",
+      current: lap.sector1Time,
+      last: lap.lastSector1Time,
+      referenceDelta: referenceDeltas?.sector1DeltaSeconds,
+    },
+    {
+      label: "S2",
+      current: lap.sector2Time,
+      last: lap.lastSector2Time,
+      referenceDelta: referenceDeltas?.sector2DeltaSeconds,
+    },
+    {
+      label: "S3",
+      current: lap.sector3Time,
+      last: lap.lastSector3Time,
+      referenceDelta: referenceDeltas?.sector3DeltaSeconds,
+    },
   ];
 
   return (
@@ -201,6 +257,14 @@ export function SectorSplitsTiles({ sample }: { sample: TelemetrySample }) {
           <span className="sector-split-last mono muted">
             last {formatTime(tile.last ?? null)}
           </span>
+          {tile.referenceDelta !== null &&
+            tile.referenceDelta !== undefined && (
+              <span
+                className={`sector-split-reference sector-split-reference-${getReferenceDeltaTone(tile.referenceDelta)} mono`}
+              >
+                REF {formatDeltaSeconds(tile.referenceDelta)}
+              </span>
+            )}
         </div>
       ))}
     </section>

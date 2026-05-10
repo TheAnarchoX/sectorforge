@@ -3,6 +3,7 @@ import type { ChangeEvent, Dispatch, SetStateAction } from "react";
 import {
   Activity,
   AlertTriangle,
+  Flag,
   Pause,
   Pin,
   PinOff,
@@ -19,6 +20,7 @@ import type {
   LapBasketEntry,
   LapBasketSessionContext,
   ParticipantState,
+  ReferenceLapSelection,
   TelemetrySample,
   TelemetrySessionDetails,
   TelemetrySessionSummary,
@@ -47,9 +49,11 @@ type TimingBoardProps = {
   isApiOffline: boolean;
   isBusy: boolean;
   activeReplaySessionId: string | null;
+  referenceLap: ReferenceLapSelection | null;
   isLapPinned: (sessionId: string, lapNumber: number) => boolean;
   onPinLap: (lap: LapComparePinInput) => void;
   onUnpinLap: (sessionId: string, lapNumber: number) => void;
+  onSetReferenceLap: (lap: ReferenceLapSelection) => void;
   onCompareSelectedLaps: (laps: LapComparePinInput[]) => void;
   onStartReplay: (sessionId: string) => Promise<boolean>;
   onStopReplay: () => Promise<void> | void;
@@ -474,9 +478,11 @@ export function TimingBoard({
   isApiOffline,
   isBusy,
   activeReplaySessionId,
+  referenceLap,
   isLapPinned,
   onPinLap,
   onUnpinLap,
+  onSetReferenceLap,
   onCompareSelectedLaps,
   onStartReplay,
   onStopReplay,
@@ -1222,6 +1228,7 @@ export function TimingBoard({
                       <th>Δ best</th>
                       <th>Trace</th>
                       <th>Updated</th>
+                      <th>Ref</th>
                       <th>Compare</th>
                       <th>Pin</th>
                     </tr>
@@ -1229,7 +1236,7 @@ export function TimingBoard({
                   <tbody>
                     {visibleSession.laps.length === 0 ? (
                       <tr className="table-row-empty">
-                        <td colSpan={13}>
+                        <td colSpan={14}>
                           <div className="table-empty-state">
                             <span>No lap summaries yet</span>
                             <span className="table-subvalue muted">
@@ -1270,6 +1277,9 @@ export function TimingBoard({
                           lap.sessionId,
                           lap.lapNumber,
                         );
+                        const isLiveReferenceLap =
+                          referenceLap?.sessionId === lap.sessionId &&
+                          referenceLap.lapNumber === lap.lapNumber;
                         const isPinLimitReached =
                           !isPinnedToCompare && pinnedLapCount >= maxPinnedLaps;
                         const isSelectedForCompare = selectedCompareLapKeys.has(
@@ -1293,6 +1303,9 @@ export function TimingBoard({
                           isSelectedForCompare ? "table-row-selected" : null,
                           isInlineComparisonLap
                             ? "session-lap-row-inline-active"
+                            : null,
+                          isLiveReferenceLap
+                            ? "session-lap-row-reference"
                             : null,
                         ]
                           .filter(Boolean)
@@ -1358,6 +1371,34 @@ export function TimingBoard({
                             </td>
                             <td className="mono">
                               {formatShortTimestamp(lap.updatedAt)}
+                            </td>
+                            <td className="session-lap-reference-cell">
+                              <button
+                                type="button"
+                                className={`icon-button lap-reference-button${isLiveReferenceLap ? " active" : ""}`}
+                                aria-label={
+                                  isLiveReferenceLap
+                                    ? `Lap ${lap.lapNumber} is the live reference`
+                                    : `Set lap ${lap.lapNumber} as live reference`
+                                }
+                                aria-pressed={isLiveReferenceLap}
+                                title={
+                                  isLiveReferenceLap
+                                    ? "Live reference lap"
+                                    : "Set as Live reference"
+                                }
+                                onClick={() =>
+                                  onSetReferenceLap(
+                                    getLapComparePinInput(
+                                      visibleSession,
+                                      lap.lapNumber,
+                                    ),
+                                  )
+                                }
+                              >
+                                <Flag size={12} aria-hidden="true" />
+                                {isLiveReferenceLap ? "REF" : "SET REF"}
+                              </button>
                             </td>
                             <td className="session-lap-inline-cell">
                               <button

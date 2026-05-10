@@ -320,6 +320,11 @@ export type LapBasketEntry = {
   session?: LapBasketSessionContext;
 };
 
+export type ReferenceLapSelection = Pick<
+  LapBasketEntry,
+  "sessionId" | "lapNumber" | "label" | "session"
+>;
+
 export type LapChannelValueKind = "Number" | "Boolean";
 
 export type LapChannelManifestEntry = {

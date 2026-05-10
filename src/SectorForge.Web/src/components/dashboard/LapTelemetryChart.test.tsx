@@ -47,4 +47,33 @@ describe("LapTelemetryChart", () => {
     expect(screen.getByText(/lap 4 \/\//i)).toBeInTheDocument();
     expect(screen.getByText(/01\.5 \/\//i)).toBeInTheDocument();
   });
+
+  it("renders a reference speed trace without changing the current chart role", () => {
+    const { container } = render(
+      <LapTelemetryChart
+        points={[
+          { elapsedSeconds: 0.5, value: 148 },
+          { elapsedSeconds: 1, value: 152 },
+          { elapsedSeconds: 1.5, value: 156 },
+        ]}
+        lapNumber={4}
+        currentValue={156}
+        isActive
+        referenceTrace={{
+          label: "Ref L3",
+          points: [
+            { elapsedSeconds: 0.5, value: 140 },
+            { elapsedSeconds: 1, value: 151 },
+            { elapsedSeconds: 1.5, value: 159 },
+          ],
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("img", { name: "Current lap speed trace for lap 4" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Ref L3")).toBeInTheDocument();
+    expect(container.querySelector(".lap-chart-reference-path")).not.toBeNull();
+  });
 });

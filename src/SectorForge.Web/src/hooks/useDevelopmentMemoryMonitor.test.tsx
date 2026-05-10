@@ -24,6 +24,29 @@ describe("useDevelopmentMemoryMonitor", () => {
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const performanceObject: TestPerformance = {
       memory: {
+        usedJSHeapSize: 440 * 1024 * 1024,
+        totalJSHeapSize: 460 * 1024 * 1024,
+        jsHeapSizeLimit: 500 * 1024 * 1024,
+      },
+    };
+
+    const { result } = renderHook(() =>
+      useDevelopmentMemoryMonitor({
+        enabled: true,
+        performanceObject: performanceObject as Performance,
+        sampleIntervalMs: 1000,
+      }),
+    );
+
+    expect(result.current?.title).toBe("High frontend memory usage");
+    expect(result.current?.message).toMatch(/440 MB of 500 MB/i);
+    expect(consoleWarn).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays quiet for moderate dev heap usage", () => {
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const performanceObject: TestPerformance = {
+      memory: {
         usedJSHeapSize: 240 * 1024 * 1024,
         totalJSHeapSize: 260 * 1024 * 1024,
         jsHeapSizeLimit: 320 * 1024 * 1024,
@@ -38,18 +61,17 @@ describe("useDevelopmentMemoryMonitor", () => {
       }),
     );
 
-    expect(result.current?.title).toBe("High frontend memory usage");
-    expect(result.current?.message).toMatch(/240 MB of 320 MB/i);
-    expect(consoleWarn).toHaveBeenCalledTimes(1);
+    expect(result.current).toBeNull();
+    expect(consoleWarn).not.toHaveBeenCalled();
   });
 
   it("clears the warning after usage drops back below the threshold", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const performanceObject: TestPerformance = {
       memory: {
-        usedJSHeapSize: 236 * 1024 * 1024,
-        totalJSHeapSize: 250 * 1024 * 1024,
-        jsHeapSizeLimit: 320 * 1024 * 1024,
+        usedJSHeapSize: 440 * 1024 * 1024,
+        totalJSHeapSize: 460 * 1024 * 1024,
+        jsHeapSizeLimit: 500 * 1024 * 1024,
       },
     };
 

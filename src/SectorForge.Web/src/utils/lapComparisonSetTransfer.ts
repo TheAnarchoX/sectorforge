@@ -8,6 +8,10 @@ import type {
   LapBasketSessionContext,
   LapCompareChannelKey,
 } from "../types/telemetry";
+import {
+  normalizeTelemetryAnnotations,
+  type TelemetryAnnotation,
+} from "./telemetryAnnotations";
 
 export const LAP_COMPARISON_SET_SCHEMA = "sectorforge.lapComparisonSet";
 export const LAP_COMPARISON_SET_VERSION = 1;
@@ -43,6 +47,7 @@ export type LapComparisonSetParseResult =
       ok: true;
       entries: LapBasketEntry[];
       reference: LapComparisonSetReference | null;
+      annotations: TelemetryAnnotation[];
     }
   | { ok: false; message: string };
 
@@ -56,6 +61,7 @@ type ExportedLapComparisonSet = {
   exportedAt: string;
   reference: LapComparisonSetReference | null;
   entries: ExportedLapComparisonSetEntry[];
+  annotations: TelemetryAnnotation[];
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -247,6 +253,7 @@ function moveReferenceFirst(
 export function buildLapComparisonSet(
   entries: LapBasketEntry[],
   exportedAt: Date = new Date(),
+  annotations: TelemetryAnnotation[] = [],
 ) {
   const reference = entries[0]
     ? {
@@ -264,14 +271,20 @@ export function buildLapComparisonSet(
       ...entry,
       role: index === 0 ? "reference" : "comparison",
     })),
+    annotations,
   } satisfies ExportedLapComparisonSet;
 }
 
 export function serializeLapComparisonSet(
   entries: LapBasketEntry[],
   exportedAt?: Date,
+  annotations?: TelemetryAnnotation[],
 ) {
-  return `${JSON.stringify(buildLapComparisonSet(entries, exportedAt), null, 2)}\n`;
+  return `${JSON.stringify(
+    buildLapComparisonSet(entries, exportedAt, annotations),
+    null,
+    2,
+  )}\n`;
 }
 
 export function buildLapComparisonSetFilename(exportedAt: Date = new Date()) {
@@ -385,5 +398,6 @@ export function parseLapComparisonSetJson(
     ok: true,
     entries: moveReferenceFirst(entries, reference),
     reference,
+    annotations: normalizeTelemetryAnnotations(parsed.annotations),
   };
 }
