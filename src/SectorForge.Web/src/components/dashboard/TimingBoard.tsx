@@ -16,6 +16,7 @@ import type {
   CollectorStatus,
   CurrentLapTelemetrySeries,
   DashboardReplayState,
+  LapBasketEntry,
   LapBasketSessionContext,
   ParticipantState,
   TelemetrySample,
@@ -34,6 +35,7 @@ import {
   formatTime,
   parseDurationSeconds,
 } from "../../utils/telemetryFormat";
+import { CompareWorkspace } from "./CompareWorkspace";
 
 type TimingBoardProps = {
   collectorStatus: CollectorStatus | null;
@@ -76,6 +78,20 @@ const EMPTY_REPLAY_LAP_TRACE: CurrentLapTelemetrySeries = {
   sessionId: null,
   lapNumber: null,
   points: [],
+};
+const INLINE_COMPARE_COLORS = ["#63b8d6", "#d9b04a"];
+
+type InlineComparePair = {
+  comparisonLapNumber: number;
+  referenceLapNumber: number;
+};
+
+type SessionLapMetadata = {
+  sector1Time: string | null;
+  sector2Time: string | null;
+  sector3Time: string | null;
+  tyreCompound: string | null;
+  pitStopCount: number | null;
 };
 
 function buildReplayTraceSeries(
@@ -344,6 +360,106 @@ function getLapCompareSessionContext(
   } satisfies LapBasketSessionContext;
 }
 
+function getFastestLapNumber(session: TelemetrySessionDetails) {
+  let fastestLapNumber: number | null = null;
+  let fastestSeconds = Number.POSITIVE_INFINITY;
+
+  for (const lap of session.laps) {
+    const seconds = parseDurationSeconds(lap.lapTime);
+    if (seconds !== null && seconds < fastestSeconds) {
+      fastestLapNumber = lap.lapNumber;
+      fastestSeconds = seconds;
+    }
+  }
+
+  return fastestLapNumber;
+}
+
+function getDefaultReferenceLapNumber(
+  session: TelemetrySessionDetails,
+  comparisonLapNumber: number,
+) {
+  const fastestLapNumber = getFastestLapNumber(session);
+  if (fastestLapNumber !== null && fastestLapNumber !== comparisonLapNumber) {
+    return fastestLapNumber;
+  }
+
+  return (
+    session.laps.find((lap) => lap.lapNumber !== comparisonLapNumber)
+      ?.lapNumber ?? comparisonLapNumber
+  );
+}
+
+function getInlineCompareEntry(
+  session: TelemetrySessionDetails,
+  lapNumber: number,
+  color: string,
+) {
+  return {
+    ...getLapComparePinInput(session, lapNumber),
+    color,
+  } satisfies LapBasketEntry;
+}
+
+function buildInlineCompareEntries(
+  session: TelemetrySessionDetails | null,
+  pair: InlineComparePair | null,
+) {
+  if (session === null || pair === null) {
+    return [];
+  }
+
+  const entries = [
+    getInlineCompareEntry(
+      session,
+      pair.referenceLapNumber,
+      INLINE_COMPARE_COLORS[0],
+    ),
+  ];
+
+  if (pair.comparisonLapNumber !== pair.referenceLapNumber) {
+    entries.push(
+      getInlineCompareEntry(
+        session,
+        pair.comparisonLapNumber,
+        INLINE_COMPARE_COLORS[1],
+      ),
+    );
+  }
+
+  return entries;
+}
+
+function buildSessionLapMetadata(
+  session: TelemetrySessionDetails,
+): Map<number, SessionLapMetadata> {
+  const metadataByLap = new Map<number, SessionLapMetadata>();
+
+  for (const sample of session.samples) {
+    const lapNumber = sample.lap.lapNumber;
+    if (lapNumber === null || lapNumber === undefined) {
+      continue;
+    }
+
+    metadataByLap.set(lapNumber, {
+      sector1Time: sample.lap.sector1Time ?? sample.lap.lastSector1Time ?? null,
+      sector2Time: sample.lap.sector2Time ?? sample.lap.lastSector2Time ?? null,
+      sector3Time: sample.lap.sector3Time ?? sample.lap.lastSector3Time ?? null,
+      tyreCompound:
+        sample.tyres.compound && sample.tyres.compound !== "Unknown"
+          ? sample.tyres.compound
+          : null,
+      pitStopCount: sample.lap.pitStopCount ?? null,
+    });
+  }
+
+  return metadataByLap;
+}
+
+function formatPitStops(value: number | null | undefined) {
+  return value === null || value === undefined ? "-" : String(value);
+}
+
 export function TimingBoard({
   collectorStatus,
   sample,
@@ -382,6 +498,8 @@ export function TimingBoard({
   const [selectedCompareLapKeys, setSelectedCompareLapKeys] = useState<
     Set<string>
   >(() => new Set());
+  const [inlineComparePair, setInlineComparePair] =
+    useState<InlineComparePair | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -697,6 +815,24 @@ export function TimingBoard({
       : isCompareSelectionOverLimit
         ? `Compare basket has room for ${compareSelectionAvailableSlots} more laps`
         : "Send selected laps to Compare";
+  const lapMetadataByNumber = useMemo(
+    () =>
+      visibleSession === null
+        ? new Map<number, SessionLapMetadata>()
+        : buildSessionLapMetadata(visibleSession),
+    [visibleSession],
+  );
+  const inlineCompareEntries = useMemo(
+    () => buildInlineCompareEntries(visibleSession, inlineComparePair),
+    [inlineComparePair, visibleSession],
+  );
+  const inlineCompareSummary =
+    inlineComparePair === null
+      ? "Select a lap"
+      : inlineComparePair.comparisonLapNumber ===
+          inlineComparePair.referenceLapNumber
+        ? `Lap ${inlineComparePair.comparisonLapNumber}`
+        : `Lap ${inlineComparePair.comparisonLapNumber} vs lap ${inlineComparePair.referenceLapNumber}`;
 
   const handleSelectSession = (sessionId: string) => {
     if (activeReplaySessionId !== null && activeReplaySessionId !== sessionId) {
@@ -711,6 +847,7 @@ export function TimingBoard({
     );
     if (selectedSessionId !== sessionId) {
       setSelectedCompareLapKeys(new Set());
+      setInlineComparePair(null);
     }
     setSelectedSession((current) =>
       current?.session.id === sessionId ? current : null,
@@ -745,6 +882,46 @@ export function TimingBoard({
         getLapComparePinInput(visibleSession, lap.lapNumber),
       ),
     );
+  };
+
+  const handleOpenInlineCompare = (lapNumber: number) => {
+    if (visibleSession === null) {
+      return;
+    }
+
+    setInlineComparePair({
+      comparisonLapNumber: lapNumber,
+      referenceLapNumber: getDefaultReferenceLapNumber(
+        visibleSession,
+        lapNumber,
+      ),
+    });
+  };
+
+  const handleSetInlineReferenceLap = (
+    _sessionId: string,
+    lapNumber: number,
+  ) => {
+    setInlineComparePair((currentPair) => {
+      if (
+        currentPair === null ||
+        lapNumber === currentPair.referenceLapNumber
+      ) {
+        return currentPair;
+      }
+
+      if (lapNumber === currentPair.comparisonLapNumber) {
+        return {
+          comparisonLapNumber: currentPair.referenceLapNumber,
+          referenceLapNumber: lapNumber,
+        };
+      }
+
+      return {
+        comparisonLapNumber: currentPair.referenceLapNumber,
+        referenceLapNumber: lapNumber,
+      };
+    });
   };
 
   const handleStartReplay = async (sessionId: string) => {
@@ -811,6 +988,7 @@ export function TimingBoard({
       if (selectedSessionId === sessionId) {
         setSelectedSessionId(null);
         setSelectedSession(null);
+        setInlineComparePair(null);
         setReplayIndex(0);
       }
       if (!removed) {
@@ -1004,9 +1182,7 @@ export function TimingBoard({
               <div className="session-detail-heading">
                 <div>
                   <div className="panel-kicker">Lap board</div>
-                  <h3 className="panel-title">
-                    {visibleSession.laps.length} recorded laps
-                  </h3>
+                  <h3 className="panel-title">Lap-focused session view</h3>
                 </div>
                 <div className="session-detail-heading-actions">
                   <div className="session-detail-note mono">
@@ -1034,16 +1210,22 @@ export function TimingBoard({
                       <th>Select</th>
                       <th>Lap</th>
                       <th>Lap time</th>
+                      <th>S1</th>
+                      <th>S2</th>
+                      <th>S3</th>
+                      <th>Tyre</th>
+                      <th>Pits</th>
                       <th>Δ best</th>
                       <th>Trace</th>
                       <th>Updated</th>
                       <th>Compare</th>
+                      <th>Pin</th>
                     </tr>
                   </thead>
                   <tbody>
                     {visibleSession.laps.length === 0 ? (
                       <tr className="table-row-empty">
-                        <td colSpan={7}>
+                        <td colSpan={13}>
                           <div className="table-empty-state">
                             <span>No lap summaries yet</span>
                             <span className="table-subvalue muted">
@@ -1055,6 +1237,9 @@ export function TimingBoard({
                       </tr>
                     ) : (
                       visibleSession.laps.map((lap) => {
+                        const lapMetadata = lapMetadataByNumber.get(
+                          lap.lapNumber,
+                        );
                         const lapSeconds = parseDurationSeconds(lap.lapTime);
                         const bestSeconds = parseDurationSeconds(
                           visibleSession.session.bestLapTime,
@@ -1086,6 +1271,11 @@ export function TimingBoard({
                         const isSelectedForCompare = selectedCompareLapKeys.has(
                           getLapSelectionKey(lap.sessionId, lap.lapNumber),
                         );
+                        const isInlineComparisonLap =
+                          inlineComparePair?.comparisonLapNumber ===
+                            lap.lapNumber ||
+                          inlineComparePair?.referenceLapNumber ===
+                            lap.lapNumber;
                         const pinLabel = isPinnedToCompare
                           ? `Unpin lap ${lap.lapNumber} from compare`
                           : `Pin lap ${lap.lapNumber} for compare`;
@@ -1097,6 +1287,9 @@ export function TimingBoard({
                         const rowClass = [
                           isBest ? "table-row-active" : null,
                           isSelectedForCompare ? "table-row-selected" : null,
+                          isInlineComparisonLap
+                            ? "session-lap-row-inline-active"
+                            : null,
                         ]
                           .filter(Boolean)
                           .join(" ");
@@ -1122,6 +1315,29 @@ export function TimingBoard({
                             <td className="mono">{lap.lapNumber}</td>
                             <td className="mono">{formatTime(lap.lapTime)}</td>
                             <td className="mono">
+                              {formatTime(lapMetadata?.sector1Time)}
+                            </td>
+                            <td className="mono">
+                              {formatTime(lapMetadata?.sector2Time)}
+                            </td>
+                            <td className="mono">
+                              {formatTime(lapMetadata?.sector3Time)}
+                            </td>
+                            <td>
+                              {lapMetadata?.tyreCompound ? (
+                                <span
+                                  className={`tyre-chip tyre-chip-${lapMetadata.tyreCompound.toLowerCase()}`}
+                                >
+                                  {lapMetadata.tyreCompound}
+                                </span>
+                              ) : (
+                                <span className="muted">-</span>
+                              )}
+                            </td>
+                            <td className="mono">
+                              {formatPitStops(lapMetadata?.pitStopCount)}
+                            </td>
+                            <td className="mono">
                               {delta === null
                                 ? "-"
                                 : isBest
@@ -1138,6 +1354,19 @@ export function TimingBoard({
                             </td>
                             <td className="mono">
                               {formatShortTimestamp(lap.updatedAt)}
+                            </td>
+                            <td className="session-lap-inline-cell">
+                              <button
+                                type="button"
+                                className="icon-button lap-inline-compare-button"
+                                aria-pressed={isInlineComparisonLap}
+                                aria-label={`Compare lap ${lap.lapNumber} inline`}
+                                onClick={() =>
+                                  handleOpenInlineCompare(lap.lapNumber)
+                                }
+                              >
+                                Compare
+                              </button>
                             </td>
                             <td className="session-lap-pin-cell">
                               <button
@@ -1176,6 +1405,26 @@ export function TimingBoard({
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {visibleSession !== null && inlineComparePair !== null && (
+            <div className="session-detail-section session-inline-compare-section">
+              <div className="session-detail-heading">
+                <div>
+                  <div className="panel-kicker">Inline comparison</div>
+                  <h3 className="panel-title">{inlineCompareSummary}</h3>
+                </div>
+                <div className="session-detail-note mono">
+                  Switch reference from the legend
+                </div>
+              </div>
+              <CompareWorkspace
+                variant="inline"
+                basketEntries={inlineCompareEntries}
+                onSetReferenceLap={handleSetInlineReferenceLap}
+                onOpenSessions={() => undefined}
+              />
             </div>
           )}
 

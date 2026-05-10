@@ -1,9 +1,17 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TimingBoard } from "./TimingBoard";
 import {
   createCollectorStatus,
+  createLapChannelsResponse,
   createSessionDetails,
   createSessionSummary,
   createTelemetrySample,
@@ -12,11 +20,13 @@ import {
 
 const timingBoardApiMock = vi.hoisted(() => ({
   deleteSession: vi.fn(),
+  getLapChannelsForBasketEntry: vi.fn(),
   getSessionDetails: vi.fn(),
 }));
 
 vi.mock("../../api/telemetryApi", () => ({
   deleteSession: timingBoardApiMock.deleteSession,
+  getLapChannelsForBasketEntry: timingBoardApiMock.getLapChannelsForBasketEntry,
   getSessionDetails: timingBoardApiMock.getSessionDetails,
 }));
 
@@ -84,6 +94,20 @@ describe("TimingBoard", () => {
   beforeEach(() => {
     timingBoardApiMock.getSessionDetails.mockReset();
     timingBoardApiMock.deleteSession.mockReset();
+    timingBoardApiMock.getLapChannelsForBasketEntry.mockReset();
+    timingBoardApiMock.getLapChannelsForBasketEntry.mockResolvedValue(
+      createLapChannelsResponse({
+        channels: {
+          time: [0, 10, 20],
+          speedKph: [120, 150, 200],
+          rpm: [5000, 6000, 7000],
+          throttle: [0.2, 0.6, 0.9],
+          brake: [0, 0.1, 0.2],
+          steering: [0, 0.1, -0.1],
+          lapDistance: [0, 100, 200],
+        },
+      }),
+    );
   });
 
   afterEach(() => {
@@ -170,7 +194,7 @@ describe("TimingBoard", () => {
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
 
-    expect(screen.getByText(/recorded laps/i)).toBeInTheDocument();
+    expect(screen.getByText("Lap-focused session view")).toBeInTheDocument();
     expect(screen.getByText("Session Summary")).toBeInTheDocument();
     expect(screen.getByText("Driver, car, and gap board")).toBeInTheDocument();
 
@@ -263,7 +287,7 @@ describe("TimingBoard", () => {
     });
 
     await user.click(getSessionCaptureButton("Silverstone"));
-    await screen.findByText(/recorded laps/i);
+    await screen.findByText("Lap-focused session view");
 
     const pinLap = screen.getByRole("button", {
       name: /pin lap 3 for compare/i,
@@ -334,7 +358,7 @@ describe("TimingBoard", () => {
     const rendered = renderTimingBoard({ sessions: [session], sample: null });
 
     await user.click(getSessionCaptureButton("Silverstone"));
-    await screen.findByText(/recorded laps/i);
+    await screen.findByText("Lap-focused session view");
 
     const compareSelected = screen.getByRole("button", {
       name: "Compare Selected",
@@ -389,6 +413,118 @@ describe("TimingBoard", () => {
     ]);
   });
 
+  it("opens an inline lap comparison with lap metadata and switchable reference", async () => {
+    const user = userEvent.setup();
+    const session = createSessionSummary();
+    const sessionDetails = createSessionDetails({
+      laps: [
+        {
+          sessionId: session.id,
+          lapNumber: 3,
+          lapTime: "00:01:02.400",
+          bestLapTime: "00:01:01.900",
+          updatedAt: "2026-05-03T12:01:10.000Z",
+        },
+        {
+          sessionId: session.id,
+          lapNumber: 4,
+          lapTime: "00:01:01.900",
+          bestLapTime: "00:01:01.900",
+          updatedAt: "2026-05-03T12:02:15.000Z",
+        },
+      ],
+      samples: [
+        createTelemetrySample({
+          lap: {
+            lapNumber: 3,
+            sector1Time: "00:00:20.100",
+            sector2Time: "00:00:20.800",
+            sector3Time: "00:00:21.500",
+            pitStopCount: 1,
+          },
+          tyres: { compound: "Medium" },
+        }),
+        createTelemetrySample({
+          lap: {
+            lapNumber: 4,
+            sector1Time: "00:00:20.000",
+            sector2Time: "00:00:20.700",
+            sector3Time: "00:00:21.200",
+            pitStopCount: 1,
+          },
+          tyres: { compound: "Soft" },
+        }),
+      ],
+    });
+
+    timingBoardApiMock.getSessionDetails.mockResolvedValue(sessionDetails);
+    timingBoardApiMock.getLapChannelsForBasketEntry.mockImplementation(
+      ({ lapNumber }: { lapNumber: number }) =>
+        Promise.resolve(
+          createLapChannelsResponse({
+            lapNumber,
+            lapTime: lapNumber === 3 ? "00:01:02.400" : "00:01:01.900",
+            channels: {
+              time: lapNumber === 3 ? [0, 11, 21] : [0, 10, 20],
+              speedKph: lapNumber === 3 ? [118, 149, 198] : [120, 152, 202],
+              rpm: [5000, 6000, 7000],
+              throttle: [0.2, 0.6, 0.9],
+              brake: [0, 0.1, 0.2],
+              steering: [0, 0.1, -0.1],
+              lapDistance: [0, 100, 200],
+            },
+          }),
+        ),
+    );
+
+    renderTimingBoard({ sessions: [session], sample: null });
+
+    await user.click(getSessionCaptureButton("Silverstone"));
+    await screen.findByText("Lap-focused session view");
+
+    const lapThreeRow = screen.getByText("00:20.100").closest("tr");
+    if (lapThreeRow === null) {
+      throw new Error("Expected lap 3 metadata row to render.");
+    }
+    expect(within(lapThreeRow).getByText("Medium")).toBeInTheDocument();
+    expect(within(lapThreeRow).getByText("1")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Compare lap 3 inline" }),
+    );
+
+    expect(
+      screen.getByRole("region", { name: "Inline lap compare" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Lap 3 vs lap 4")).toBeInTheDocument();
+
+    expect(
+      await screen.findByRole("img", {
+        name: /Lap overlay chart for Speed overlay 1/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("img", {
+        name: /Delta time plot vs Silverstone L4/i,
+      }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Set Silverstone L3 as reference lap",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Lap 4 vs lap 3")).toBeInTheDocument();
+      expect(
+        screen.getByRole("img", {
+          name: /Delta time plot vs Silverstone L3/i,
+        }),
+      ).toBeInTheDocument();
+    });
+  });
+
   it("reloads selected-session details when the selected capture summary changes", async () => {
     const user = userEvent.setup();
     const session = createSessionSummary();
@@ -404,7 +540,7 @@ describe("TimingBoard", () => {
     const rendered = renderTimingBoard({ sessions: [session], sample: null });
 
     await user.click(getSessionCaptureButton("Silverstone"));
-    await screen.findByText(/recorded laps/i);
+    await screen.findByText("Lap-focused session view");
 
     expect(timingBoardApiMock.getSessionDetails).toHaveBeenCalledTimes(1);
 
@@ -464,7 +600,7 @@ describe("TimingBoard", () => {
     const rendered = renderTimingBoard({ sessions: [session], sample: null });
 
     await user.click(getSessionCaptureButton("Silverstone"));
-    await screen.findByText(/recorded laps/i);
+    await screen.findByText("Lap-focused session view");
 
     await user.click(
       screen.getByRole("button", { name: "Delete selected capture" }),
@@ -492,7 +628,7 @@ describe("TimingBoard", () => {
     renderTimingBoard({ sessions: [createSessionSummary()], sample: null });
 
     await user.click(getSessionCaptureButton("Silverstone"));
-    await screen.findByText(/recorded laps/i);
+    await screen.findByText("Lap-focused session view");
 
     const toolbar = screen.getByRole("button", {
       name: "Delete selected capture",

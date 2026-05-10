@@ -123,6 +123,7 @@ export type CompareWorkspaceFrame =
 type CompareWorkspaceProps = {
   frame?: CompareWorkspaceFrame;
   basketEntries?: LapBasketEntry[];
+  variant?: "workspace" | "inline";
   onRemoveLap?: (sessionId: string, lapNumber: number) => void;
   onSetReferenceLap?: (sessionId: string, lapNumber: number) => void;
   onSetPanelChannel?: (
@@ -399,6 +400,7 @@ function getCursorChartX(
 export function CompareWorkspace({
   frame,
   basketEntries = [],
+  variant = "workspace",
   onRemoveLap,
   onSetReferenceLap,
   onSetPanelChannel,
@@ -409,6 +411,7 @@ export function CompareWorkspace({
     return (
       <CompareBasketView
         entries={basketEntries}
+        variant={variant}
         onRemoveLap={onRemoveLap}
         onSetReferenceLap={onSetReferenceLap}
         onSetPanelChannel={onSetPanelChannel}
@@ -432,12 +435,14 @@ export function CompareWorkspace({
 
 function CompareBasketView({
   entries,
+  variant,
   onRemoveLap,
   onSetReferenceLap,
   onSetPanelChannel,
   onClearBasket,
 }: {
   entries: LapBasketEntry[];
+  variant: "workspace" | "inline";
   onRemoveLap?: (sessionId: string, lapNumber: number) => void;
   onSetReferenceLap?: (sessionId: string, lapNumber: number) => void;
   onSetPanelChannel?: (
@@ -446,6 +451,7 @@ function CompareBasketView({
   ) => void;
   onClearBasket?: () => void;
 }) {
+  const isInline = variant === "inline";
   const [channelStates, setChannelStates] = useState<
     Record<string, LapChannelLoadState>
   >({});
@@ -550,12 +556,18 @@ function CompareBasketView({
   }, [entries]);
 
   return (
-    <section className="compare-workspace" aria-label="Lap compare">
+    <section
+      className={`compare-workspace${isInline ? " compare-workspace-inline" : ""}`}
+      aria-label={isInline ? "Inline lap compare" : "Lap compare"}
+    >
       <header className="zone-bar">
         <div className="zone-bar-title">
-          <span className="zone-kicker">Compare</span>
+          <span className="zone-kicker">
+            {isInline ? "Inline Compare" : "Compare"}
+          </span>
           <span className="zone-source">
-            <GitCompareArrows size={13} /> {entries.length} pinned{" "}
+            <GitCompareArrows size={13} /> {entries.length}{" "}
+            {isInline ? "scoped" : "pinned"}{" "}
             {entries.length === 1 ? "lap" : "laps"}
           </span>
         </div>
@@ -565,22 +577,26 @@ function CompareBasketView({
             {sessionSummaries.length === 1 ? "session" : "sessions"}
           </span>
           <span className="mono">reference {entries[0].label}</span>
-          <button
-            type="button"
-            className="icon-button"
-            disabled={overlayPanels.length >= MAX_COMPARE_OVERLAY_PANELS}
-            onClick={handleAddOverlayPanel}
-          >
-            <Plus size={13} /> Add chart
-          </button>
-          <button
-            type="button"
-            className="icon-button danger"
-            disabled={onClearBasket === undefined}
-            onClick={onClearBasket}
-          >
-            <Trash2 size={13} /> Clear
-          </button>
+          {!isInline && (
+            <>
+              <button
+                type="button"
+                className="icon-button"
+                disabled={overlayPanels.length >= MAX_COMPARE_OVERLAY_PANELS}
+                onClick={handleAddOverlayPanel}
+              >
+                <Plus size={13} /> Add chart
+              </button>
+              <button
+                type="button"
+                className="icon-button danger"
+                disabled={onClearBasket === undefined}
+                onClick={onClearBasket}
+              >
+                <Trash2 size={13} /> Clear
+              </button>
+            </>
+          )}
         </div>
       </header>
       <CompareSessionContextStrip summaries={sessionSummaries} />

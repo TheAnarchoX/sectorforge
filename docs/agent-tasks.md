@@ -711,9 +711,10 @@ Execution Phase 4: session analysis surfaces.
 
 ### SF-05D: Session Overview Redesign With Lap-Focused Layout, Lap Comparison, And Expanded Metadata
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend feature
 - Goal: Redesign the Session Overview workspace around laps and compose the compare components from SF-053/SF-054 with expanded session and lap metadata, so users can get a richer understanding of their session performance without needing to switch workspaces.
+- Notes: Completed on 2026-05-10. The Sessions workspace lap board now emphasizes lap metadata with sector splits, tyre compound, pit-stop count, delta, trace, inline Compare, and pin controls. Each lap can open an in-place comparison panel that reuses the Compare workspace overlay and delta charts against the default fastest reference lap, and the reference can be swapped from the inline compare legend without navigating away.
 - Suggested files: `src/SectorForge.Web/src/components/dashboard/SessionOverview.tsx`,  `src/SectorForge.Web/src/components/dashboard/LapTelemetryChart.tsx`, `src/SectorForge.Web/src/App.tsx`, `src/SectorForge.Web/src/App.css`
 - Acceptance criteria:
   - Session Overview workspace is redesigned to prominently feature a list of laps with key metadata (lap time, sector times, tyre compound, pit stops).

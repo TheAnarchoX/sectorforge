@@ -256,6 +256,28 @@
   min-height: 320px;
 }
 
+.compare-workspace-inline {
+  min-height: 0;
+  border-color: rgba(99, 184, 214, 0.28);
+  background: var(--canvas-0);
+}
+
+.compare-workspace-inline .compare-session-strip,
+.compare-workspace-inline .compare-basket-list {
+  display: none;
+}
+
+.compare-workspace-inline .compare-overlay-header,
+.compare-workspace-inline .zone-bar {
+  padding-right: 10px;
+  padding-left: 10px;
+}
+
+.compare-workspace-inline .compare-overlay-stage {
+  padding-right: 10px;
+  padding-left: 10px;
+}
+
 .compare-session-strip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -2607,7 +2629,7 @@
 }
 
 .session-lap-table {
-  min-width: 680px;
+  min-width: 1120px;
 }
 
 .session-lap-table th:first-child,
@@ -2640,6 +2662,34 @@
 
 .session-lap-pin-cell {
   text-align: right;
+}
+
+.session-lap-inline-cell {
+  text-align: right;
+}
+
+.session-lap-row-inline-active td,
+.session-lap-row-inline-active th {
+  background: rgba(99, 184, 214, 0.04);
+}
+
+.lap-inline-compare-button {
+  min-width: 82px;
+  min-height: 26px;
+  padding: 3px 8px;
+  font-size: 10px;
+}
+
+.lap-inline-compare-button[aria-pressed="true"] {
+  border-color: rgba(99, 184, 214, 0.75);
+  color: var(--accent-cyan);
+  background: rgba(99, 184, 214, 0.08);
+}
+
+.session-inline-compare-section {
+  padding: 8px;
+  border: 1px solid rgba(99, 184, 214, 0.22);
+  background: rgba(99, 184, 214, 0.025);
 }
 
 .lap-pin-button {
