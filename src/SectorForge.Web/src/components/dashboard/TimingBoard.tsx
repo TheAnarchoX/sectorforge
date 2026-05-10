@@ -25,6 +25,7 @@ import type {
   TelemetryTraceSeries,
 } from "../../types/telemetry";
 import { TraceLane } from "./DashboardPrimitives";
+import { SessionSummaryPanel } from "./SessionSummaryPanel";
 import {
   clamp,
   formatDelta,
@@ -993,6 +994,10 @@ export function TimingBoard({
               </div>
             ))}
           </div>
+
+          {visibleSession !== null && (
+            <SessionSummaryPanel sessionDetails={visibleSession} />
+          )}
 
           {visibleSession !== null && (
             <div className="session-detail-section">

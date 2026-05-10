@@ -2295,6 +2295,159 @@
   font-size: 11px;
 }
 
+.session-summary-panel {
+  padding: 8px;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.session-summary-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--line-soft);
+}
+
+.session-summary-metric {
+  display: grid;
+  gap: 4px;
+  min-height: 78px;
+  padding: 8px 10px;
+  background: var(--canvas-1);
+}
+
+.session-summary-metric-value {
+  color: var(--ink-strong);
+  font-size: 1.2rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.session-summary-visual-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.session-summary-visual {
+  display: grid;
+  grid-template-rows: auto minmax(132px, 1fr);
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--line-soft);
+  background: var(--canvas-1);
+}
+
+.session-summary-visual-heading,
+.session-summary-chart-caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ink-soft);
+  font-family: var(--font-label);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.session-summary-histogram {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(48px, 1fr);
+  gap: 6px;
+  min-height: 132px;
+  overflow-x: auto;
+}
+
+.session-summary-histogram-bucket {
+  display: grid;
+  grid-template-rows: minmax(82px, 1fr) auto;
+  gap: 6px;
+  min-width: 48px;
+}
+
+.session-summary-histogram-bar-shell {
+  display: flex;
+  align-items: flex-end;
+  min-height: 82px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.session-summary-histogram-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  min-height: 12px;
+  padding-top: 4px;
+  background: linear-gradient(
+    180deg,
+    rgba(99, 184, 214, 0.7) 0%,
+    rgba(99, 184, 214, 0.2) 100%
+  );
+  color: var(--ink-strong);
+  font-size: 10px;
+}
+
+.session-summary-histogram-label {
+  color: var(--ink-muted);
+  font-size: 9px;
+  line-height: 1.2;
+  text-align: center;
+  white-space: normal;
+}
+
+.session-summary-line-chart {
+  display: grid;
+  grid-template-rows: minmax(128px, 1fr) auto;
+  gap: 4px;
+  min-width: 0;
+}
+
+.session-summary-line-svg {
+  display: block;
+  width: 100%;
+  min-height: 128px;
+  border: 1px solid var(--line-soft);
+  background: var(--canvas-0);
+}
+
+.session-summary-chart-grid {
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 1;
+}
+
+.session-summary-line-path {
+  fill: none;
+  stroke: var(--accent-amber);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.4;
+}
+
+.session-summary-line-marker {
+  fill: var(--accent-amber);
+  stroke: var(--canvas-0);
+  stroke-width: 1.5;
+}
+
+.session-summary-chart-axis {
+  fill: var(--ink-muted);
+  font-family: var(--font-label);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.session-summary-chart-caption {
+  color: var(--ink-muted);
+}
+
 /* Replay controls ------------------------------------------------------- */
 
 .replay-controls {

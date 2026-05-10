@@ -171,6 +171,7 @@ describe("TimingBoard", () => {
     );
 
     expect(screen.getByText(/recorded laps/i)).toBeInTheDocument();
+    expect(screen.getByText("Session Summary")).toBeInTheDocument();
     expect(screen.getByText("Driver, car, and gap board")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Start replay" }));

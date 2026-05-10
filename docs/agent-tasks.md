@@ -697,9 +697,10 @@ Execution Phase 4: session analysis surfaces.
 
 ### SF-05E: Add Session Summary Dashboard Panel With Key Metrics And Visualizations
 
-- Status: `ready`
+- Status: `done`
 - Type: frontend feature
 - Goal: Add a new "Session Summary" panel to the dashboard that provides key metrics (e.g. best lap, average lap time, consistency metrics) and visualizations (e.g. lap time distribution, tyre usage over time) for a completed session, so users can quickly assess their overall performance and identify areas for improvement.
+- Notes: Completed on 2026-05-10. Added a stored-session `SessionSummaryPanel` with best lap, average lap, lap-time standard deviation, lap-time histogram, and tyre wear/age chart driven by `TelemetrySessionDetails`; the Sessions workspace now renders it above the lap board for completed captures, with focused utility and component tests.
 - Suggested files: `src/SectorForge.Web/src/components/dashboard/SessionSummaryPanel.tsx`, `src/SectorForge.Web/src/utils/*`, `src/SectorForge.Web/src/App.tsx`, `src/SectorForge.Web/src/App.css`
 - Acceptance criteria:
   - Session Summary panel is added to the dashboard and is visible when viewing a completed session.
