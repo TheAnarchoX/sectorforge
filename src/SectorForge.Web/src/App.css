@@ -963,6 +963,21 @@
   width: 18%;
 }
 
+.compare-sector-table th:last-child,
+.compare-sector-actions {
+  width: 74px;
+  text-align: center;
+}
+
+.compare-sector-actions {
+  overflow: visible;
+}
+
+.compare-sector-remove-button {
+  width: 30px;
+  padding: 4px;
+}
+
 .compare-sector-table tbody tr {
   outline: none;
 }

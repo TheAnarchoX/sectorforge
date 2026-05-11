@@ -1352,6 +1352,7 @@ function CompareBasketView({
       <CompareSectorSplitTable
         entries={entries}
         channelStates={channelStates}
+        onRemoveLap={onRemoveLap}
       />
       <CompareDeltaTimeChart
         entries={entries}
@@ -1677,9 +1678,11 @@ function buildSectorSplitRows(
 function CompareSectorSplitTable({
   entries,
   channelStates,
+  onRemoveLap,
 }: {
   entries: LapBasketEntry[];
   channelStates: Record<string, LapChannelLoadState>;
+  onRemoveLap?: (sessionId: string, lapNumber: number) => void;
 }) {
   const headingId = useId();
   const statusId = useId();
@@ -1692,6 +1695,7 @@ function CompareSectorSplitTable({
   const tableLabel = `Sector split comparison vs ${
     referenceEntry?.label ?? "reference lap"
   }`;
+  const canRemoveLap = onRemoveLap !== undefined;
 
   return (
     <section className="compare-sector-panel" aria-labelledby={headingId}>
@@ -1733,6 +1737,7 @@ function CompareSectorSplitTable({
                   {column.label}
                 </th>
               ))}
+              {canRemoveLap && <th scope="col">Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -1741,6 +1746,7 @@ function CompareSectorSplitTable({
                 key={getEntryKey(row.entry)}
                 row={row}
                 isReference={index === 0}
+                onRemoveLap={onRemoveLap}
               />
             ))}
           </tbody>
@@ -1753,9 +1759,11 @@ function CompareSectorSplitTable({
 function CompareSectorSplitRow({
   row,
   isReference,
+  onRemoveLap,
 }: {
   row: SectorSplitRow;
   isReference: boolean;
+  onRemoveLap?: (sessionId: string, lapNumber: number) => void;
 }) {
   const state = row.state;
   const statusText =
@@ -1824,6 +1832,21 @@ function CompareSectorSplitRow({
           )}
         </td>
       ))}
+      {onRemoveLap !== undefined && (
+        <td className="compare-sector-actions">
+          <button
+            type="button"
+            className="icon-button danger compare-sector-remove-button"
+            aria-label={`Remove ${row.entry.label} from comparison`}
+            title={`Remove ${row.entry.label} from comparison`}
+            onClick={() =>
+              onRemoveLap(row.entry.sessionId, row.entry.lapNumber)
+            }
+          >
+            <X size={13} />
+          </button>
+        </td>
+      )}
     </tr>
   );
 }

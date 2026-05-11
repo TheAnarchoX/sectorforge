@@ -210,10 +210,10 @@ public sealed class F125UdpTelemetryAdapterTests
         var playerOffset = playerCarIndex * LapDataSize;
         BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(playerOffset, sizeof(uint)), 83_210);
         BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(playerOffset + 4, sizeof(uint)), 12_345);
-        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 20, sizeof(float)), 1234.5f);
-        payload[playerOffset + 32] = 1;
-        payload[playerOffset + 33] = 7;
-        payload[playerOffset + 36] = 2;
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 18, sizeof(float)), 1234.5f);
+        payload[playerOffset + 30] = 1;
+        payload[playerOffset + 31] = 7;
+        payload[playerOffset + 34] = 2;
         return payload;
     }
 

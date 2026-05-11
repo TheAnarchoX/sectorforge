@@ -64,7 +64,7 @@ function Get-CoverageByFile {
             if (-not $coverageByFile.ContainsKey($normalizedFileName)) {
                 $coverageByFile[$normalizedFileName] = [ordered]@{
                     Covered = 0
-                    Valid = 0
+                    Valid   = 0
                 }
             }
 
@@ -87,20 +87,25 @@ function Get-CoverageEntryForPath {
     )
 
     $normalizedSuffix = $PathSuffix.Replace('/', '\')
-    $matches = @($CoverageByFile.Keys | Where-Object { $_.EndsWith($normalizedSuffix, [System.StringComparison]::OrdinalIgnoreCase) })
+    $coveragePathList = [System.Collections.Generic.List[string]]::new()
+    foreach ($coverageFilePath in $CoverageByFile.Keys) {
+        if ($coverageFilePath.EndsWith($normalizedSuffix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $coveragePathList.Add($coverageFilePath)
+        }
+    }
 
-    if ($matches.Count -eq 0) {
+    if ($coveragePathList.Count -eq 0) {
         throw "No coverage entry matched path suffix '$PathSuffix'."
     }
 
     $aggregate = [ordered]@{
         Covered = 0
-        Valid = 0
+        Valid   = 0
     }
 
-    foreach ($match in $matches) {
-        $aggregate.Covered += $CoverageByFile[$match].Covered
-        $aggregate.Valid += $CoverageByFile[$match].Valid
+    foreach ($coveragePath in $coveragePathList) {
+        $aggregate.Covered += $CoverageByFile[$coveragePath].Covered
+        $aggregate.Valid += $CoverageByFile[$coveragePath].Valid
     }
 
     return $aggregate
@@ -110,14 +115,14 @@ function Write-LowCoverageSummary {
     param([hashtable]$CoverageByFile)
 
     $lowestCoverage = $CoverageByFile.GetEnumerator() |
-        ForEach-Object {
-            [pscustomobject]@{
-                File = $_.Key.Replace('\', '/')
-                LineCoverage = Get-LineCoveragePercent $_.Value
-            }
-        } |
-        Sort-Object LineCoverage, File |
-        Select-Object -First 10
+    ForEach-Object {
+        [pscustomobject]@{
+            File         = $_.Key.Replace('\', '/')
+            LineCoverage = Get-LineCoveragePercent $_.Value
+        }
+    } |
+    Sort-Object LineCoverage, File |
+    Select-Object -First 10
 
     Write-Host ""
     Write-Host "Lowest covered files:" -ForegroundColor Cyan
@@ -136,17 +141,28 @@ New-Item -ItemType Directory -Path $reportRoot -Force | Out-Null
 Push-Location $root
 
 try {
+    Invoke-NativeCommand -Command "dotnet" -Arguments @("tool", "restore")
+
     foreach ($project in $testProjects) {
         $projectOutputDirectory = Join-Path $projectCoverageRoot $project.Name
         New-Item -ItemType Directory -Path $projectOutputDirectory -Force | Out-Null
+        $coverageOutputPath = [IO.Path]::Combine($projectOutputDirectory, "coverage.cobertura.xml")
 
         $testArguments = @(
+            "tool",
+            "run",
+            "dotnet-coverage",
+            "--",
+            "collect",
+            "--nologo",
+            "--output",
+            $coverageOutputPath,
+            "--output-format",
+            "cobertura",
+            "dotnet",
             "test",
             $project.Path,
-            "--nologo",
-            "/p:CollectCoverage=true",
-            "/p:CoverletOutputFormat=cobertura",
-            "/p:CoverletOutput=$([IO.Path]::Combine($projectOutputDirectory, 'coverage'))"
+            "--nologo"
         )
 
         if ($NoRestore) {
@@ -155,8 +171,6 @@ try {
 
         Invoke-NativeCommand -Command "dotnet" -Arguments $testArguments
     }
-
-    Invoke-NativeCommand -Command "dotnet" -Arguments @("tool", "restore")
 
     $coverageFiles = @(Get-ChildItem -Path $projectCoverageRoot -Filter "coverage.cobertura.xml" -Recurse | Select-Object -ExpandProperty FullName)
     if ($coverageFiles.Count -eq 0) {

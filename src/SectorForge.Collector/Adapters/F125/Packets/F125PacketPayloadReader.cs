@@ -163,26 +163,28 @@ public sealed class F125LapDataPacketReader : IF125PacketPayloadReader
 
         return new F125PlayerLapData(
             CarIndex: carIndex,
-            LapNumber: payload[33],
+            LapNumber: payload[31],
             CurrentLapTime: TimeSpan.FromMilliseconds(currentLapTime),
             LastLapTime: F125PacketLayout.ReadMilliseconds(lastLapTime),
             BestLapTime: null,
-            Position: payload[32],
-            SectorIndex: payload[36],
-            LapDistanceMeters: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(20, sizeof(float))),
+            Position: payload[30],
+            SectorIndex: payload[34],
+            LapDistanceMeters: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(18, sizeof(float))),
             Sector1Time: F125PacketLayout.ReadSectorTime(payload, millisecondsOffset: 8, minutesOffset: 10),
             Sector2Time: F125PacketLayout.ReadSectorTime(payload, millisecondsOffset: 11, minutesOffset: 13),
-            DeltaToCarInFront: F125PacketLayout.ReadSectorTime(payload, millisecondsOffset: 14, minutesOffset: 16),
-            DeltaToRaceLeader: F125PacketLayout.ReadSectorTime(payload, millisecondsOffset: 17, minutesOffset: 19),
-            TotalDistanceMeters: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(24, sizeof(float))),
-            IsValid: payload[37] == 0,
-            PitStatusCode: payload[34],
-            PitStopCount: payload[35],
-            GridPosition: payload[43],
-            ResultStatusCode: payload[45],
-            PenaltiesSeconds: payload[38],
-            WarningsCount: payload[39],
-            CornersCut: payload[40]);
+            DeltaToCarInFront: F125PacketLayout.ReadMilliseconds(
+                BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(14, sizeof(ushort)))),
+            DeltaToRaceLeader: F125PacketLayout.ReadMilliseconds(
+                BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(16, sizeof(ushort)))),
+            TotalDistanceMeters: BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(22, sizeof(float))),
+            IsValid: payload[35] == 0,
+            PitStatusCode: payload[32],
+            PitStopCount: payload[33],
+            GridPosition: payload[41],
+            ResultStatusCode: payload[43],
+            PenaltiesSeconds: payload[36],
+            WarningsCount: payload[37],
+            CornersCut: payload[38]);
     }
 }
 

@@ -8,7 +8,7 @@ This folder contains the repo-local coverage command and threshold configuration
 .\tests\coverage\Invoke-Coverage.ps1
 ```
 
-The script runs all three .NET test projects with MSBuild-based coverlet collection, merges the reports, and writes Cobertura, HTML, and text summary output under `artifacts\coverage\report`.
+The script runs all three .NET test projects through `dotnet-coverage`, merges the reports, and writes Cobertura, HTML, and text summary output under `artifacts\coverage\report`.
 
 ## Baseline
 

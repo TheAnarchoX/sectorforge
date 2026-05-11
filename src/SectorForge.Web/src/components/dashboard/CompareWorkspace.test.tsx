@@ -934,6 +934,8 @@ describe("CompareWorkspace", () => {
   });
 
   it("renders sector splits with reference deltas and best sector highlights", async () => {
+    const user = userEvent.setup();
+    const onRemoveLap = vi.fn();
     getLapChannelsForBasketEntryMock.mockImplementation(
       ({ lapNumber }: { lapNumber: number }) =>
         Promise.resolve(
@@ -966,6 +968,7 @@ describe("CompareWorkspace", () => {
             color: "#d9b04a",
           },
         ]}
+        onRemoveLap={onRemoveLap}
         onOpenSessions={vi.fn()}
       />,
     );
@@ -987,6 +990,9 @@ describe("CompareWorkspace", () => {
     expect(
       within(table).getByRole("columnheader", { name: "S1" }),
     ).toBeInTheDocument();
+    expect(
+      within(table).getByRole("columnheader", { name: "Actions" }),
+    ).toBeInTheDocument();
     if (lap5Row === null) {
       throw new Error("Expected Practice lap 5 row to render.");
     }
@@ -999,6 +1005,17 @@ describe("CompareWorkspace", () => {
         name: /Practice lap 5 S1, 00:20.000, delta -0.100s, best sector across pinned laps/i,
       }),
     ).toHaveClass("compare-sector-best");
+
+    await user.click(
+      within(lap5Row).getByRole("button", {
+        name: "Remove Practice lap 5 from comparison",
+      }),
+    );
+
+    expect(onRemoveLap).toHaveBeenCalledWith(
+      "22222222-2222-2222-2222-222222222222",
+      5,
+    );
   });
 
   it("shows a placeholder when every pinned lap fails to load", async () => {

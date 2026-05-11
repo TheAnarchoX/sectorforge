@@ -1,0 +1,41 @@
+{
+    "id": "/",
+    "name": "SectorForge",
+    "short_name": "SectorForge",
+    "description": "A local-first sim telemetry pitwall with live streaming, replay, and analysis workflows.",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "display_override": [
+        "standalone",
+        "minimal-ui",
+        "browser"
+    ],
+    "orientation": "landscape",
+    "background_color": "#0a0f15",
+    "theme_color": "#0a0f15",
+    "categories": [
+        "sports",
+        "utilities"
+    ],
+    "icons": [
+        {
+            "src": "/pwa-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/pwa-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}

@@ -1,10 +1,23 @@
 # SectorForge
 
-[![CI](https://github.com/TheAnarchoX/sectorforge/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TheAnarchoX/sectorforge/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-94.13%25%20overall-brightgreen)](tests/coverage/README.md)
-[![License](https://img.shields.io/badge/license-Non--Commercial-0f172a)](LICENSE)
+<!-- markdownlint-disable MD033 -->
 
-![SectorForge wordmark](docs/assets/sectorforge-wordmark.svg)
+<p align="center">
+   <img src="docs/assets/sectorforge-mark.svg" alt="SectorForge logo" width="72" />
+   <img src="docs/assets/sectorforge-wordmark.svg" alt="SectorForge wordmark" width="360" />
+</p>
+
+<p align="center">
+   <a href="https://github.com/TheAnarchoX/sectorforge/actions/workflows/ci.yml">
+      <img src="https://github.com/TheAnarchoX/sectorforge/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status" />
+   </a>
+   <a href="tests/coverage/README.md">
+      <img src="https://img.shields.io/badge/coverage-94.13%25%20overall-brightgreen" alt="Coverage 94.13% overall" />
+   </a>
+   <a href="LICENSE">
+      <img src="https://img.shields.io/badge/license-Non--Commercial-0f172a" alt="License Non-Commercial" />
+   </a>
+</p>
 
 SectorForge is a Windows-first, local-first telemetry and race analysis app for sim racing. The current slice pairs a native .NET collector and local API with SignalR live telemetry, SQLite session storage, replay controls, a React/Vite dashboard, and a config-gated F1 25 UDP beta path.
 
@@ -12,15 +25,62 @@ Docker, WSL, admin rights, and a running sim are not required for the current MV
 
 ## Quick Look
 
-- Native collector and adapter boundary for fake, UDP, shared memory, plugin, or replay inputs.
-- Config-gated F1 25 UDP beta adapter with player-car telemetry and optional session, tyre, ERS, damage, weather, and participant timing channels.
-- Normalized telemetry model in the backend so live, stored, and replay flows share the same data shape.
-- Local SignalR dashboard with live feed, session review, replay, lap compare, and driving-focused views.
-- SQLite persistence with bounded raw sample retention for long local runs.
+- Native .NET collector and adapter boundary for fake, UDP, shared memory, plugin, or replay inputs.
+- Local ASP.NET Core API with SignalR live telemetry, REST collector controls, replay controls, and SQLite-backed session storage.
+- React/Vite dashboard with dedicated Live, Driver, Sessions, Compare, and Adapters workspaces.
+- Live reference analysis that can compare the current lap against a stored lap through the same lap-channel data used by Compare.
+- Config-gated F1 25 UDP beta path with player-car telemetry and optional session, tyre, ERS, damage, weather, and participant timing channels.
 
-![SectorForge live dashboard](docs/assets/dashboard-live.png)
+## Feature Tour
 
-![SectorForge live telemetry animation](docs/assets/dashboard-live.gif)
+### 🟢 Live Pitwall
+
+The default workspace is the pitwall console for the active telemetry stream. It shows the current session band, lap timing strip, speed/RPM/gear/fuel readings, current-lap graph, rolling trace lanes for speed, RPM, gear, throttle, brake, and steering, plus a sidebar for strategy, thermal, field, and collector status.
+
+When an adapter publishes richer optional channels, the Live workspace adds driver flags, sector split tiles, lap-valid state, damage, ERS, and weather forecast panels without requiring game-specific UI branches.
+
+<p align="center">
+   <img src="artifacts/screenshot-live-pitwall-collapsed-f125.png" alt="SectorForge Live pitwall with F1 25 optional panels collapsed" width="49%" />
+   <img src="artifacts/screenshot-live-pitwall-expanded-f125.png" alt="SectorForge Live pitwall with F1 25 optional panels expanded" width="49%" />
+</p>
+
+### 🏁 Driver HUD
+
+The Driver workspace is a glanceable cockpit view for a secondary screen. It emphasizes shift lights, speed, gear, RPM, lap time, delta, best lap, position, active sector, fuel, remaining session time, throttle/brake/steering inputs, and tyre/brake thermal strips. It also includes a driver-focused lap compare view that can line the current lap up against a stored reference.
+
+<p align="center">
+   <img src="artifacts/screenshot-driver-dashboard.png" alt="SectorForge Driver HUD dashboard" width="920" />
+</p>
+
+### ⏱️ Sessions And Replays
+
+The Sessions workspace is the local capture review area. It lists stored sessions, loads capture details, shows overview metrics and charts, supports search and sorting, exposes lap tables, and lets laps be pinned for Compare or marked as a Live reference.
+
+<p align="center">
+   <img src="artifacts/screenshot-sessions.png" alt="SectorForge Sessions workspace" width="920" />
+</p>
+
+Stored captures can be replayed back through the dashboard. Replay playback drives the same Live and Driver views as real telemetry, with play/pause, timeline scrub, sample progress, and a docked control surface when replay is active outside the Sessions workspace.
+
+<p align="center">
+   <img src="artifacts/screenshot-replay.png" alt="SectorForge replay controls and dashboard playback" width="920" />
+</p>
+
+### 📊 Compare Workspace
+
+Compare is the lap analysis workbench. Pin laps from Sessions, choose the reference lap, and compare up to the basket limit across one or more overlay charts. Current overlay channels include speed, RPM, throttle, brake, and steering, with distance alignment when lap-distance data is available and time fallback for older captures.
+
+The workspace includes add/remove chart controls, synchronized distance cursors, X/Y zoom and pan, delta-time traces against the reference lap, sector split tables, cursor readouts, telemetry annotations, and JSON import/export for comparison sets and notes.
+
+<p align="center">
+   <img src="artifacts/screenshot-compare.png" alt="SectorForge Compare workspace with lap overlays and delta analysis" width="920" />
+</p>
+
+<!-- markdownlint-enable MD033 -->
+
+### 🔌 Adapters And Collector
+
+The Adapters workspace shows the local telemetry input registry and collector state. The fake adapter is the default development path and autostarts through `tools\dev.ps1`. The F1 25 UDP adapter is implemented as an opt-in beta, while ACC shared memory, AMS2, and LMU inputs are present as disabled placeholders until their parser work is ready.
 
 ## Setup
 
@@ -158,18 +218,20 @@ For the deeper runtime breakdown, see [docs/architecture.md](docs/architecture.m
 
 ## Current Slice
 
-| Area | Status |
-| --- | --- |
-| Fake telemetry adapter | Working 60 Hz simulated stream |
-| ASP.NET Core API | Health, games, sessions, collector control, replay control |
-| SignalR hub | Streams normalized telemetry samples |
-| React dashboard | Live feed, session review, replay controls, driver HUD, F1 25 optional channel panels |
-| SQLite storage | Sessions, lap summaries, raw sample blobs with retention cap |
-| Compare workflow | Usable lap basket, overlay chart, delta plot, sector table, and synchronized cursor |
-| F1 25 UDP | Beta, config-gated; player-car telemetry plus optional packet aggregation |
-| ACC shared memory | Placeholder adapter |
-| AMS2 telemetry | Placeholder adapter |
-| LMU plugin/UDP | Placeholder adapter |
+| Area                    | Status                                                                                                               |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Fake telemetry adapter  | Working 60 Hz simulated stream                                                                                       |
+| ASP.NET Core API        | Health, games, sessions, collector control, replay control                                                           |
+| SignalR hub             | Streams normalized telemetry samples                                                                                 |
+| React dashboard         | Live pitwall, Driver HUD, Sessions, Compare, Adapters, replay dock, and F1 25 optional channel panels                |
+| Live reference analysis | Stored-lap reference overlay, timing/input deltas, and sector comparison in the Live workspace                       |
+| SQLite storage          | Sessions, lap summaries, lap-channel API, and raw sample blobs with retention cap                                    |
+| Sessions and replay     | Stored capture review, search/sort, lap pinning, inline compare, replay playback, and timeline scrub                 |
+| Compare workflow        | Lap basket, multi-chart overlays, delta plot, sector table, synchronized cursor, annotations, and JSON import/export |
+| F1 25 UDP               | Beta, config-gated; player-car telemetry plus optional packet aggregation                                            |
+| ACC shared memory       | Placeholder adapter                                                                                                  |
+| AMS2 telemetry          | Placeholder adapter                                                                                                  |
+| LMU plugin/UDP          | Placeholder adapter                                                                                                  |
 
 The GitHub Actions workflow runs on Windows and checks merged .NET coverage thresholds, frontend Vitest coverage, .NET format verification, frontend lint, and frontend build. The coverage badge above reflects the current documented 94.13% overall line-coverage baseline from [tests/coverage/README.md](tests/coverage/README.md).
 

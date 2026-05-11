@@ -293,10 +293,10 @@ public sealed class F125NormalizerTests
             BuildMotionPayload(playerCarIndex));
 
         var lapPayload = BuildLapDataPayload(playerCarIndex);
-        lapPayload[32] = 0;
-        lapPayload[34] = 2;
-        lapPayload[43] = 0;
-        lapPayload[45] = 7;
+        lapPayload[30] = 0;
+        lapPayload[32] = 2;
+        lapPayload[41] = 0;
+        lapPayload[43] = 7;
         var lapData = ReadPacket<F125LapDataPacket>(
             F125PacketIds.LapData,
             playerCarIndex,
@@ -464,20 +464,20 @@ public sealed class F125NormalizerTests
         payload[playerOffset + 10] = 1;
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 11, sizeof(ushort)), 12_345);
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 14, sizeof(ushort)), 450);
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 17, sizeof(ushort)), 1_750);
-        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 20, sizeof(float)), 1234.5f);
-        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 24, sizeof(float)), 5432.25f);
-        payload[playerOffset + 32] = position;
-        payload[playerOffset + 33] = 7;
-        payload[playerOffset + 34] = 1;
-        payload[playerOffset + 35] = 2;
-        payload[playerOffset + 36] = 2;
-        payload[playerOffset + 37] = 0;
-        payload[playerOffset + 38] = 5;
-        payload[playerOffset + 39] = 4;
-        payload[playerOffset + 40] = 3;
-        payload[playerOffset + 43] = gridPosition;
-        payload[playerOffset + 45] = resultStatus;
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(playerOffset + 16, sizeof(ushort)), 1_750);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 18, sizeof(float)), 1234.5f);
+        BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(playerOffset + 22, sizeof(float)), 5432.25f);
+        payload[playerOffset + 30] = position;
+        payload[playerOffset + 31] = 7;
+        payload[playerOffset + 32] = 1;
+        payload[playerOffset + 33] = 2;
+        payload[playerOffset + 34] = 2;
+        payload[playerOffset + 35] = 0;
+        payload[playerOffset + 36] = 5;
+        payload[playerOffset + 37] = 4;
+        payload[playerOffset + 38] = 3;
+        payload[playerOffset + 41] = gridPosition;
+        payload[playerOffset + 43] = resultStatus;
     }
 
     private static byte[] BuildCarTelemetryPayload(byte playerCarIndex)
