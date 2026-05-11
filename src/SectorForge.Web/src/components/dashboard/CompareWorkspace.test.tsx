@@ -558,6 +558,55 @@ describe("CompareWorkspace", () => {
     );
   });
 
+  it("splits RPM overlay traces when lap time moves backward", async () => {
+    getLapChannelsForBasketEntryMock.mockResolvedValue(
+      createLapChannelsResponse({
+        sampleCount: 6,
+        channels: {
+          time: [0, 1, 2, 0.5, 1.5, 2.5],
+          speedKph: [120, 130, 140, 125, 135, 145],
+          rpm: [9000, 9500, 9300, 9100, 9400, 9200],
+          throttle: [0.2, 0.4, 0.5, 0.3, 0.5, 0.6],
+          brake: [0, 0, 0.1, 0, 0, 0.1],
+          steering: [0, 0.1, 0.2, 0, -0.1, -0.2],
+          lapDistance: null,
+        },
+      }),
+    );
+
+    render(
+      <CompareWorkspace
+        basketEntries={[
+          {
+            sessionId: "11111111-1111-1111-1111-111111111111",
+            lapNumber: 4,
+            label: "Practice lap 4",
+            color: "#63b8d6",
+            channelSelections: [
+              { panelId: DEFAULT_COMPARE_PANEL_ID, channelKey: "rpm" },
+            ],
+          },
+        ]}
+        onOpenSessions={vi.fn()}
+      />,
+    );
+
+    const overlay = await screen.findByRole("img", {
+      name: /Lap overlay chart for RPM/i,
+    });
+
+    await waitFor(() => {
+      expect(
+        overlay.querySelectorAll("path.compare-overlay-trace").length,
+      ).toBe(2);
+    });
+    expect(
+      overlay
+        .querySelector("path.compare-overlay-trace")
+        ?.getAttribute("style"),
+    ).toContain("--compare-overlay-stroke-width: 0.64");
+  });
+
   it("adds, updates, and removes an independent overlay chart", async () => {
     const user = userEvent.setup();
     const onSetPanelChannel = vi.fn();

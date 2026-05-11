@@ -74,6 +74,7 @@ function createDashboardState(
     traceSeries: createTraceSeries({
       speed: [],
       rpm: [],
+      gear: [],
       throttle: [],
       brake: [],
       steering: [],
@@ -181,12 +182,21 @@ describe("App", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Replay warning");
     expect(screen.getByText("Speed trace")).toBeInTheDocument();
 
+    expect(
+      await screen.findByRole("region", {
+        name: "Floating replay controls",
+      }),
+    ).toBeInTheDocument();
+
     await user.click(screen.getByRole("button", { name: "Stop replay" }));
     expect(dashboardHookMock.current?.stopCollector).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("button", { name: /driver/i }));
     expect(screen.getByText("SPEED")).toBeInTheDocument();
     expect(screen.getByText("GEAR")).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Floating replay controls" }),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /adapters/i }));
     expect(screen.getAllByText("Fake telemetry").length).toBeGreaterThan(0);

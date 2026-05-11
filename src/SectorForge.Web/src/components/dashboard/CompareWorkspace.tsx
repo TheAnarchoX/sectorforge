@@ -5,6 +5,7 @@ import {
   LoaderCircle,
   MessageSquareText,
   Plus,
+  RotateCcw,
   Trash2,
   Upload,
   X,
@@ -24,6 +25,7 @@ import type {
   PointerEvent,
   ReactNode,
   RefObject,
+  WheelEvent,
 } from "react";
 import {
   AnnotationPanel,
@@ -193,6 +195,52 @@ type CompareDistanceCursorControls = {
     distanceMeters: number,
   ) => void;
   onDistanceCursorClear: (sourcePanelId: string) => void;
+};
+
+type CompareChartXAxis = "lapDistance" | "time";
+
+type CompareAxisZoom = {
+  min: number;
+  max: number;
+};
+
+type CompareXAxisZoom = CompareAxisZoom & {
+  axis: CompareChartXAxis;
+};
+
+type CompareChartPoint = {
+  x: number;
+  y: number;
+};
+
+type CompareZoomSelection = {
+  start: CompareChartPoint;
+  current: CompareChartPoint;
+};
+
+type CompareChartDragState = CompareZoomSelection & {
+  pointerId: number;
+  mode: "pan" | "select";
+  originClientX: number;
+  originClientY: number;
+  lastClientX: number;
+  lastClientY: number;
+  didMove: boolean;
+};
+
+type CompareSelectionRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type CompareZoomControls = {
+  xZoom: CompareXAxisZoom | null;
+  yZoom: CompareAxisZoom | null;
+  onXZoomChange: (zoom: CompareXAxisZoom | null) => void;
+  onYZoomChange: (panelId: string, zoom: CompareAxisZoom | null) => void;
+  onResetZoom: () => void;
 };
 
 type ChartPointerLikeEvent = {
@@ -536,6 +584,308 @@ function getCursorChartX(
   return toChartX(clamp(cursor.distanceMeters, domainMin, domainMax));
 }
 
+function normalizeZoomRange(
+  zoom: CompareAxisZoom | null,
+  domainMin: number,
+  domainMax: number,
+) {
+  if (zoom === null || domainMax <= domainMin) {
+    return null;
+  }
+
+  const domainSpan = domainMax - domainMin;
+  const minSpan = Math.max(domainSpan * 0.015, Number.EPSILON);
+  const nextMin = clamp(Math.min(zoom.min, zoom.max), domainMin, domainMax);
+  const nextMax = clamp(Math.max(zoom.min, zoom.max), domainMin, domainMax);
+  if (nextMax - nextMin < minSpan) {
+    return null;
+  }
+
+  return { min: nextMin, max: nextMax } satisfies CompareAxisZoom;
+}
+
+function zoomRangeAround(
+  rangeMin: number,
+  rangeMax: number,
+  domainMin: number,
+  domainMax: number,
+  center: number,
+  factor: number,
+) {
+  const domainSpan = domainMax - domainMin;
+  const rangeSpan = rangeMax - rangeMin;
+  if (domainSpan <= Number.EPSILON || rangeSpan <= Number.EPSILON) {
+    return null;
+  }
+
+  const nextSpan = clamp(rangeSpan * factor, domainSpan * 0.015, domainSpan);
+  if (nextSpan >= domainSpan * 0.995) {
+    return null;
+  }
+
+  const anchorRatio = clamp((center - rangeMin) / rangeSpan, 0, 1);
+  let nextMin = center - nextSpan * anchorRatio;
+  let nextMax = nextMin + nextSpan;
+
+  if (nextMin < domainMin) {
+    nextMin = domainMin;
+    nextMax = domainMin + nextSpan;
+  }
+  if (nextMax > domainMax) {
+    nextMax = domainMax;
+    nextMin = domainMax - nextSpan;
+  }
+
+  return { min: nextMin, max: nextMax } satisfies CompareAxisZoom;
+}
+
+function panZoomRange(
+  rangeMin: number,
+  rangeMax: number,
+  domainMin: number,
+  domainMax: number,
+  delta: number,
+) {
+  const span = rangeMax - rangeMin;
+  const domainSpan = domainMax - domainMin;
+  if (span <= Number.EPSILON || span >= domainSpan * 0.995) {
+    return null;
+  }
+
+  let nextMin = rangeMin + delta;
+  let nextMax = rangeMax + delta;
+  if (nextMin < domainMin) {
+    nextMin = domainMin;
+    nextMax = domainMin + span;
+  }
+  if (nextMax > domainMax) {
+    nextMax = domainMax;
+    nextMin = domainMax - span;
+  }
+
+  return { min: nextMin, max: nextMax } satisfies CompareAxisZoom;
+}
+
+function interpolateChartPointAtX(
+  from: CompareChartPoint,
+  to: CompareChartPoint,
+  x: number,
+): CompareChartPoint {
+  if (Math.abs(to.x - from.x) <= Number.EPSILON) {
+    return { x, y: from.y };
+  }
+
+  const ratio = (x - from.x) / (to.x - from.x);
+  return { x, y: from.y + (to.y - from.y) * ratio };
+}
+
+function clipChartSegmentToXDomain(
+  from: CompareChartPoint,
+  to: CompareChartPoint,
+  domainMin: number,
+  domainMax: number,
+): [CompareChartPoint, CompareChartPoint] | null {
+  const segmentMin = Math.min(from.x, to.x);
+  const segmentMax = Math.max(from.x, to.x);
+  if (segmentMax < domainMin || segmentMin > domainMax) {
+    return null;
+  }
+
+  const clippedFromX = clamp(from.x, domainMin, domainMax);
+  const clippedToX = clamp(to.x, domainMin, domainMax);
+  const clippedFrom =
+    clippedFromX === from.x
+      ? from
+      : interpolateChartPointAtX(from, to, clippedFromX);
+  const clippedTo =
+    clippedToX === to.x ? to : interpolateChartPointAtX(from, to, clippedToX);
+
+  return [clippedFrom, clippedTo];
+}
+
+function clipChartPointsToXDomain(
+  points: CompareChartPoint[],
+  domainMin: number,
+  domainMax: number,
+) {
+  const clippedPoints: CompareChartPoint[] = [];
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    if (previous === undefined || current === undefined) {
+      continue;
+    }
+
+    const segment = clipChartSegmentToXDomain(
+      previous,
+      current,
+      domainMin,
+      domainMax,
+    );
+    if (segment === null) {
+      continue;
+    }
+
+    const [from, to] = segment;
+    const last = clippedPoints.at(-1);
+    if (
+      last === undefined ||
+      Math.abs(last.x - from.x) > Number.EPSILON ||
+      Math.abs(last.y - from.y) > Number.EPSILON
+    ) {
+      clippedPoints.push(from);
+    }
+    clippedPoints.push(to);
+  }
+
+  return clippedPoints;
+}
+
+function splitChartPointsIntoForwardRuns(points: CompareChartPoint[]) {
+  const runs: CompareChartPoint[][] = [];
+  let currentRun: CompareChartPoint[] = [];
+
+  for (const point of points) {
+    const previous = currentRun.at(-1);
+    if (previous === undefined) {
+      currentRun = [point];
+      continue;
+    }
+
+    if (point.x < previous.x - Number.EPSILON) {
+      if (currentRun.length >= 2) {
+        runs.push(currentRun);
+      }
+      currentRun = [point];
+      continue;
+    }
+
+    if (Math.abs(point.x - previous.x) <= Number.EPSILON) {
+      currentRun[currentRun.length - 1] = point;
+      continue;
+    }
+
+    currentRun.push(point);
+  }
+
+  if (currentRun.length >= 2) {
+    runs.push(currentRun);
+  }
+
+  return runs;
+}
+
+function buildClippedPathData(
+  points: CompareChartPoint[],
+  xDomainMin: number,
+  xDomainMax: number,
+  toChartX: (value: number) => number,
+  toChartY: (value: number) => number,
+) {
+  return splitChartPointsIntoForwardRuns(points).flatMap((run) => {
+    const clippedPoints = clipChartPointsToXDomain(run, xDomainMin, xDomainMax);
+    if (clippedPoints.length < 2) {
+      return [];
+    }
+
+    return [
+      clippedPoints
+        .map((point, index) => {
+          const command = index === 0 ? "M" : "L";
+          return `${command} ${toChartX(point.x).toFixed(2)} ${toChartY(point.y).toFixed(2)}`;
+        })
+        .join(" "),
+    ];
+  });
+}
+
+function isDragPastThreshold(
+  originClientX: number,
+  originClientY: number,
+  clientX: number,
+  clientY: number,
+) {
+  return (
+    Math.abs(clientX - originClientX) >= 4 ||
+    Math.abs(clientY - originClientY) >= 4
+  );
+}
+
+function getSelectionRect(
+  selection: CompareZoomSelection | null,
+  toChartX: (value: number) => number,
+  toChartY: (value: number) => number,
+): CompareSelectionRect | null {
+  if (selection === null) {
+    return null;
+  }
+
+  const x1 = toChartX(selection.start.x);
+  const x2 = toChartX(selection.current.x);
+  const y1 = toChartY(selection.start.y);
+  const y2 = toChartY(selection.current.y);
+  return {
+    x: Math.min(x1, x2),
+    y: Math.min(y1, y2),
+    width: Math.abs(x2 - x1),
+    height: Math.abs(y2 - y1),
+  };
+}
+
+function useWheelScrollBlock(
+  ref: RefObject<SVGSVGElement | null>,
+  active: boolean,
+) {
+  useEffect(() => {
+    if (!active) {
+      return undefined;
+    }
+
+    const element = ref.current;
+    if (element === null) {
+      return undefined;
+    }
+
+    const blockWheel = (event: globalThis.WheelEvent) => {
+      event.preventDefault();
+    };
+    element.addEventListener("wheel", blockWheel, { passive: false });
+    return () => element.removeEventListener("wheel", blockWheel);
+  }, [active, ref]);
+}
+
+function getChartDomainPointFromPointer(
+  event: { currentTarget: SVGSVGElement; clientX: number; clientY: number },
+  chartWidth: number,
+  chartHeight: number,
+  padding: { top: number; right: number; bottom: number; left: number },
+  xDomainMin: number,
+  xDomainMax: number,
+  yDomainMin: number,
+  yDomainMax: number,
+) {
+  const rect = event.currentTarget.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) {
+    return null;
+  }
+
+  const plotLeft = padding.left;
+  const plotRight = chartWidth - padding.right;
+  const plotTop = padding.top;
+  const plotBottom = chartHeight - padding.bottom;
+  const chartX = ((event.clientX - rect.left) / rect.width) * chartWidth;
+  const chartY = ((event.clientY - rect.top) / rect.height) * chartHeight;
+  const clampedX = clamp(chartX, plotLeft, plotRight);
+  const clampedY = clamp(chartY, plotTop, plotBottom);
+  const xRatio = (clampedX - plotLeft) / Math.max(plotRight - plotLeft, 1);
+  const yRatio = (plotBottom - clampedY) / Math.max(plotBottom - plotTop, 1);
+
+  return {
+    x: xDomainMin + xRatio * (xDomainMax - xDomainMin),
+    y: yDomainMin + yRatio * (yDomainMax - yDomainMin),
+  };
+}
+
 export function CompareWorkspace({
   frame,
   basketEntries = [],
@@ -722,6 +1072,10 @@ function CompareBasketView({
   );
   const [distanceCursor, setDistanceCursor] =
     useState<CompareDistanceCursorState>(EMPTY_DISTANCE_CURSOR);
+  const [xZoom, setXZoom] = useState<CompareXAxisZoom | null>(null);
+  const [yZoomsByPanelId, setYZoomsByPanelId] = useState<
+    Record<string, CompareAxisZoom | undefined>
+  >({});
   const [annotationDraft, setAnnotationDraft] =
     useState<AnnotationDraft | null>(null);
   const sessionSummaries = useMemo(
@@ -791,6 +1145,11 @@ function CompareBasketView({
           panel.id === panelId ? { ...panel, channelKey: channel } : panel,
         ),
       );
+      setYZoomsByPanelId((currentZooms) => {
+        const remainingZooms = { ...currentZooms };
+        delete remainingZooms[panelId];
+        return remainingZooms;
+      });
       onSetPanelChannel?.(panelId, channel);
     },
     [onSetPanelChannel],
@@ -817,6 +1176,31 @@ function CompareBasketView({
         ? EMPTY_DISTANCE_CURSOR
         : currentCursor,
     );
+    setYZoomsByPanelId((currentZooms) => {
+      const remainingZooms = { ...currentZooms };
+      delete remainingZooms[panelId];
+      return remainingZooms;
+    });
+  }, []);
+
+  const handleYZoomChange = useCallback(
+    (panelId: string, zoom: CompareAxisZoom | null) => {
+      setYZoomsByPanelId((currentZooms) => {
+        const remainingZooms = { ...currentZooms };
+        delete remainingZooms[panelId];
+        if (zoom === null) {
+          return remainingZooms;
+        }
+
+        return { ...remainingZooms, [panelId]: zoom };
+      });
+    },
+    [],
+  );
+
+  const handleResetZoom = useCallback(() => {
+    setXZoom(null);
+    setYZoomsByPanelId({});
   }, []);
 
   const handleDistanceCursorChange = useCallback(
@@ -833,6 +1217,8 @@ function CompareBasketView({
         : currentCursor,
     );
   }, []);
+
+  const hasZoom = xZoom !== null || Object.keys(yZoomsByPanelId).length > 0;
 
   useEffect(() => {
     let isCancelled = false;
@@ -909,6 +1295,14 @@ function CompareBasketView({
               >
                 <Plus size={13} /> Add chart
               </button>
+              <button
+                type="button"
+                className="icon-button"
+                disabled={!hasZoom}
+                onClick={handleResetZoom}
+              >
+                <RotateCcw size={13} /> Reset zoom
+              </button>
               {transferActions}
               <button
                 type="button"
@@ -947,6 +1341,11 @@ function CompareBasketView({
             distanceCursor={distanceCursor}
             onDistanceCursorChange={handleDistanceCursorChange}
             onDistanceCursorClear={handleDistanceCursorClear}
+            xZoom={xZoom}
+            yZoom={yZoomsByPanelId[panel.id] ?? null}
+            onXZoomChange={setXZoom}
+            onYZoomChange={handleYZoomChange}
+            onResetZoom={handleResetZoom}
           />
         ))}
       </div>
@@ -962,6 +1361,11 @@ function CompareBasketView({
         distanceCursor={distanceCursor}
         onDistanceCursorChange={handleDistanceCursorChange}
         onDistanceCursorClear={handleDistanceCursorClear}
+        xZoom={xZoom}
+        yZoom={yZoomsByPanelId[DELTA_COMPARE_PANEL_ID] ?? null}
+        onXZoomChange={setXZoom}
+        onYZoomChange={handleYZoomChange}
+        onResetZoom={handleResetZoom}
       />
       <CompareDistanceCursorReadout
         entries={entries}
@@ -1853,14 +2257,22 @@ const OVERLAY_GRID_TICK_COUNT = 4;
 type OverlayTrace = {
   entry: LapBasketEntry;
   pathData: string;
+  pathId: string;
 };
 
 type OverlayChartModel = {
   traces: OverlayTrace[];
-  xAxis: "lapDistance" | "time";
+  traceStrokeWidth: number;
+  xAxis: CompareChartXAxis;
   xAxisLabel: string;
   xDomainMin: number;
   xDomainMax: number;
+  fullXDomainMin: number;
+  fullXDomainMax: number;
+  yDomainMin: number;
+  yDomainMax: number;
+  fullYDomainMin: number;
+  fullYDomainMax: number;
   xTicks: number[];
   yTicks: number[];
   formatXTick: (value: number) => string;
@@ -1925,9 +2337,30 @@ function pickReadyEntries(
   return ready;
 }
 
+function getOverlayTraceStrokeWidth(
+  xDomainMin: number,
+  xDomainMax: number,
+  fullXDomainMin: number,
+  fullXDomainMax: number,
+  traceCount: number,
+  seriesCount: number,
+) {
+  const fullSpan = Math.max(fullXDomainMax - fullXDomainMin, Number.EPSILON);
+  const visibleSpan = Math.max(xDomainMax - xDomainMin, Number.EPSILON);
+  const zoomRatio = clamp(visibleSpan / fullSpan, 0, 1);
+  const zoomStroke = clamp(0.9 * Math.sqrt(zoomRatio), 0.24, 0.9);
+  const pathDensity = traceCount / Math.max(seriesCount, 1);
+  const densityStroke =
+    pathDensity <= 1 ? 0.9 : clamp(0.9 / Math.sqrt(pathDensity), 0.24, 0.9);
+
+  return Math.min(zoomStroke, densityStroke);
+}
+
 function buildOverlayChartModel(
   ready: Array<{ entry: LapBasketEntry; response: LapChannelsResponse }>,
   channelKey: OverlayChannelKey,
+  xZoom: CompareXAxisZoom | null,
+  yZoom: CompareAxisZoom | null,
 ): OverlayChartModel | null {
   const allHaveDistance =
     ready.length > 0 &&
@@ -2014,14 +2447,35 @@ function buildOverlayChartModel(
     yMax += yPad;
   }
 
-  const xTicks = buildAxisTicks(xMin, xMax);
-  const yTicks = buildAxisTicks(yMin, yMax);
-  const finalXMin = Math.min(xMin, xTicks[0] ?? xMin);
-  const finalXMax = Math.max(xMax, xTicks[xTicks.length - 1] ?? xMax);
-  const finalYMin = Math.min(yMin, yTicks[0] ?? yMin);
-  const finalYMax = Math.max(yMax, yTicks[yTicks.length - 1] ?? yMax);
-  const xRange = Math.max(finalXMax - finalXMin, Number.EPSILON);
-  const yRange = Math.max(finalYMax - finalYMin, Number.EPSILON);
+  const fullXTicks = buildAxisTicks(xMin, xMax);
+  const fullYTicks = buildAxisTicks(yMin, yMax);
+  const fullXDomainMin = Math.min(xMin, fullXTicks[0] ?? xMin);
+  const fullXDomainMax = Math.max(xMax, fullXTicks.at(-1) ?? xMax);
+  const fullYDomainMin = Math.min(yMin, fullYTicks[0] ?? yMin);
+  const fullYDomainMax = Math.max(yMax, fullYTicks.at(-1) ?? yMax);
+  const normalizedXZoom =
+    xZoom?.axis === xAxis
+      ? normalizeZoomRange(xZoom, fullXDomainMin, fullXDomainMax)
+      : null;
+  const normalizedYZoom = normalizeZoomRange(
+    yZoom,
+    fullYDomainMin,
+    fullYDomainMax,
+  );
+  const xDomainMin = normalizedXZoom?.min ?? fullXDomainMin;
+  const xDomainMax = normalizedXZoom?.max ?? fullXDomainMax;
+  const yDomainMin = normalizedYZoom?.min ?? fullYDomainMin;
+  const yDomainMax = normalizedYZoom?.max ?? fullYDomainMax;
+  const xTicks = buildAxisTicks(xDomainMin, xDomainMax).filter(
+    (tick) => tick >= xDomainMin && tick <= xDomainMax,
+  );
+  const yTicks = buildAxisTicks(yDomainMin, yDomainMax).filter(
+    (tick) => tick >= yDomainMin && tick <= yDomainMax,
+  );
+  const resolvedXTicks = xTicks.length > 0 ? xTicks : [xDomainMin, xDomainMax];
+  const resolvedYTicks = yTicks.length > 0 ? yTicks : [yDomainMin, yDomainMax];
+  const xRange = Math.max(xDomainMax - xDomainMin, Number.EPSILON);
+  const yRange = Math.max(yDomainMax - yDomainMin, Number.EPSILON);
   const plotWidth =
     OVERLAY_CHART_WIDTH -
     OVERLAY_CHART_PADDING.left -
@@ -2032,20 +2486,34 @@ function buildOverlayChartModel(
     OVERLAY_CHART_PADDING.bottom;
 
   const toChartX = (value: number) =>
-    OVERLAY_CHART_PADDING.left + ((value - finalXMin) / xRange) * plotWidth;
+    OVERLAY_CHART_PADDING.left + ((value - xDomainMin) / xRange) * plotWidth;
 
   const toChartY = (value: number) =>
-    OVERLAY_CHART_PADDING.top + (1 - (value - finalYMin) / yRange) * plotHeight;
+    OVERLAY_CHART_PADDING.top +
+    (1 - (value - yDomainMin) / yRange) * plotHeight;
 
-  const traces: OverlayTrace[] = series.map(({ entry, points }) => {
-    const pathData = points
-      .map((point, index) => {
-        const command = index === 0 ? "M" : "L";
-        return `${command} ${toChartX(point.x).toFixed(2)} ${toChartY(point.y).toFixed(2)}`;
-      })
-      .join(" ");
-    return { entry, pathData };
+  const traces: OverlayTrace[] = series.flatMap(({ entry, points }) => {
+    const pathRuns = buildClippedPathData(
+      points,
+      xDomainMin,
+      xDomainMax,
+      toChartX,
+      toChartY,
+    );
+    return pathRuns.map((pathData, pathIndex) => ({
+      entry,
+      pathData,
+      pathId: `${getEntryKey(entry)}-${pathIndex}`,
+    }));
   });
+  const traceStrokeWidth = getOverlayTraceStrokeWidth(
+    xDomainMin,
+    xDomainMax,
+    fullXDomainMin,
+    fullXDomainMax,
+    traces.length,
+    series.length,
+  );
 
   const channelOption =
     OVERLAY_CHANNEL_OPTIONS.find((option) => option.key === channelKey) ??
@@ -2060,12 +2528,19 @@ function buildOverlayChartModel(
 
   return {
     traces,
+    traceStrokeWidth,
     xAxis,
     xAxisLabel,
-    xDomainMin: finalXMin,
-    xDomainMax: finalXMax,
-    xTicks,
-    yTicks: [...yTicks].reverse(),
+    xDomainMin,
+    xDomainMax,
+    fullXDomainMin,
+    fullXDomainMax,
+    yDomainMin,
+    yDomainMax,
+    fullYDomainMin,
+    fullYDomainMax,
+    xTicks: resolvedXTicks,
+    yTicks: [...resolvedYTicks].reverse(),
     formatXTick,
     formatYTick: channelOption.formatTick,
     toChartX,
@@ -2094,6 +2569,11 @@ function CompareOverlayChart({
   distanceCursor,
   onDistanceCursorChange,
   onDistanceCursorClear,
+  xZoom,
+  yZoom,
+  onXZoomChange,
+  onYZoomChange,
+  onResetZoom,
 }: {
   panelId: string;
   panelNumber: number;
@@ -2110,8 +2590,15 @@ function CompareOverlayChart({
     distanceMeters: number,
     endDistanceMeters?: number | null,
   ) => void;
-} & CompareDistanceCursorControls) {
+} & CompareDistanceCursorControls &
+  CompareZoomControls) {
   const selectId = useId();
+  const clipPathId = `compare-overlay-clip-${panelId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+  const svgRef = useRef<SVGSVGElement>(null);
+  const dragStateRef = useRef<CompareChartDragState | null>(null);
+  const suppressClickRef = useRef(false);
+  const [zoomSelection, setZoomSelection] =
+    useState<CompareZoomSelection | null>(null);
   const ready = useMemo(
     () => pickReadyEntries(entries, channelStates),
     [entries, channelStates],
@@ -2120,9 +2607,10 @@ function CompareOverlayChart({
     OVERLAY_CHANNEL_OPTIONS.find((option) => option.key === selectedChannel) ??
     OVERLAY_CHANNEL_OPTIONS[0];
   const model = useMemo(
-    () => buildOverlayChartModel(ready, selectedChannel),
-    [ready, selectedChannel],
+    () => buildOverlayChartModel(ready, selectedChannel, xZoom, yZoom),
+    [ready, selectedChannel, xZoom, yZoom],
   );
+  useWheelScrollBlock(svgRef, model !== null);
   const momentAnnotations = useMemo(
     () => getMomentAnnotationsForEntries(annotations, entries),
     [annotations, entries],
@@ -2136,9 +2624,110 @@ function CompareOverlayChart({
           model.toChartX,
         )
       : null;
+  const selectionRect =
+    model === null
+      ? null
+      : getSelectionRect(zoomSelection, model.toChartX, model.toChartY);
   const handlePointerMove = useCallback(
     (event: PointerEvent<SVGSVGElement>) => {
       if (model === null || model.xAxis !== "lapDistance") {
+        return;
+      }
+
+      const dragState = dragStateRef.current;
+      if (dragState?.pointerId === event.pointerId) {
+        const point = getChartDomainPointFromPointer(
+          event,
+          OVERLAY_CHART_WIDTH,
+          OVERLAY_CHART_HEIGHT,
+          OVERLAY_CHART_PADDING,
+          model.xDomainMin,
+          model.xDomainMax,
+          model.yDomainMin,
+          model.yDomainMax,
+        );
+        if (point === null) {
+          return;
+        }
+
+        const didMove =
+          dragState.didMove ||
+          isDragPastThreshold(
+            dragState.originClientX,
+            dragState.originClientY,
+            event.clientX,
+            event.clientY,
+          );
+
+        if (dragState.mode === "select") {
+          const nextSelection = { start: dragState.start, current: point };
+          dragStateRef.current = {
+            ...dragState,
+            current: point,
+            lastClientX: event.clientX,
+            lastClientY: event.clientY,
+            didMove,
+          };
+          setZoomSelection(didMove ? nextSelection : null);
+          if (didMove) {
+            suppressClickRef.current = true;
+          }
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+
+        const rect = event.currentTarget.getBoundingClientRect();
+        const plotWidth =
+          rect.width *
+          ((OVERLAY_CHART_WIDTH -
+            OVERLAY_CHART_PADDING.left -
+            OVERLAY_CHART_PADDING.right) /
+            OVERLAY_CHART_WIDTH);
+        const plotHeight =
+          rect.height *
+          ((OVERLAY_CHART_HEIGHT -
+            OVERLAY_CHART_PADDING.top -
+            OVERLAY_CHART_PADDING.bottom) /
+            OVERLAY_CHART_HEIGHT);
+        const deltaX = event.clientX - dragState.lastClientX;
+        const deltaY = event.clientY - dragState.lastClientY;
+        if (plotWidth > 0 && plotHeight > 0) {
+          const nextXZoom = panZoomRange(
+            model.xDomainMin,
+            model.xDomainMax,
+            model.fullXDomainMin,
+            model.fullXDomainMax,
+            -(deltaX / plotWidth) * (model.xDomainMax - model.xDomainMin),
+          );
+          const nextYZoom = panZoomRange(
+            model.yDomainMin,
+            model.yDomainMax,
+            model.fullYDomainMin,
+            model.fullYDomainMax,
+            (deltaY / plotHeight) * (model.yDomainMax - model.yDomainMin),
+          );
+
+          if (nextXZoom !== null) {
+            onXZoomChange({ ...nextXZoom, axis: model.xAxis });
+          }
+          if (nextYZoom !== null) {
+            onYZoomChange(panelId, nextYZoom);
+          }
+        }
+
+        dragStateRef.current = {
+          ...dragState,
+          current: point,
+          lastClientX: event.clientX,
+          lastClientY: event.clientY,
+          didMove,
+        };
+        if (didMove) {
+          suppressClickRef.current = true;
+        }
+        event.preventDefault();
+        event.stopPropagation();
         return;
       }
 
@@ -2153,7 +2742,162 @@ function CompareOverlayChart({
         onDistanceCursorChange(panelId, distanceMeters);
       }
     },
-    [model, onDistanceCursorChange, panelId],
+    [model, onDistanceCursorChange, onXZoomChange, onYZoomChange, panelId],
+  );
+  const handleWheel = useCallback(
+    (event: WheelEvent<SVGSVGElement>) => {
+      if (model === null) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const point = getChartDomainPointFromPointer(
+        event,
+        OVERLAY_CHART_WIDTH,
+        OVERLAY_CHART_HEIGHT,
+        OVERLAY_CHART_PADDING,
+        model.xDomainMin,
+        model.xDomainMax,
+        model.yDomainMin,
+        model.yDomainMax,
+      );
+      if (point === null) {
+        return;
+      }
+
+      const factor = event.deltaY < 0 ? 0.82 : 1.22;
+      const nextXZoom = zoomRangeAround(
+        model.xDomainMin,
+        model.xDomainMax,
+        model.fullXDomainMin,
+        model.fullXDomainMax,
+        point.x,
+        factor,
+      );
+      const nextYZoom = zoomRangeAround(
+        model.yDomainMin,
+        model.yDomainMax,
+        model.fullYDomainMin,
+        model.fullYDomainMax,
+        point.y,
+        factor,
+      );
+
+      onXZoomChange(
+        nextXZoom === null ? null : { ...nextXZoom, axis: model.xAxis },
+      );
+      onYZoomChange(panelId, nextYZoom);
+    },
+    [model, onXZoomChange, onYZoomChange, panelId],
+  );
+  const handlePointerDown = useCallback(
+    (event: PointerEvent<SVGSVGElement>) => {
+      if (model === null || (event.button !== 0 && event.button !== 1)) {
+        return;
+      }
+
+      const point = getChartDomainPointFromPointer(
+        event,
+        OVERLAY_CHART_WIDTH,
+        OVERLAY_CHART_HEIGHT,
+        OVERLAY_CHART_PADDING,
+        model.xDomainMin,
+        model.xDomainMax,
+        model.yDomainMin,
+        model.yDomainMax,
+      );
+      if (point === null) {
+        return;
+      }
+
+      const canPan = xZoom !== null || yZoom !== null;
+      const mode =
+        canPan && (event.shiftKey || event.button === 1) ? "pan" : "select";
+
+      dragStateRef.current = {
+        pointerId: event.pointerId,
+        mode,
+        start: point,
+        current: point,
+        originClientX: event.clientX,
+        originClientY: event.clientY,
+        lastClientX: event.clientX,
+        lastClientY: event.clientY,
+        didMove: false,
+      };
+      setZoomSelection(null);
+      event.currentTarget.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    },
+    [model, xZoom, yZoom],
+  );
+  const handlePointerRelease = useCallback(
+    (event: PointerEvent<SVGSVGElement>) => {
+      const dragState = dragStateRef.current;
+      if (dragState?.pointerId === event.pointerId) {
+        const point =
+          model === null
+            ? null
+            : getChartDomainPointFromPointer(
+                event,
+                OVERLAY_CHART_WIDTH,
+                OVERLAY_CHART_HEIGHT,
+                OVERLAY_CHART_PADDING,
+                model.xDomainMin,
+                model.xDomainMax,
+                model.yDomainMin,
+                model.yDomainMax,
+              );
+        const finalSelection = {
+          start: dragState.start,
+          current: point ?? dragState.current,
+        };
+        const didMove =
+          dragState.didMove ||
+          isDragPastThreshold(
+            dragState.originClientX,
+            dragState.originClientY,
+            event.clientX,
+            event.clientY,
+          );
+
+        if (dragState.mode === "select" && didMove && model !== null) {
+          const nextXZoom = normalizeZoomRange(
+            {
+              min: finalSelection.start.x,
+              max: finalSelection.current.x,
+            },
+            model.fullXDomainMin,
+            model.fullXDomainMax,
+          );
+          const nextYZoom = normalizeZoomRange(
+            {
+              min: finalSelection.start.y,
+              max: finalSelection.current.y,
+            },
+            model.fullYDomainMin,
+            model.fullYDomainMax,
+          );
+
+          if (nextXZoom !== null) {
+            onXZoomChange({ ...nextXZoom, axis: model.xAxis });
+          }
+          if (nextYZoom !== null) {
+            onYZoomChange(panelId, nextYZoom);
+          }
+          suppressClickRef.current = true;
+        }
+
+        dragStateRef.current = null;
+        setZoomSelection(null);
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+      }
+    },
+    [model, onXZoomChange, onYZoomChange, panelId],
   );
   const handleFocus = useCallback(() => {
     if (model === null || model.xAxis !== "lapDistance") {
@@ -2168,6 +2912,12 @@ function CompareOverlayChart({
   }, [distanceCursor.distanceMeters, model, onDistanceCursorChange, panelId]);
   const handleChartClick = useCallback(
     (event: MouseEvent<SVGSVGElement>) => {
+      if (suppressClickRef.current) {
+        suppressClickRef.current = false;
+        event.preventDefault();
+        return;
+      }
+
       if (model === null || model.xAxis !== "lapDistance") {
         return;
       }
@@ -2264,16 +3014,43 @@ function CompareOverlayChart({
       ) : (
         <div className="compare-overlay-stage">
           <svg
+            ref={svgRef}
             className="compare-overlay-svg"
             viewBox={`0 0 ${OVERLAY_CHART_WIDTH} ${OVERLAY_CHART_HEIGHT}`}
             role="img"
             aria-label={`Lap overlay chart for ${channelOption.label} overlay ${panelNumber}`}
             tabIndex={model.xAxis === "lapDistance" ? 0 : undefined}
             onFocus={handleFocus}
+            onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
-            onPointerLeave={() => onDistanceCursorClear(panelId)}
+            onPointerUp={handlePointerRelease}
+            onPointerCancel={handlePointerRelease}
+            onPointerLeave={(event) => {
+              handlePointerRelease(event);
+              onDistanceCursorClear(panelId);
+            }}
+            onWheelCapture={handleWheel}
+            onDoubleClick={onResetZoom}
             onClick={handleChartClick}
           >
+            <defs>
+              <clipPath id={clipPathId}>
+                <rect
+                  x={OVERLAY_CHART_PADDING.left}
+                  y={OVERLAY_CHART_PADDING.top}
+                  width={
+                    OVERLAY_CHART_WIDTH -
+                    OVERLAY_CHART_PADDING.left -
+                    OVERLAY_CHART_PADDING.right
+                  }
+                  height={
+                    OVERLAY_CHART_HEIGHT -
+                    OVERLAY_CHART_PADDING.top -
+                    OVERLAY_CHART_PADDING.bottom
+                  }
+                />
+              </clipPath>
+            </defs>
             {model.yTicks.map((tick) => {
               const y = model.toChartY(tick);
               return (
@@ -2338,54 +3115,57 @@ function CompareOverlayChart({
               y1={OVERLAY_CHART_HEIGHT - OVERLAY_CHART_PADDING.bottom}
               y2={OVERLAY_CHART_HEIGHT - OVERLAY_CHART_PADDING.bottom}
             />
-            {model.traces.map((trace) => (
-              <path
-                key={getEntryKey(trace.entry)}
-                className="compare-overlay-trace"
-                style={
-                  {
-                    "--lap-color": trace.entry.color,
-                  } as CSSProperties
-                }
-                d={trace.pathData}
-              />
-            ))}
-            {model.xAxis === "lapDistance" &&
-              momentAnnotations.map((annotation) => {
-                const startX = model.toChartX(annotation.distanceMeters ?? 0);
-                const endX =
-                  typeof annotation.endDistanceMeters === "number"
-                    ? model.toChartX(annotation.endDistanceMeters)
-                    : null;
-                return (
-                  <g key={`annotation-${annotation.id}`}>
-                    {endX !== null && (
-                      <rect
-                        className="annotation-chart-span"
-                        x={Math.min(startX, endX)}
-                        y={OVERLAY_CHART_PADDING.top}
-                        width={Math.max(Math.abs(endX - startX), 2)}
-                        height={
-                          OVERLAY_CHART_HEIGHT -
-                          OVERLAY_CHART_PADDING.top -
-                          OVERLAY_CHART_PADDING.bottom
-                        }
-                      />
-                    )}
-                    <line
-                      className="annotation-chart-marker"
-                      x1={startX}
-                      x2={startX}
-                      y1={OVERLAY_CHART_PADDING.top}
-                      y2={OVERLAY_CHART_HEIGHT - OVERLAY_CHART_PADDING.bottom}
-                    >
-                      <title>
-                        {annotation.note} {formatAnnotationMoment(annotation)}
-                      </title>
-                    </line>
-                  </g>
-                );
-              })}
+            <g clipPath={`url(#${clipPathId})`}>
+              {model.traces.map((trace) => (
+                <path
+                  key={trace.pathId}
+                  className="compare-overlay-trace"
+                  style={
+                    {
+                      "--lap-color": trace.entry.color,
+                      "--compare-overlay-stroke-width": `${model.traceStrokeWidth.toFixed(2)}`,
+                    } as CSSProperties
+                  }
+                  d={trace.pathData}
+                />
+              ))}
+              {model.xAxis === "lapDistance" &&
+                momentAnnotations.map((annotation) => {
+                  const startX = model.toChartX(annotation.distanceMeters ?? 0);
+                  const endX =
+                    typeof annotation.endDistanceMeters === "number"
+                      ? model.toChartX(annotation.endDistanceMeters)
+                      : null;
+                  return (
+                    <g key={`annotation-${annotation.id}`}>
+                      {endX !== null && (
+                        <rect
+                          className="annotation-chart-span"
+                          x={Math.min(startX, endX)}
+                          y={OVERLAY_CHART_PADDING.top}
+                          width={Math.max(Math.abs(endX - startX), 2)}
+                          height={
+                            OVERLAY_CHART_HEIGHT -
+                            OVERLAY_CHART_PADDING.top -
+                            OVERLAY_CHART_PADDING.bottom
+                          }
+                        />
+                      )}
+                      <line
+                        className="annotation-chart-marker"
+                        x1={startX}
+                        x2={startX}
+                        y1={OVERLAY_CHART_PADDING.top}
+                        y2={OVERLAY_CHART_HEIGHT - OVERLAY_CHART_PADDING.bottom}
+                      >
+                        <title>
+                          {annotation.note} {formatAnnotationMoment(annotation)}
+                        </title>
+                      </line>
+                    </g>
+                  );
+                })}
+            </g>
             {cursorX !== null && (
               <line
                 className="compare-distance-cursor-line"
@@ -2410,6 +3190,34 @@ function CompareOverlayChart({
             >
               {channelOption.axisLabel}
             </text>
+            <rect
+              className="compare-chart-pointer-capture"
+              x={OVERLAY_CHART_PADDING.left}
+              y={OVERLAY_CHART_PADDING.top}
+              width={
+                OVERLAY_CHART_WIDTH -
+                OVERLAY_CHART_PADDING.left -
+                OVERLAY_CHART_PADDING.right
+              }
+              height={
+                OVERLAY_CHART_HEIGHT -
+                OVERLAY_CHART_PADDING.top -
+                OVERLAY_CHART_PADDING.bottom
+              }
+              fill="transparent"
+              pointerEvents="all"
+            />
+            {selectionRect !== null &&
+              selectionRect.width >= 1 &&
+              selectionRect.height >= 1 && (
+                <rect
+                  className="compare-zoom-selection"
+                  x={selectionRect.x}
+                  y={selectionRect.y}
+                  width={selectionRect.width}
+                  height={selectionRect.height}
+                />
+              )}
           </svg>
         </div>
       )}
@@ -2505,6 +3313,12 @@ type DeltaChartModel = {
   traces: DeltaChartTrace[];
   xDomainMin: number;
   xDomainMax: number;
+  fullXDomainMin: number;
+  fullXDomainMax: number;
+  yDomainMin: number;
+  yDomainMax: number;
+  fullYDomainMin: number;
+  fullYDomainMax: number;
   xTicks: number[];
   yTicks: number[];
   toChartX: (value: number) => number;
@@ -2582,8 +3396,39 @@ function buildDeltaSegments(points: DeltaTimePoint[]) {
   return segments;
 }
 
+function clipDeltaSegmentToXDomain(
+  segment: DeltaSegment,
+  domainMin: number,
+  domainMax: number,
+): DeltaSegment | null {
+  const clipped = clipChartSegmentToXDomain(
+    {
+      x: segment.from.distanceMeters,
+      y: segment.from.deltaSeconds,
+    },
+    {
+      x: segment.to.distanceMeters,
+      y: segment.to.deltaSeconds,
+    },
+    domainMin,
+    domainMax,
+  );
+  if (clipped === null) {
+    return null;
+  }
+
+  const [from, to] = clipped;
+  return {
+    from: { distanceMeters: from.x, deltaSeconds: from.y },
+    to: { distanceMeters: to.x, deltaSeconds: to.y },
+    tone: segment.tone,
+  };
+}
+
 function buildDeltaChartModel(
   traces: DeltaTimeTrace[],
+  xZoom: CompareXAxisZoom | null,
+  yZoom: CompareAxisZoom | null,
 ): DeltaChartModel | null {
   const allPoints = traces.flatMap((trace) => trace.points);
   if (allPoints.length < DELTA_MIN_POINTS) {
@@ -2597,30 +3442,66 @@ function buildDeltaChartModel(
   );
   const yStep = getNiceStep(maxAbsDelta / 2);
   const yMax = Math.max(yStep * 2, maxAbsDelta);
-  const yTicks = [yMax, yStep, 0, -yStep, -yMax];
-  const xTicks = buildAxisTicks(0, xMax);
-  const finalXMax = Math.max(xMax, xTicks[xTicks.length - 1] ?? xMax);
+  const fullXTicks = buildAxisTicks(0, xMax);
+  const fullXDomainMin = 0;
+  const fullXDomainMax = Math.max(xMax, fullXTicks.at(-1) ?? xMax);
+  const fullYDomainMin = -yMax;
+  const fullYDomainMax = yMax;
+  const normalizedXZoom =
+    xZoom?.axis === "lapDistance"
+      ? normalizeZoomRange(xZoom, fullXDomainMin, fullXDomainMax)
+      : null;
+  const normalizedYZoom = normalizeZoomRange(
+    yZoom,
+    fullYDomainMin,
+    fullYDomainMax,
+  );
+  const xDomainMin = normalizedXZoom?.min ?? fullXDomainMin;
+  const xDomainMax = normalizedXZoom?.max ?? fullXDomainMax;
+  const yDomainMin = normalizedYZoom?.min ?? fullYDomainMin;
+  const yDomainMax = normalizedYZoom?.max ?? fullYDomainMax;
+  const xTicks = buildAxisTicks(xDomainMin, xDomainMax).filter(
+    (tick) => tick >= xDomainMin && tick <= xDomainMax,
+  );
+  const yTicks = buildAxisTicks(yDomainMin, yDomainMax).filter(
+    (tick) => tick >= yDomainMin && tick <= yDomainMax,
+  );
+  const resolvedXTicks = xTicks.length > 0 ? xTicks : [xDomainMin, xDomainMax];
+  const resolvedYTicks = yTicks.length > 0 ? yTicks : [yDomainMin, yDomainMax];
   const plotWidth =
     OVERLAY_CHART_WIDTH - DELTA_CHART_PADDING.left - DELTA_CHART_PADDING.right;
   const plotHeight =
     DELTA_CHART_HEIGHT - DELTA_CHART_PADDING.top - DELTA_CHART_PADDING.bottom;
-  const xRange = Math.max(finalXMax, Number.EPSILON);
-  const yRange = Math.max(yMax * 2, Number.EPSILON);
+  const xRange = Math.max(xDomainMax - xDomainMin, Number.EPSILON);
+  const yRange = Math.max(yDomainMax - yDomainMin, Number.EPSILON);
 
   const toChartX = (value: number) =>
-    DELTA_CHART_PADDING.left + (value / xRange) * plotWidth;
+    DELTA_CHART_PADDING.left + ((value - xDomainMin) / xRange) * plotWidth;
   const toChartY = (value: number) =>
-    DELTA_CHART_PADDING.top + ((yMax - value) / yRange) * plotHeight;
+    DELTA_CHART_PADDING.top + ((yDomainMax - value) / yRange) * plotHeight;
 
   return {
     traces: traces.map((trace) => ({
       trace,
-      segments: buildDeltaSegments(trace.points),
+      segments: buildDeltaSegments(trace.points).flatMap((segment) => {
+        const clippedSegment = clipDeltaSegmentToXDomain(
+          segment,
+          xDomainMin,
+          xDomainMax,
+        );
+        return clippedSegment === null ? [] : [clippedSegment];
+      }),
     })),
-    xDomainMin: 0,
-    xDomainMax: finalXMax,
-    xTicks,
-    yTicks,
+    xDomainMin,
+    xDomainMax,
+    fullXDomainMin,
+    fullXDomainMax,
+    yDomainMin,
+    yDomainMax,
+    fullYDomainMin,
+    fullYDomainMax,
+    xTicks: resolvedXTicks,
+    yTicks: [...resolvedYTicks].reverse(),
     toChartX,
     toChartY,
   };
@@ -2683,6 +3564,11 @@ function CompareDeltaTimeChart({
   distanceCursor,
   onDistanceCursorChange,
   onDistanceCursorClear,
+  xZoom,
+  yZoom,
+  onXZoomChange,
+  onYZoomChange,
+  onResetZoom,
 }: {
   entries: LapBasketEntry[];
   channelStates: Record<string, LapChannelLoadState>;
@@ -2692,7 +3578,14 @@ function CompareDeltaTimeChart({
     distanceMeters: number,
     endDistanceMeters?: number | null,
   ) => void;
-} & CompareDistanceCursorControls) {
+} & CompareDistanceCursorControls &
+  CompareZoomControls) {
+  const clipPathId = "compare-delta-clip";
+  const svgRef = useRef<SVGSVGElement>(null);
+  const dragStateRef = useRef<CompareChartDragState | null>(null);
+  const suppressClickRef = useRef(false);
+  const [zoomSelection, setZoomSelection] =
+    useState<CompareZoomSelection | null>(null);
   const referenceEntry = entries[0] ?? null;
   const deltaModel = useMemo(() => {
     if (referenceEntry === null) {
@@ -2721,9 +3614,12 @@ function CompareDeltaTimeChart({
   }, [channelStates, entries, referenceEntry]);
   const chartModel = useMemo(
     () =>
-      deltaModel === null ? null : buildDeltaChartModel(deltaModel.traces),
-    [deltaModel],
+      deltaModel === null
+        ? null
+        : buildDeltaChartModel(deltaModel.traces, xZoom, yZoom),
+    [deltaModel, xZoom, yZoom],
   );
+  useWheelScrollBlock(svgRef, chartModel !== null);
   const placeholderMessage = getDeltaPlaceholderMessage(entries, channelStates);
   const momentAnnotations = useMemo(
     () => getMomentAnnotationsForEntries(annotations, entries),
@@ -2739,9 +3635,116 @@ function CompareDeltaTimeChart({
           chartModel.xDomainMax,
           chartModel.toChartX,
         );
+  const selectionRect =
+    chartModel === null
+      ? null
+      : getSelectionRect(
+          zoomSelection,
+          chartModel.toChartX,
+          chartModel.toChartY,
+        );
   const handlePointerMove = useCallback(
     (event: PointerEvent<SVGSVGElement>) => {
       if (chartModel === null) {
+        return;
+      }
+
+      const dragState = dragStateRef.current;
+      if (dragState?.pointerId === event.pointerId) {
+        const point = getChartDomainPointFromPointer(
+          event,
+          OVERLAY_CHART_WIDTH,
+          DELTA_CHART_HEIGHT,
+          DELTA_CHART_PADDING,
+          chartModel.xDomainMin,
+          chartModel.xDomainMax,
+          chartModel.yDomainMin,
+          chartModel.yDomainMax,
+        );
+        if (point === null) {
+          return;
+        }
+
+        const didMove =
+          dragState.didMove ||
+          isDragPastThreshold(
+            dragState.originClientX,
+            dragState.originClientY,
+            event.clientX,
+            event.clientY,
+          );
+
+        if (dragState.mode === "select") {
+          const nextSelection = { start: dragState.start, current: point };
+          dragStateRef.current = {
+            ...dragState,
+            current: point,
+            lastClientX: event.clientX,
+            lastClientY: event.clientY,
+            didMove,
+          };
+          setZoomSelection(didMove ? nextSelection : null);
+          if (didMove) {
+            suppressClickRef.current = true;
+          }
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+
+        const rect = event.currentTarget.getBoundingClientRect();
+        const plotWidth =
+          rect.width *
+          ((OVERLAY_CHART_WIDTH -
+            DELTA_CHART_PADDING.left -
+            DELTA_CHART_PADDING.right) /
+            OVERLAY_CHART_WIDTH);
+        const plotHeight =
+          rect.height *
+          ((DELTA_CHART_HEIGHT -
+            DELTA_CHART_PADDING.top -
+            DELTA_CHART_PADDING.bottom) /
+            DELTA_CHART_HEIGHT);
+        const deltaX = event.clientX - dragState.lastClientX;
+        const deltaY = event.clientY - dragState.lastClientY;
+        if (plotWidth > 0 && plotHeight > 0) {
+          const nextXZoom = panZoomRange(
+            chartModel.xDomainMin,
+            chartModel.xDomainMax,
+            chartModel.fullXDomainMin,
+            chartModel.fullXDomainMax,
+            -(deltaX / plotWidth) *
+              (chartModel.xDomainMax - chartModel.xDomainMin),
+          );
+          const nextYZoom = panZoomRange(
+            chartModel.yDomainMin,
+            chartModel.yDomainMax,
+            chartModel.fullYDomainMin,
+            chartModel.fullYDomainMax,
+            (deltaY / plotHeight) *
+              (chartModel.yDomainMax - chartModel.yDomainMin),
+          );
+
+          if (nextXZoom !== null) {
+            onXZoomChange({ ...nextXZoom, axis: "lapDistance" });
+          }
+          if (nextYZoom !== null) {
+            onYZoomChange(DELTA_COMPARE_PANEL_ID, nextYZoom);
+          }
+        }
+
+        dragStateRef.current = {
+          ...dragState,
+          current: point,
+          lastClientX: event.clientX,
+          lastClientY: event.clientY,
+          didMove,
+        };
+        if (didMove) {
+          suppressClickRef.current = true;
+        }
+        event.preventDefault();
+        event.stopPropagation();
         return;
       }
 
@@ -2756,7 +3759,162 @@ function CompareDeltaTimeChart({
         onDistanceCursorChange(DELTA_COMPARE_PANEL_ID, distanceMeters);
       }
     },
-    [chartModel, onDistanceCursorChange],
+    [chartModel, onDistanceCursorChange, onXZoomChange, onYZoomChange],
+  );
+  const handleWheel = useCallback(
+    (event: WheelEvent<SVGSVGElement>) => {
+      if (chartModel === null) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const point = getChartDomainPointFromPointer(
+        event,
+        OVERLAY_CHART_WIDTH,
+        DELTA_CHART_HEIGHT,
+        DELTA_CHART_PADDING,
+        chartModel.xDomainMin,
+        chartModel.xDomainMax,
+        chartModel.yDomainMin,
+        chartModel.yDomainMax,
+      );
+      if (point === null) {
+        return;
+      }
+
+      const factor = event.deltaY < 0 ? 0.82 : 1.22;
+      const nextXZoom = zoomRangeAround(
+        chartModel.xDomainMin,
+        chartModel.xDomainMax,
+        chartModel.fullXDomainMin,
+        chartModel.fullXDomainMax,
+        point.x,
+        factor,
+      );
+      const nextYZoom = zoomRangeAround(
+        chartModel.yDomainMin,
+        chartModel.yDomainMax,
+        chartModel.fullYDomainMin,
+        chartModel.fullYDomainMax,
+        point.y,
+        factor,
+      );
+
+      onXZoomChange(
+        nextXZoom === null ? null : { ...nextXZoom, axis: "lapDistance" },
+      );
+      onYZoomChange(DELTA_COMPARE_PANEL_ID, nextYZoom);
+    },
+    [chartModel, onXZoomChange, onYZoomChange],
+  );
+  const handlePointerDown = useCallback(
+    (event: PointerEvent<SVGSVGElement>) => {
+      if (chartModel === null || (event.button !== 0 && event.button !== 1)) {
+        return;
+      }
+
+      const point = getChartDomainPointFromPointer(
+        event,
+        OVERLAY_CHART_WIDTH,
+        DELTA_CHART_HEIGHT,
+        DELTA_CHART_PADDING,
+        chartModel.xDomainMin,
+        chartModel.xDomainMax,
+        chartModel.yDomainMin,
+        chartModel.yDomainMax,
+      );
+      if (point === null) {
+        return;
+      }
+
+      const canPan = xZoom !== null || yZoom !== null;
+      const mode =
+        canPan && (event.shiftKey || event.button === 1) ? "pan" : "select";
+
+      dragStateRef.current = {
+        pointerId: event.pointerId,
+        mode,
+        start: point,
+        current: point,
+        originClientX: event.clientX,
+        originClientY: event.clientY,
+        lastClientX: event.clientX,
+        lastClientY: event.clientY,
+        didMove: false,
+      };
+      setZoomSelection(null);
+      event.currentTarget.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    },
+    [chartModel, xZoom, yZoom],
+  );
+  const handlePointerRelease = useCallback(
+    (event: PointerEvent<SVGSVGElement>) => {
+      const dragState = dragStateRef.current;
+      if (dragState?.pointerId === event.pointerId) {
+        const point =
+          chartModel === null
+            ? null
+            : getChartDomainPointFromPointer(
+                event,
+                OVERLAY_CHART_WIDTH,
+                DELTA_CHART_HEIGHT,
+                DELTA_CHART_PADDING,
+                chartModel.xDomainMin,
+                chartModel.xDomainMax,
+                chartModel.yDomainMin,
+                chartModel.yDomainMax,
+              );
+        const finalSelection = {
+          start: dragState.start,
+          current: point ?? dragState.current,
+        };
+        const didMove =
+          dragState.didMove ||
+          isDragPastThreshold(
+            dragState.originClientX,
+            dragState.originClientY,
+            event.clientX,
+            event.clientY,
+          );
+
+        if (dragState.mode === "select" && didMove && chartModel !== null) {
+          const nextXZoom = normalizeZoomRange(
+            {
+              min: finalSelection.start.x,
+              max: finalSelection.current.x,
+            },
+            chartModel.fullXDomainMin,
+            chartModel.fullXDomainMax,
+          );
+          const nextYZoom = normalizeZoomRange(
+            {
+              min: finalSelection.start.y,
+              max: finalSelection.current.y,
+            },
+            chartModel.fullYDomainMin,
+            chartModel.fullYDomainMax,
+          );
+
+          if (nextXZoom !== null) {
+            onXZoomChange({ ...nextXZoom, axis: "lapDistance" });
+          }
+          if (nextYZoom !== null) {
+            onYZoomChange(DELTA_COMPARE_PANEL_ID, nextYZoom);
+          }
+          suppressClickRef.current = true;
+        }
+
+        dragStateRef.current = null;
+        setZoomSelection(null);
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+      }
+    },
+    [chartModel, onXZoomChange, onYZoomChange],
   );
   const handleFocus = useCallback(() => {
     if (chartModel === null) {
@@ -2772,6 +3930,12 @@ function CompareDeltaTimeChart({
   }, [chartModel, distanceCursor.distanceMeters, onDistanceCursorChange]);
   const handleChartClick = useCallback(
     (event: MouseEvent<SVGSVGElement>) => {
+      if (suppressClickRef.current) {
+        suppressClickRef.current = false;
+        event.preventDefault();
+        return;
+      }
+
       if (chartModel === null || referenceEntry === null) {
         return;
       }
@@ -2814,18 +3978,43 @@ function CompareDeltaTimeChart({
         <>
           <div className="compare-overlay-stage">
             <svg
+              ref={svgRef}
               className="compare-overlay-svg"
               viewBox={`0 0 ${OVERLAY_CHART_WIDTH} ${DELTA_CHART_HEIGHT}`}
               role="img"
               aria-label={`Delta time plot vs ${referenceEntry.label}`}
               tabIndex={0}
               onFocus={handleFocus}
+              onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
-              onPointerLeave={() =>
-                onDistanceCursorClear(DELTA_COMPARE_PANEL_ID)
-              }
+              onPointerUp={handlePointerRelease}
+              onPointerCancel={handlePointerRelease}
+              onPointerLeave={(event) => {
+                handlePointerRelease(event);
+                onDistanceCursorClear(DELTA_COMPARE_PANEL_ID);
+              }}
+              onWheelCapture={handleWheel}
+              onDoubleClick={onResetZoom}
               onClick={handleChartClick}
             >
+              <defs>
+                <clipPath id={clipPathId}>
+                  <rect
+                    x={DELTA_CHART_PADDING.left}
+                    y={DELTA_CHART_PADDING.top}
+                    width={
+                      OVERLAY_CHART_WIDTH -
+                      DELTA_CHART_PADDING.left -
+                      DELTA_CHART_PADDING.right
+                    }
+                    height={
+                      DELTA_CHART_HEIGHT -
+                      DELTA_CHART_PADDING.top -
+                      DELTA_CHART_PADDING.bottom
+                    }
+                  />
+                </clipPath>
+              </defs>
               {chartModel.yTicks.map((tick) => {
                 const y = chartModel.toChartY(tick);
                 return (
@@ -2887,35 +4076,74 @@ function CompareDeltaTimeChart({
                 y1={DELTA_CHART_PADDING.top}
                 y2={DELTA_CHART_HEIGHT - DELTA_CHART_PADDING.bottom}
               />
-              {chartModel.traces.map(({ trace, segments }) => (
-                <g key={trace.id}>
-                  {segments.map((segment, index) => (
-                    <line
-                      key={`${trace.id}-underlay-${index}`}
-                      className="compare-delta-segment-underlay"
-                      style={
-                        {
-                          "--lap-color": trace.color ?? "var(--accent-cyan)",
-                        } as CSSProperties
-                      }
-                      x1={chartModel.toChartX(segment.from.distanceMeters)}
-                      x2={chartModel.toChartX(segment.to.distanceMeters)}
-                      y1={chartModel.toChartY(segment.from.deltaSeconds)}
-                      y2={chartModel.toChartY(segment.to.deltaSeconds)}
-                    />
-                  ))}
-                  {segments.map((segment, index) => (
-                    <line
-                      key={`${trace.id}-${index}`}
-                      className={`compare-delta-segment compare-delta-segment-${segment.tone}`}
-                      x1={chartModel.toChartX(segment.from.distanceMeters)}
-                      x2={chartModel.toChartX(segment.to.distanceMeters)}
-                      y1={chartModel.toChartY(segment.from.deltaSeconds)}
-                      y2={chartModel.toChartY(segment.to.deltaSeconds)}
-                    />
-                  ))}
-                </g>
-              ))}
+              <g clipPath={`url(#${clipPathId})`}>
+                {chartModel.traces.map(({ trace, segments }) => (
+                  <g key={trace.id}>
+                    {segments.map((segment, index) => (
+                      <line
+                        key={`${trace.id}-underlay-${index}`}
+                        className="compare-delta-segment-underlay"
+                        style={
+                          {
+                            "--lap-color": trace.color ?? "var(--accent-cyan)",
+                          } as CSSProperties
+                        }
+                        x1={chartModel.toChartX(segment.from.distanceMeters)}
+                        x2={chartModel.toChartX(segment.to.distanceMeters)}
+                        y1={chartModel.toChartY(segment.from.deltaSeconds)}
+                        y2={chartModel.toChartY(segment.to.deltaSeconds)}
+                      />
+                    ))}
+                    {segments.map((segment, index) => (
+                      <line
+                        key={`${trace.id}-${index}`}
+                        className={`compare-delta-segment compare-delta-segment-${segment.tone}`}
+                        x1={chartModel.toChartX(segment.from.distanceMeters)}
+                        x2={chartModel.toChartX(segment.to.distanceMeters)}
+                        y1={chartModel.toChartY(segment.from.deltaSeconds)}
+                        y2={chartModel.toChartY(segment.to.deltaSeconds)}
+                      />
+                    ))}
+                  </g>
+                ))}
+                {momentAnnotations.map((annotation) => {
+                  const startX = chartModel.toChartX(
+                    annotation.distanceMeters ?? 0,
+                  );
+                  const endX =
+                    typeof annotation.endDistanceMeters === "number"
+                      ? chartModel.toChartX(annotation.endDistanceMeters)
+                      : null;
+                  return (
+                    <g key={`delta-annotation-${annotation.id}`}>
+                      {endX !== null && (
+                        <rect
+                          className="annotation-chart-span"
+                          x={Math.min(startX, endX)}
+                          y={DELTA_CHART_PADDING.top}
+                          width={Math.max(Math.abs(endX - startX), 2)}
+                          height={
+                            DELTA_CHART_HEIGHT -
+                            DELTA_CHART_PADDING.top -
+                            DELTA_CHART_PADDING.bottom
+                          }
+                        />
+                      )}
+                      <line
+                        className="annotation-chart-marker"
+                        x1={startX}
+                        x2={startX}
+                        y1={DELTA_CHART_PADDING.top}
+                        y2={DELTA_CHART_HEIGHT - DELTA_CHART_PADDING.bottom}
+                      >
+                        <title>
+                          {annotation.note} {formatAnnotationMoment(annotation)}
+                        </title>
+                      </line>
+                    </g>
+                  );
+                })}
+              </g>
               {cursorX !== null && (
                 <line
                   className="compare-distance-cursor-line"
@@ -2925,43 +4153,6 @@ function CompareDeltaTimeChart({
                   y2={DELTA_CHART_HEIGHT - DELTA_CHART_PADDING.bottom}
                 />
               )}
-              {momentAnnotations.map((annotation) => {
-                const startX = chartModel.toChartX(
-                  annotation.distanceMeters ?? 0,
-                );
-                const endX =
-                  typeof annotation.endDistanceMeters === "number"
-                    ? chartModel.toChartX(annotation.endDistanceMeters)
-                    : null;
-                return (
-                  <g key={`delta-annotation-${annotation.id}`}>
-                    {endX !== null && (
-                      <rect
-                        className="annotation-chart-span"
-                        x={Math.min(startX, endX)}
-                        y={DELTA_CHART_PADDING.top}
-                        width={Math.max(Math.abs(endX - startX), 2)}
-                        height={
-                          DELTA_CHART_HEIGHT -
-                          DELTA_CHART_PADDING.top -
-                          DELTA_CHART_PADDING.bottom
-                        }
-                      />
-                    )}
-                    <line
-                      className="annotation-chart-marker"
-                      x1={startX}
-                      x2={startX}
-                      y1={DELTA_CHART_PADDING.top}
-                      y2={DELTA_CHART_HEIGHT - DELTA_CHART_PADDING.bottom}
-                    >
-                      <title>
-                        {annotation.note} {formatAnnotationMoment(annotation)}
-                      </title>
-                    </line>
-                  </g>
-                );
-              })}
               <text
                 className="compare-overlay-axis-label"
                 x={DELTA_CHART_PADDING.left}
@@ -2977,6 +4168,34 @@ function CompareDeltaTimeChart({
               >
                 Delta (s)
               </text>
+              <rect
+                className="compare-chart-pointer-capture"
+                x={DELTA_CHART_PADDING.left}
+                y={DELTA_CHART_PADDING.top}
+                width={
+                  OVERLAY_CHART_WIDTH -
+                  DELTA_CHART_PADDING.left -
+                  DELTA_CHART_PADDING.right
+                }
+                height={
+                  DELTA_CHART_HEIGHT -
+                  DELTA_CHART_PADDING.top -
+                  DELTA_CHART_PADDING.bottom
+                }
+                fill="transparent"
+                pointerEvents="all"
+              />
+              {selectionRect !== null &&
+                selectionRect.width >= 1 &&
+                selectionRect.height >= 1 && (
+                  <rect
+                    className="compare-zoom-selection"
+                    x={selectionRect.x}
+                    y={selectionRect.y}
+                    width={selectionRect.width}
+                    height={selectionRect.height}
+                  />
+                )}
             </svg>
           </div>
           {clippedTraceCount > 0 && (

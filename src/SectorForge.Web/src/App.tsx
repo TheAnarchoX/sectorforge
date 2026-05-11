@@ -265,7 +265,7 @@ function App() {
 
   return (
     <main
-      className={`app-shell app-shell-rail${isReplayRunning && workspace === "live" ? " app-shell-replay-active" : ""}`}
+      className={`app-shell app-shell-rail${isReplayRunning && workspace !== "sessions" ? " app-shell-replay-active" : ""}`}
     >
       <WorkspaceRail
         active={workspace}
@@ -377,6 +377,7 @@ function App() {
               onStartReplay={startReplay}
               onStopReplay={stopCollector}
               onReplayStateChange={setReplayState}
+              showGlobalReplayControls={workspace !== "sessions"}
               onSessionDeleted={handleSessionDeleted}
             />
           </div>

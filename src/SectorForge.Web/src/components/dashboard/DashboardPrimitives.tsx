@@ -151,9 +151,7 @@ function TraceLaneImpl({
   let polylinePoints = "";
   let centerLineY: number | null = null;
   const cursorX =
-    cursorRatio === null
-      ? null
-      : Math.min(Math.max(cursorRatio, 0), 1) * width;
+    cursorRatio === null ? null : Math.min(Math.max(cursorRatio, 0), 1) * width;
 
   const handlePointerMove = (event: PointerEvent<SVGSVGElement>) => {
     if (onCursorRatioChange === undefined) {
@@ -261,6 +259,7 @@ function TraceLaneImpl({
                 y2={centerLineY}
               />
             )}
+            <polyline className="trace-line" points={polylinePoints} />
             {cursorX !== null && (
               <line
                 className="trace-cursor-line"
@@ -270,7 +269,6 @@ function TraceLaneImpl({
                 y2={height}
               />
             )}
-            <polyline className="trace-line" points={polylinePoints} />
           </svg>
         )}
       </div>

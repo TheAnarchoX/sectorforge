@@ -11,6 +11,53 @@ import {
 } from "../../test/telemetryFixtures";
 
 describe("MainTelemetryColumn", () => {
+  it("preserves completed sector tones in the live speed view", () => {
+    const sectorOneSample = createTelemetrySample({
+      lap: { lapNumber: 7, sectorIndex: 0 },
+      timing: { sectorDelta: "-00:00:00.120" },
+    });
+    const sectorTwoSample = createTelemetrySample({
+      lap: { lapNumber: 7, sectorIndex: 1 },
+      timing: { sectorDelta: "+00:00:00.090" },
+    });
+
+    const { container, rerender } = render(
+      <MainTelemetryColumn
+        activeSource={createTelemetrySource()}
+        runMode="Live"
+        sample={sectorOneSample}
+        traceSeries={createTraceSeries()}
+        lapTrace={createLapTrace()}
+        referenceLap={null}
+        referenceChannelsState={{ status: "idle" }}
+        onClearReferenceLap={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelectorAll(".sector-bar-pip")[0]).toHaveClass(
+      "active",
+      "sector-tone-improving",
+    );
+
+    rerender(
+      <MainTelemetryColumn
+        activeSource={createTelemetrySource()}
+        runMode="Live"
+        sample={sectorTwoSample}
+        traceSeries={createTraceSeries()}
+        lapTrace={createLapTrace()}
+        referenceLap={null}
+        referenceChannelsState={{ status: "idle" }}
+        onClearReferenceLap={vi.fn()}
+      />,
+    );
+
+    const sectorPips = container.querySelectorAll(".sector-bar-pip");
+    expect(sectorPips[0]).toHaveClass("sector-tone-improving");
+    expect(sectorPips[0]).not.toHaveClass("active");
+    expect(sectorPips[1]).toHaveClass("active", "sector-tone-losing");
+  });
+
   it("renders subtle live reference comparison hints when a reference is selected", async () => {
     const user = userEvent.setup();
     const onClearReferenceLap = vi.fn();

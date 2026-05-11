@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, type PointerEvent } from "react";
 import { formatNumber } from "../../utils/telemetryFormat";
 
 const CHART_WIDTH = 860;
@@ -20,6 +20,9 @@ type LapTelemetryChartProps = {
     label: string;
     points: Array<{ elapsedSeconds: number; value: number }>;
   } | null;
+  cursorRatio?: number | null;
+  onCursorRatioChange?: (ratio: number) => void;
+  onCursorClear?: () => void;
 };
 
 function formatAxisSeconds(value: number) {
@@ -75,6 +78,9 @@ function LapTelemetryChartImpl({
   currentValue,
   isActive,
   referenceTrace = null,
+  cursorRatio = null,
+  onCursorRatioChange,
+  onCursorClear,
 }: LapTelemetryChartProps) {
   if (points.length === 0) {
     return (
@@ -144,6 +150,23 @@ function LapTelemetryChartImpl({
   const toChartY = (value: number) =>
     CHART_PADDING.top + (1 - value / maxY) * plotHeight;
 
+  const cursorX =
+    cursorRatio === null
+      ? null
+      : CHART_PADDING.left + Math.min(Math.max(cursorRatio, 0), 1) * plotWidth;
+
+  const handlePointerMove = (event: PointerEvent<SVGSVGElement>) => {
+    if (onCursorRatioChange === undefined) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0) return;
+
+    const svgX = ((event.clientX - rect.left) / rect.width) * CHART_WIDTH;
+    onCursorRatioChange(
+      Math.min(Math.max((svgX - CHART_PADDING.left) / plotWidth, 0), 1),
+    );
+  };
+
   const buildPathData = (
     chartPoints: Array<{ elapsedSeconds: number; value: number }>,
   ) =>
@@ -194,6 +217,8 @@ function LapTelemetryChartImpl({
             viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
             role="img"
             aria-label={`Current lap speed trace${lapNumber === null ? "" : ` for lap ${lapNumber}`}`}
+            onPointerMove={handlePointerMove}
+            onPointerLeave={onCursorClear}
           >
             {yTicks.map((tick) => {
               const y = toChartY(tick);
@@ -275,6 +300,24 @@ function LapTelemetryChartImpl({
               cx={toChartX(latestPoint.elapsedSeconds)}
               cy={toChartY(latestPoint.value)}
               r={3.5}
+            />
+            {cursorX !== null && (
+              <line
+                className="lap-chart-cursor-line"
+                x1={cursorX}
+                x2={cursorX}
+                y1={CHART_PADDING.top}
+                y2={CHART_HEIGHT - CHART_PADDING.bottom}
+              />
+            )}
+            <rect
+              className="lap-chart-pointer-capture"
+              x={CHART_PADDING.left}
+              y={CHART_PADDING.top}
+              width={plotWidth}
+              height={plotHeight}
+              fill="transparent"
+              pointerEvents="all"
             />
           </svg>
         </div>

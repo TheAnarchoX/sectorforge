@@ -99,6 +99,7 @@ public sealed class F125SessionPacketReader : IF125PacketPayloadReader
                 F125PacketLayout.SessionWeatherForecastStartOffset + index * F125PacketLayout.WeatherForecastSampleSize,
                 F125PacketLayout.WeatherForecastSampleSize);
             forecastSamples.Add(new F125WeatherForecastSample(
+                SessionTypeCode: sample[0],
                 MinutesAhead: sample[1],
                 WeatherCode: sample[2],
                 TrackTemperatureC: F125PacketLayout.ReadSignedByte(sample[3]),

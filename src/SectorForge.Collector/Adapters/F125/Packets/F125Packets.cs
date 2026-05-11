@@ -122,6 +122,7 @@ public sealed record F125SessionData(
     IReadOnlyList<F125WeatherForecastSample> ForecastSamples);
 
 public sealed record F125WeatherForecastSample(
+    byte SessionTypeCode,
     int MinutesAhead,
     byte WeatherCode,
     double TrackTemperatureC,

@@ -314,16 +314,23 @@ public sealed class F125Normalizer
                 ErsDeployMode: MapErsDeployMode(carStatus.ErsDeployModeCode));
 
     private static WeatherForecastState? BuildWeatherForecast(F125SessionData? session)
-        => session is null || session.ForecastSamples.Count == 0
-            ? null
-            : new WeatherForecastState(session.ForecastSamples
-                .Select(sample => new WeatherForecastSample(
-                    MinutesAhead: sample.MinutesAhead,
-                    Weather: MapWeather(sample.WeatherCode),
-                    RainPercent: sample.RainPercent,
-                    TrackTemperatureC: sample.TrackTemperatureC,
-                    AirTemperatureC: sample.AirTemperatureC))
-                .ToArray());
+    {
+        if (session is null || session.ForecastSamples.Count == 0)
+        {
+            return null;
+        }
+
+        var forecastSamples = CurrentSessionForecastSamples(session)
+            .Select(sample => new WeatherForecastSample(
+                MinutesAhead: sample.MinutesAhead,
+                Weather: MapWeather(sample.WeatherCode),
+                RainPercent: sample.RainPercent,
+                TrackTemperatureC: sample.TrackTemperatureC,
+                AirTemperatureC: sample.AirTemperatureC))
+            .ToArray();
+
+        return forecastSamples.Length == 0 ? null : new WeatherForecastState(forecastSamples);
+    }
 
     private static IReadOnlyList<ParticipantState>? BuildParticipants(F125TelemetryPacketSet packets, int playerCarIndex)
     {
@@ -396,9 +403,26 @@ public sealed class F125Normalizer
     private static string? DisplayTeamName(F125ParticipantData? participant)
         => participant is null ? null : $"Team {participant.TeamId.ToString(CultureInfo.InvariantCulture)}";
 
+    private static IReadOnlyList<F125WeatherForecastSample> CurrentSessionForecastSamples(F125SessionData session)
+    {
+        var currentSessionSamples = session.ForecastSamples
+            .Where(sample => sample.SessionTypeCode == session.SessionTypeCode)
+            .ToArray();
+
+        return currentSessionSamples.Length == 0 ? session.ForecastSamples : currentSessionSamples;
+    }
+
     private static double? CurrentRainPercent(F125SessionData? session)
-        => session?.ForecastSamples.FirstOrDefault(sample => sample.MinutesAhead == 0)?.RainPercent
-            ?? session?.ForecastSamples.FirstOrDefault()?.RainPercent;
+    {
+        if (session is null)
+        {
+            return null;
+        }
+
+        var forecastSamples = CurrentSessionForecastSamples(session);
+        return forecastSamples.FirstOrDefault(sample => sample.MinutesAhead == 0)?.RainPercent
+            ?? forecastSamples.FirstOrDefault()?.RainPercent;
+    }
 
     private static double? EstimateLitersPerLap(F125CarStatusData? carStatus)
         => carStatus is not null && carStatus.FuelRemainingLaps > 0

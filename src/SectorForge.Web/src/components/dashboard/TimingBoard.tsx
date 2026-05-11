@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, Dispatch, SetStateAction } from "react";
+import { createPortal } from "react-dom";
 import {
   Activity,
   AlertTriangle,
-  Flag,
   Pause,
   Pin,
   PinOff,
@@ -19,8 +19,8 @@ import type {
   DashboardReplayState,
   LapBasketEntry,
   LapBasketSessionContext,
-  ParticipantState,
   ReferenceLapSelection,
+  ParticipantState,
   TelemetrySample,
   TelemetrySessionDetails,
   TelemetrySessionSummary,
@@ -49,15 +49,16 @@ type TimingBoardProps = {
   isApiOffline: boolean;
   isBusy: boolean;
   activeReplaySessionId: string | null;
-  referenceLap: ReferenceLapSelection | null;
+  referenceLap?: ReferenceLapSelection | null;
   isLapPinned: (sessionId: string, lapNumber: number) => boolean;
   onPinLap: (lap: LapComparePinInput) => void;
   onUnpinLap: (sessionId: string, lapNumber: number) => void;
-  onSetReferenceLap: (lap: ReferenceLapSelection) => void;
+  onSetReferenceLap?: (referenceLap: ReferenceLapSelection) => void;
   onCompareSelectedLaps: (laps: LapComparePinInput[]) => void;
   onStartReplay: (sessionId: string) => Promise<boolean>;
   onStopReplay: () => Promise<void> | void;
   onReplayStateChange: Dispatch<SetStateAction<DashboardReplayState | null>>;
+  showGlobalReplayControls?: boolean;
   onSessionDeleted?: () => void | Promise<void>;
 };
 
@@ -74,7 +75,7 @@ function isAbortError(error: unknown) {
 }
 
 const REPLAY_TRACE_WINDOW = 180;
-const REPLAY_LAP_TRACE_WINDOW = 720;
+const REPLAY_LAP_TRACE_WINDOW = 120_000;
 const REPLAY_STEP_MS_FALLBACK = 60;
 const REPLAY_STEP_MS_MIN = 35;
 const REPLAY_STEP_MS_MAX = 140;
@@ -106,6 +107,7 @@ function buildReplayTraceSeries(
     return {
       speed: [],
       rpm: [],
+      gear: [],
       throttle: [],
       brake: [],
       steering: [],
@@ -119,6 +121,7 @@ function buildReplayTraceSeries(
   return {
     speed: windowSamples.map((nextSample) => nextSample.vehicle.speedKph ?? 0),
     rpm: windowSamples.map((nextSample) => nextSample.vehicle.rpm ?? 0),
+    gear: windowSamples.map((nextSample) => nextSample.vehicle.gear ?? 0),
     throttle: windowSamples.map(
       (nextSample) => (nextSample.driverInput.throttle ?? 0) * 100,
     ),
@@ -478,15 +481,14 @@ export function TimingBoard({
   isApiOffline,
   isBusy,
   activeReplaySessionId,
-  referenceLap,
   isLapPinned,
   onPinLap,
   onUnpinLap,
-  onSetReferenceLap,
   onCompareSelectedLaps,
   onStartReplay,
   onStopReplay,
   onReplayStateChange,
+  showGlobalReplayControls = false,
   onSessionDeleted,
 }: TimingBoardProps) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
@@ -1052,14 +1054,23 @@ export function TimingBoard({
     return sorted;
   }, [sessions, searchQuery, sortMode]);
 
-  const replayTransport =
-    visibleSession === null ? null : (
+  const renderReplayTransport = (surface: "session" | "dock") => {
+    if (visibleSession === null) {
+      return null;
+    }
+
+    const isDock = surface === "dock";
+    const timelineInputId = `replay-timeline-${surface}-${visibleSession.session.id}`;
+
+    return (
       <div
-        className="sessions-transport"
+        className={isDock ? "replay-controls" : "sessions-transport"}
         role="group"
         aria-label="Replay transport"
       >
-        <div className="sessions-transport-row">
+        <div
+          className={isDock ? "replay-controls-row" : "sessions-transport-row"}
+        >
           <span className="status-pill mono">
             {requestedReplaySessionId === visibleSession.session.id &&
             activeReplaySessionId === null
@@ -1070,7 +1081,11 @@ export function TimingBoard({
                   : "Replay paused"
                 : "Replay ready"}
           </span>
-          <div className="sessions-transport-actions">
+          <div
+            className={
+              isDock ? "replay-controls-actions" : "sessions-transport-actions"
+            }
+          >
             {isReplaySessionActive ? (
               <button
                 className="icon-button primary"
@@ -1109,15 +1124,17 @@ export function TimingBoard({
           </div>
         </div>
 
-        <div className="sessions-transport-slider">
+        <div
+          className={isDock ? "replay-slider-group" : "sessions-transport-slider"}
+        >
           <label
             className="detail-label"
-            htmlFor={`replay-timeline-${visibleSession.session.id}`}
+            htmlFor={timelineInputId}
           >
             Timeline
           </label>
           <input
-            id={`replay-timeline-${visibleSession.session.id}`}
+            id={timelineInputId}
             className="replay-slider"
             type="range"
             min={0}
@@ -1138,6 +1155,67 @@ export function TimingBoard({
         </div>
       </div>
     );
+
+  };
+
+  const replayTransport = renderReplayTransport("session");
+
+  const globalReplayControls =
+    showGlobalReplayControls &&
+    activeReplaySessionId !== null &&
+    typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className="replay-dock"
+            role="region"
+            aria-label="Floating replay controls"
+          >
+            <div className="session-detail-section replay-dock-panel">
+              <div className="session-detail-heading">
+                <div>
+                  <div className="panel-kicker">Replay transport</div>
+                  <h2 className="panel-title">{detailTitle}</h2>
+                </div>
+                <div className="session-detail-note mono">{detailStatus}</div>
+              </div>
+
+              {visibleSession !== null && isReplaySessionActive ? (
+                renderReplayTransport("dock")
+              ) : (
+                <div
+                  className="replay-controls"
+                  role="group"
+                  aria-label="Replay transport"
+                >
+                  <div className="replay-controls-row">
+                    <span className="status-pill mono">
+                      Loading replay controls
+                    </span>
+                    <div className="replay-controls-actions">
+                      <button
+                        className="icon-button danger"
+                        type="button"
+                        onClick={() => void handleStopReplay()}
+                        disabled={isBusy}
+                      >
+                        <Square size={16} />
+                        Stop
+                      </button>
+                    </div>
+                  </div>
+                  <div className="replay-timeline-meta mono">
+                    <span>Capture detail loading</span>
+                    <span>
+                      {selectedSessionSummary?.trackName ?? "Stored capture"}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
 
   const detailBody = (() => {
     if (canShowOverview) {
@@ -1228,7 +1306,6 @@ export function TimingBoard({
                       <th>Δ best</th>
                       <th>Trace</th>
                       <th>Updated</th>
-                      <th>Ref</th>
                       <th>Compare</th>
                       <th>Pin</th>
                     </tr>
@@ -1236,7 +1313,7 @@ export function TimingBoard({
                   <tbody>
                     {visibleSession.laps.length === 0 ? (
                       <tr className="table-row-empty">
-                        <td colSpan={14}>
+                        <td colSpan={13}>
                           <div className="table-empty-state">
                             <span>No lap summaries yet</span>
                             <span className="table-subvalue muted">
@@ -1277,9 +1354,6 @@ export function TimingBoard({
                           lap.sessionId,
                           lap.lapNumber,
                         );
-                        const isLiveReferenceLap =
-                          referenceLap?.sessionId === lap.sessionId &&
-                          referenceLap.lapNumber === lap.lapNumber;
                         const isPinLimitReached =
                           !isPinnedToCompare && pinnedLapCount >= maxPinnedLaps;
                         const isSelectedForCompare = selectedCompareLapKeys.has(
@@ -1303,9 +1377,6 @@ export function TimingBoard({
                           isSelectedForCompare ? "table-row-selected" : null,
                           isInlineComparisonLap
                             ? "session-lap-row-inline-active"
-                            : null,
-                          isLiveReferenceLap
-                            ? "session-lap-row-reference"
                             : null,
                         ]
                           .filter(Boolean)
@@ -1371,34 +1442,6 @@ export function TimingBoard({
                             </td>
                             <td className="mono">
                               {formatShortTimestamp(lap.updatedAt)}
-                            </td>
-                            <td className="session-lap-reference-cell">
-                              <button
-                                type="button"
-                                className={`icon-button lap-reference-button${isLiveReferenceLap ? " active" : ""}`}
-                                aria-label={
-                                  isLiveReferenceLap
-                                    ? `Lap ${lap.lapNumber} is the live reference`
-                                    : `Set lap ${lap.lapNumber} as live reference`
-                                }
-                                aria-pressed={isLiveReferenceLap}
-                                title={
-                                  isLiveReferenceLap
-                                    ? "Live reference lap"
-                                    : "Set as Live reference"
-                                }
-                                onClick={() =>
-                                  onSetReferenceLap(
-                                    getLapComparePinInput(
-                                      visibleSession,
-                                      lap.lapNumber,
-                                    ),
-                                  )
-                                }
-                              >
-                                <Flag size={12} aria-hidden="true" />
-                                {isLiveReferenceLap ? "REF" : "SET REF"}
-                              </button>
                             </td>
                             <td className="session-lap-inline-cell">
                               <button
@@ -1700,10 +1743,11 @@ export function TimingBoard({
     activeReplaySessionId !== selectedSummary.id;
 
   return (
-    <section
-      className="sessions-workspace"
-      aria-label="Sessions browser and capture detail"
-    >
+    <>
+      <section
+        className="sessions-workspace"
+        aria-label="Sessions browser and capture detail"
+      >
       <div className="sessions-toolbar">
         <div className="sessions-toolbar-search">
           <Search size={16} aria-hidden />
@@ -1897,6 +1941,8 @@ export function TimingBoard({
           {detailBody}
         </article>
       </div>
-    </section>
+      </section>
+      {globalReplayControls}
+    </>
   );
 }

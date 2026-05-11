@@ -316,6 +316,7 @@ public sealed class F125NormalizerTests
         sessionPayload[SessionForecastCountOffset] = 1;
         var forecast = sessionPayload.AsSpan(SessionForecastStartOffset, WeatherForecastSampleSize);
         forecast.Clear();
+        forecast[0] = 99;
         forecast[1] = 5;
         forecast[2] = 99;
         forecast[7] = 64;
@@ -515,7 +516,7 @@ public sealed class F125NormalizerTests
 
     private static byte[] BuildSessionPayload()
     {
-        var payload = new byte[SessionForecastStartOffset + 2 * WeatherForecastSampleSize];
+        var payload = new byte[SessionForecastStartOffset + 3 * WeatherForecastSampleSize];
         payload[0] = 3;
         payload[1] = unchecked((byte)-2);
         payload[2] = 18;
@@ -526,21 +527,31 @@ public sealed class F125NormalizerTests
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(9, sizeof(ushort)), 600);
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(11, sizeof(ushort)), 1_200);
         payload[124] = 2;
-        payload[SessionForecastCountOffset] = 2;
+        payload[SessionForecastCountOffset] = 3;
 
         var first = payload.AsSpan(SessionForecastStartOffset, WeatherForecastSampleSize);
+        first[0] = 14;
         first[1] = 0;
-        first[2] = 3;
-        first[3] = 22;
-        first[5] = 18;
-        first[7] = 42;
+        first[2] = 0;
+        first[3] = 25;
+        first[5] = 20;
+        first[7] = 5;
 
         var second = payload.AsSpan(SessionForecastStartOffset + WeatherForecastSampleSize, WeatherForecastSampleSize);
-        second[1] = 15;
-        second[2] = 4;
-        second[3] = 20;
-        second[5] = 17;
-        second[7] = 72;
+        second[0] = 15;
+        second[1] = 0;
+        second[2] = 3;
+        second[3] = 22;
+        second[5] = 18;
+        second[7] = 42;
+
+        var third = payload.AsSpan(SessionForecastStartOffset + 2 * WeatherForecastSampleSize, WeatherForecastSampleSize);
+        third[0] = 15;
+        third[1] = 15;
+        third[2] = 4;
+        third[3] = 20;
+        third[5] = 17;
+        third[7] = 72;
         return payload;
     }
 

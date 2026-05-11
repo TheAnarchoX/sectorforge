@@ -38,6 +38,7 @@ const EMPTY_LAP_TRACE: CurrentLapTelemetrySeries = {
 const EMPTY_TRACE_SERIES: TelemetryTraceSeries = {
   speed: [],
   rpm: [],
+  gear: [],
   throttle: [],
   brake: [],
   steering: [],
@@ -214,6 +215,7 @@ function appendLapTracePoint(
 type TraceBuffers = {
   speed: number[];
   rpm: number[];
+  gear: number[];
   throttle: number[];
   brake: number[];
   steering: number[];
@@ -222,18 +224,27 @@ type TraceBuffers = {
 type TraceSampleValues = {
   speed: number;
   rpm: number;
+  gear: number;
   throttle: number;
   brake: number;
   steering: number;
 };
 
 function createTraceBuffers(): TraceBuffers {
-  return { speed: [], rpm: [], throttle: [], brake: [], steering: [] };
+  return {
+    speed: [],
+    rpm: [],
+    gear: [],
+    throttle: [],
+    brake: [],
+    steering: [],
+  };
 }
 
 function clearTraceBuffers(buffers: TraceBuffers) {
   buffers.speed.length = 0;
   buffers.rpm.length = 0;
+  buffers.gear.length = 0;
   buffers.throttle.length = 0;
   buffers.brake.length = 0;
   buffers.steering.length = 0;
@@ -242,6 +253,7 @@ function clearTraceBuffers(buffers: TraceBuffers) {
 function appendTraceSample(buffers: TraceBuffers, values: TraceSampleValues) {
   appendTraceValue(buffers.speed, values.speed);
   appendTraceValue(buffers.rpm, values.rpm);
+  appendTraceValue(buffers.gear, values.gear);
   appendTraceValue(buffers.throttle, values.throttle);
   appendTraceValue(buffers.brake, values.brake);
   appendTraceValue(buffers.steering, values.steering);
@@ -250,6 +262,7 @@ function appendTraceSample(buffers: TraceBuffers, values: TraceSampleValues) {
 function replaceTraceSample(buffers: TraceBuffers, values: TraceSampleValues) {
   replaceTraceValue(buffers.speed, values.speed);
   replaceTraceValue(buffers.rpm, values.rpm);
+  replaceTraceValue(buffers.gear, values.gear);
   replaceTraceValue(buffers.throttle, values.throttle);
   replaceTraceValue(buffers.brake, values.brake);
   replaceTraceValue(buffers.steering, values.steering);
@@ -259,6 +272,7 @@ function getTraceSampleValues(sample: TelemetrySample): TraceSampleValues {
   return {
     speed: sample.vehicle.speedKph ?? 0,
     rpm: sample.vehicle.rpm ?? 0,
+    gear: sample.vehicle.gear ?? 0,
     throttle: (sample.driverInput.throttle ?? 0) * 100,
     brake: (sample.driverInput.brake ?? 0) * 100,
     steering: (sample.driverInput.steering ?? 0) * 100,
@@ -269,6 +283,7 @@ function snapshotTraceBuffers(buffers: TraceBuffers): TelemetryTraceSeries {
   return {
     speed: buffers.speed.slice(),
     rpm: buffers.rpm.slice(),
+    gear: buffers.gear.slice(),
     throttle: buffers.throttle.slice(),
     brake: buffers.brake.slice(),
     steering: buffers.steering.slice(),

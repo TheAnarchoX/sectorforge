@@ -352,6 +352,7 @@ export function createTraceSeries(
     {
       speed: [148, 152, 156],
       rpm: [6200, 6320, 6450],
+      gear: [3, 4, 4],
       throttle: [55, 61, 72],
       brake: [3, 5, 8],
       steering: [12, -4, 12],

@@ -49,6 +49,7 @@ type TraceChannel = {
 const TRACE_CHANNELS: TraceChannel[] = [
   { key: "speed", label: "Speed", unit: "kph", color: "var(--accent-cyan)" },
   { key: "rpm", label: "RPM", unit: "rpm", color: "var(--ink-strong)" },
+  { key: "gear", label: "Gear", unit: "gear", color: "var(--accent-violet)" },
   {
     key: "throttle",
     label: "Throttle",
@@ -151,6 +152,8 @@ function getTraceReference(
       return formatReferenceDelta(comparison?.values.speedKph, 0, " kph");
     case "rpm":
       return formatReferenceDelta(comparison?.values.rpm, 0, " rpm");
+    case "gear":
+      return null;
     case "throttle":
       return formatReferenceDelta(comparison?.values.throttlePct, 0, "%");
     case "brake":
@@ -262,6 +265,7 @@ function MainTelemetryColumnComponent({
 
   const speedMax = maxValue(traceSeries.speed, 320);
   const rpmMax = maxValue(traceSeries.rpm, 9000);
+  const gearMax = maxValue(traceSeries.gear, 8);
   const steeringValue =
     sample?.driverInput.steering === null ||
     sample?.driverInput.steering === undefined
@@ -358,6 +362,9 @@ function MainTelemetryColumnComponent({
             currentValue={sample?.vehicle.speedKph}
             isActive={runMode !== "Idle"}
             referenceTrace={referenceSpeedTrace}
+            cursorRatio={traceCursorRatio}
+            onCursorRatioChange={setTraceCursorRatio}
+            onCursorClear={() => setTraceCursorRatio(null)}
           />
         </div>
       </div>
@@ -367,8 +374,8 @@ function MainTelemetryColumnComponent({
           <div className="zone-bar-title">
             <span className="zone-kicker">Channel scope</span>
             <span className="zone-source">
-              Synchronized live channels — speed · rpm · throttle · brake ·
-              steer
+              Synchronized live channels — speed · rpm · gear · throttle · brake
+              · steer
             </span>
           </div>
           <div className="zone-bar-meta mono">
@@ -442,6 +449,22 @@ function MainTelemetryColumnComponent({
               max={rpmMax}
               color="var(--ink-strong)"
               reference={getTraceReference(liveReferenceComparison, "rpm")}
+              cursorRatio={traceCursorRatio}
+              onCursorRatioChange={setTraceCursorRatio}
+              onCursorClear={() => setTraceCursorRatio(null)}
+              expanded={isChannelScopeExpanded}
+            />
+            <TraceLane
+              label="Gear"
+              value={formatGear(sample?.vehicle.gear)}
+              unit="gear"
+              values={traceSeries.gear}
+              xValues={hasAlignedTraceDomain ? traceElapsedSeconds : undefined}
+              xMax={hasAlignedTraceDomain ? traceXMax : null}
+              min={0}
+              max={gearMax}
+              color="var(--accent-violet)"
+              reference={getTraceReference(liveReferenceComparison, "gear")}
               cursorRatio={traceCursorRatio}
               onCursorRatioChange={setTraceCursorRatio}
               onCursorClear={() => setTraceCursorRatio(null)}

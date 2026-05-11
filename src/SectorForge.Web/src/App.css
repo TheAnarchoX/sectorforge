@@ -793,9 +793,10 @@
 .compare-overlay-trace {
   fill: none;
   stroke: var(--lap-color, var(--accent-cyan));
-  stroke-width: 1.5;
-  stroke-linejoin: round;
-  stroke-linecap: round;
+  stroke-width: var(--compare-overlay-stroke-width, 0.9);
+  stroke-linejoin: miter;
+  stroke-linecap: square;
+  vector-effect: non-scaling-stroke;
 }
 
 .compare-distance-cursor-line {
@@ -803,6 +804,21 @@
   stroke-width: 1.25;
   stroke-dasharray: 4 4;
   pointer-events: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.compare-zoom-selection {
+  fill: rgba(99, 184, 214, 0.22);
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-width: 1.25;
+  stroke-dasharray: 5 3;
+  pointer-events: none;
+  shape-rendering: crispEdges;
+  vector-effect: non-scaling-stroke;
+}
+
+.compare-chart-pointer-capture {
+  cursor: crosshair;
 }
 
 .compare-overlay-placeholder {
@@ -1116,13 +1132,15 @@
 .compare-delta-segment-underlay {
   stroke: var(--lap-color, var(--accent-cyan));
   stroke-width: 5;
-  stroke-linecap: round;
+  stroke-linecap: square;
   opacity: 0.28;
+  vector-effect: non-scaling-stroke;
 }
 
 .compare-delta-segment {
   stroke-width: 2;
-  stroke-linecap: round;
+  stroke-linecap: square;
+  vector-effect: non-scaling-stroke;
 }
 
 .compare-delta-segment-loss {
@@ -1809,6 +1827,16 @@
   border-color: var(--accent-cyan);
   color: var(--accent-cyan);
 }
+.sector-bar-pip.sector-tone-improving {
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+  background: rgba(111, 190, 114, 0.08);
+}
+.sector-bar-pip.sector-tone-losing {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+  background: rgba(204, 98, 86, 0.08);
+}
 .sector-bar-pip.sector-tone-improving.active {
   border-color: var(--accent-green);
   color: var(--accent-green);
@@ -2244,6 +2272,16 @@
   fill: var(--accent-cyan);
 }
 
+.lap-chart-cursor-line {
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+}
+
+.lap-chart-pointer-capture {
+  cursor: crosshair;
+}
+
 /* Trace stack ----------------------------------------------------------- */
 
 .trace-panel .panel-body {
@@ -2258,11 +2296,11 @@
 
 .trace-lane {
   display: grid;
-  grid-template-columns: 128px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 75px minmax(0, 1fr);
+  gap: 8px;
   align-items: center;
   min-height: 60px;
-  padding: 6px 10px;
+  padding: 6px 19px 6px 10px;
   background: var(--canvas-1);
 }
 
@@ -2359,6 +2397,12 @@
   stroke: rgba(255, 255, 255, 0.18);
   stroke-width: 1;
   stroke-dasharray: 3 3;
+}
+
+.trace-cursor-line {
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
 }
 
 .trace-line {

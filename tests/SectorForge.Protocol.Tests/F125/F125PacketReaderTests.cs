@@ -271,12 +271,14 @@ public sealed class F125PacketReaderTests
             packet.Session.ForecastSamples,
             first =>
             {
+                Assert.Equal(15, first.SessionTypeCode);
                 Assert.Equal(0, first.MinutesAhead);
                 Assert.Equal(3, first.WeatherCode);
                 Assert.Equal(42, first.RainPercent, precision: 3);
             },
             second =>
             {
+                Assert.Equal(15, second.SessionTypeCode);
                 Assert.Equal(15, second.MinutesAhead);
                 Assert.Equal(4, second.WeatherCode);
                 Assert.Equal(72, second.RainPercent, precision: 3);
@@ -640,6 +642,7 @@ public sealed class F125PacketReaderTests
         if (safeForecastCount > 0)
         {
             var first = payload.AsSpan(SessionForecastStartOffset, WeatherForecastSampleSize);
+            first[0] = 15;
             first[1] = 0;
             first[2] = 3;
             first[3] = 22;
@@ -650,6 +653,7 @@ public sealed class F125PacketReaderTests
         if (safeForecastCount > 1)
         {
             var second = payload.AsSpan(SessionForecastStartOffset + WeatherForecastSampleSize, WeatherForecastSampleSize);
+            second[0] = 15;
             second[1] = 15;
             second[2] = 4;
             second[3] = 20;

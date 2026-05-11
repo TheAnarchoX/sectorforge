@@ -370,6 +370,7 @@ export type TelemetrySessionDetails = {
 export type TelemetryTraceSeries = {
   speed: number[];
   rpm: number[];
+  gear: number[];
   throttle: number[];
   brake: number[];
   steering: number[];
