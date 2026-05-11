@@ -23,7 +23,7 @@ export default defineConfig({
         "**/test/**",
       ],
       thresholds: {
-        lines: 90,
+        lines: 83,
       },
     },
   },

@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import {
   Activity,
   AlertTriangle,
+  Crosshair,
   Pause,
   Pin,
   PinOff,
@@ -481,9 +482,11 @@ export function TimingBoard({
   isApiOffline,
   isBusy,
   activeReplaySessionId,
+  referenceLap,
   isLapPinned,
   onPinLap,
   onUnpinLap,
+  onSetReferenceLap,
   onCompareSelectedLaps,
   onStartReplay,
   onStopReplay,
@@ -1125,12 +1128,11 @@ export function TimingBoard({
         </div>
 
         <div
-          className={isDock ? "replay-slider-group" : "sessions-transport-slider"}
+          className={
+            isDock ? "replay-slider-group" : "sessions-transport-slider"
+          }
         >
-          <label
-            className="detail-label"
-            htmlFor={timelineInputId}
-          >
+          <label className="detail-label" htmlFor={timelineInputId}>
             Timeline
           </label>
           <input
@@ -1155,7 +1157,6 @@ export function TimingBoard({
         </div>
       </div>
     );
-
   };
 
   const replayTransport = renderReplayTransport("session");
@@ -1306,6 +1307,7 @@ export function TimingBoard({
                       <th>Δ best</th>
                       <th>Trace</th>
                       <th>Updated</th>
+                      <th>Live ref</th>
                       <th>Compare</th>
                       <th>Pin</th>
                     </tr>
@@ -1313,7 +1315,7 @@ export function TimingBoard({
                   <tbody>
                     {visibleSession.laps.length === 0 ? (
                       <tr className="table-row-empty">
-                        <td colSpan={13}>
+                        <td colSpan={14}>
                           <div className="table-empty-state">
                             <span>No lap summaries yet</span>
                             <span className="table-subvalue muted">
@@ -1372,6 +1374,12 @@ export function TimingBoard({
                           : isPinLimitReached
                             ? `Compare basket holds ${maxPinnedLaps} laps`
                             : "Pin lap to Compare";
+                        const isLiveReferenceLap =
+                          referenceLap?.sessionId === lap.sessionId &&
+                          referenceLap.lapNumber === lap.lapNumber;
+                        const liveReferenceLabel = isLiveReferenceLap
+                          ? `Lap ${lap.lapNumber} is the live reference`
+                          : `Set lap ${lap.lapNumber} as live reference`;
                         const rowClass = [
                           isBest ? "table-row-active" : null,
                           isSelectedForCompare ? "table-row-selected" : null,
@@ -1442,6 +1450,27 @@ export function TimingBoard({
                             </td>
                             <td className="mono">
                               {formatShortTimestamp(lap.updatedAt)}
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                className={`icon-button lap-live-reference-button${isLiveReferenceLap ? " active" : ""}`}
+                                aria-label={liveReferenceLabel}
+                                aria-pressed={isLiveReferenceLap}
+                                title={liveReferenceLabel}
+                                disabled={onSetReferenceLap === undefined}
+                                onClick={() =>
+                                  onSetReferenceLap?.(
+                                    getLapComparePinInput(
+                                      visibleSession,
+                                      lap.lapNumber,
+                                    ),
+                                  )
+                                }
+                              >
+                                <Crosshair size={13} aria-hidden />
+                                {isLiveReferenceLap ? "Live ref" : "Ref"}
+                              </button>
                             </td>
                             <td className="session-lap-inline-cell">
                               <button
@@ -1748,199 +1777,203 @@ export function TimingBoard({
         className="sessions-workspace"
         aria-label="Sessions browser and capture detail"
       >
-      <div className="sessions-toolbar">
-        <div className="sessions-toolbar-search">
-          <Search size={16} aria-hidden />
-          <input
-            type="search"
-            placeholder="Search captures by track, car, game, or source"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            aria-label="Search captures"
-          />
-        </div>
-
-        <div
-          className="sessions-toolbar-sort"
-          role="group"
-          aria-label="Sort captures"
-        >
-          <button
-            type="button"
-            className={`chip${sortMode === "recent" ? " chip-active" : ""}`}
-            onClick={() => setSortMode("recent")}
-          >
-            Recent
-          </button>
-          <button
-            type="button"
-            className={`chip${sortMode === "best" ? " chip-active" : ""}`}
-            onClick={() => setSortMode("best")}
-          >
-            Best lap
-          </button>
-          <button
-            type="button"
-            className={`chip${sortMode === "samples" ? " chip-active" : ""}`}
-            onClick={() => setSortMode("samples")}
-          >
-            Samples
-          </button>
-        </div>
-
-        <div className="sessions-toolbar-meta mono">
-          <span>
-            {filteredSessions.length} / {sessions.length} captures
-          </span>
-          <span className="muted">
-            <Activity size={14} aria-hidden /> {liveSamplesCount} live ·{" "}
-            {totalSamples} stored
-          </span>
-        </div>
-
-        <button
-          type="button"
-          className="icon-button danger sessions-toolbar-delete"
-          onClick={() =>
-            selectedSummary && void handleDeleteSession(selectedSummary.id)
-          }
-          disabled={!canDeleteSelected}
-          aria-label="Delete selected capture"
-          title={
-            selectedSummary === null
-              ? "Select a capture to delete"
-              : activeReplaySessionId === selectedSummary.id
-                ? "Stop the active replay before deleting"
-                : "Delete selected capture"
-          }
-        >
-          <Trash2 size={16} />
-          {pendingDeleteId !== null ? "Deleting" : "Delete"}
-        </button>
-      </div>
-
-      {deleteError !== null && (
-        <div className="sessions-toolbar-error" role="alert">
-          <AlertTriangle size={14} aria-hidden /> {deleteError}
-        </div>
-      )}
-
-      <div className="sessions-layout">
-        <aside
-          className="panel sessions-list-panel"
-          aria-label="Stored captures"
-        >
-          <div className="panel-header">
-            <div>
-              <div className="panel-kicker">Captures</div>
-              <h2 className="panel-title">Stored sessions</h2>
-            </div>
-            <div className="status-pill mono">{filteredSessions.length}</div>
+        <div className="sessions-toolbar">
+          <div className="sessions-toolbar-search">
+            <Search size={16} aria-hidden />
+            <input
+              type="search"
+              placeholder="Search captures by track, car, game, or source"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              aria-label="Search captures"
+            />
           </div>
 
-          <div className="sessions-list">
-            {sessions.length === 0 ? (
-              <div className="sessions-list-empty">
-                <span>No captures yet</span>
-                <span className="table-subvalue muted">
-                  Start fake telemetry from the Live workspace to create the
-                  first stored capture.
-                </span>
+          <div
+            className="sessions-toolbar-sort"
+            role="group"
+            aria-label="Sort captures"
+          >
+            <button
+              type="button"
+              className={`chip${sortMode === "recent" ? " chip-active" : ""}`}
+              onClick={() => setSortMode("recent")}
+            >
+              Recent
+            </button>
+            <button
+              type="button"
+              className={`chip${sortMode === "best" ? " chip-active" : ""}`}
+              onClick={() => setSortMode("best")}
+            >
+              Best lap
+            </button>
+            <button
+              type="button"
+              className={`chip${sortMode === "samples" ? " chip-active" : ""}`}
+              onClick={() => setSortMode("samples")}
+            >
+              Samples
+            </button>
+          </div>
+
+          <div className="sessions-toolbar-meta mono">
+            <span>
+              {filteredSessions.length} / {sessions.length} captures
+            </span>
+            <span className="muted">
+              <Activity size={14} aria-hidden /> {liveSamplesCount} live ·{" "}
+              {totalSamples} stored
+            </span>
+          </div>
+
+          <button
+            type="button"
+            className="icon-button danger sessions-toolbar-delete"
+            onClick={() =>
+              selectedSummary && void handleDeleteSession(selectedSummary.id)
+            }
+            disabled={!canDeleteSelected}
+            aria-label="Delete selected capture"
+            title={
+              selectedSummary === null
+                ? "Select a capture to delete"
+                : activeReplaySessionId === selectedSummary.id
+                  ? "Stop the active replay before deleting"
+                  : "Delete selected capture"
+            }
+          >
+            <Trash2 size={16} />
+            {pendingDeleteId !== null ? "Deleting" : "Delete"}
+          </button>
+        </div>
+
+        {deleteError !== null && (
+          <div className="sessions-toolbar-error" role="alert">
+            <AlertTriangle size={14} aria-hidden /> {deleteError}
+          </div>
+        )}
+
+        <div className="sessions-layout">
+          <aside
+            className="panel sessions-list-panel"
+            aria-label="Stored captures"
+          >
+            <div className="panel-header">
+              <div>
+                <div className="panel-kicker">Captures</div>
+                <h2 className="panel-title">Stored sessions</h2>
               </div>
-            ) : filteredSessions.length === 0 ? (
-              <div className="sessions-list-empty">
-                <span>No matches</span>
-                <span className="table-subvalue muted">
-                  No captures match the current search. Adjust the query or sort
-                  to widen the view.
-                </span>
-              </div>
-            ) : (
-              filteredSessions.map((session) => {
-                const isActiveReplay = activeReplaySessionId === session.id;
-                const isReplayRequested =
-                  requestedReplaySessionId === session.id;
-                const isSelected = effectiveSelectedSessionId === session.id;
-                const isPending = pendingDeleteId === session.id;
-                const itemClass = [
-                  "sessions-list-item",
-                  isSelected ? "sessions-list-item-active" : null,
-                  isActiveReplay ? "sessions-list-item-replaying" : null,
-                  isPending ? "sessions-list-item-pending" : null,
-                ]
-                  .filter(Boolean)
-                  .join(" ");
-                return (
-                  <button
-                    key={session.id}
-                    type="button"
-                    className={itemClass}
-                    onClick={() => handleSelectSession(session.id)}
-                    disabled={activeReplaySessionId !== null && !isActiveReplay}
-                    aria-pressed={isSelected}
-                  >
-                    <div className="sessions-list-row">
-                      <span className="sessions-list-title">
-                        {session.trackName ?? "Unknown track"}
-                      </span>
-                      <span className="mono">
-                        {formatTime(session.bestLapTime)}
-                      </span>
-                    </div>
-                    <div className="sessions-list-row sessions-list-sub">
-                      <span className="muted">
-                        {session.carName ?? session.sourceName ?? session.game}
-                      </span>
-                      <span className="muted mono">
-                        {formatShortTimestamp(session.lastSeenAt)}
-                      </span>
-                    </div>
-                    <div className="sessions-list-row sessions-list-foot">
-                      <span className="muted mono">
-                        {session.sampleCount} samples · {session.game}
-                      </span>
-                      {isActiveReplay ? (
-                        <span className="badge badge-replay">Replaying</span>
-                      ) : isReplayRequested ? (
-                        <span className="badge">Starting</span>
-                      ) : (
-                        <span
-                          className="sessions-list-replay"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void handleStartReplay(session.id);
-                          }}
-                          role="button"
-                          tabIndex={-1}
-                          aria-label={`Replay ${
-                            session.trackName ?? "capture"
-                          }`}
-                        >
-                          <Play size={12} /> Replay
+              <div className="status-pill mono">{filteredSessions.length}</div>
+            </div>
+
+            <div className="sessions-list">
+              {sessions.length === 0 ? (
+                <div className="sessions-list-empty">
+                  <span>No captures yet</span>
+                  <span className="table-subvalue muted">
+                    Start fake telemetry from the Live workspace to create the
+                    first stored capture.
+                  </span>
+                </div>
+              ) : filteredSessions.length === 0 ? (
+                <div className="sessions-list-empty">
+                  <span>No matches</span>
+                  <span className="table-subvalue muted">
+                    No captures match the current search. Adjust the query or
+                    sort to widen the view.
+                  </span>
+                </div>
+              ) : (
+                filteredSessions.map((session) => {
+                  const isActiveReplay = activeReplaySessionId === session.id;
+                  const isReplayRequested =
+                    requestedReplaySessionId === session.id;
+                  const isSelected = effectiveSelectedSessionId === session.id;
+                  const isPending = pendingDeleteId === session.id;
+                  const itemClass = [
+                    "sessions-list-item",
+                    isSelected ? "sessions-list-item-active" : null,
+                    isActiveReplay ? "sessions-list-item-replaying" : null,
+                    isPending ? "sessions-list-item-pending" : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" ");
+                  return (
+                    <button
+                      key={session.id}
+                      type="button"
+                      className={itemClass}
+                      onClick={() => handleSelectSession(session.id)}
+                      disabled={
+                        activeReplaySessionId !== null && !isActiveReplay
+                      }
+                      aria-pressed={isSelected}
+                    >
+                      <div className="sessions-list-row">
+                        <span className="sessions-list-title">
+                          {session.trackName ?? "Unknown track"}
                         </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </aside>
-
-        <article
-          className="panel sessions-detail-panel"
-          aria-label="Capture detail"
-        >
-          <div className="panel-header">
-            <div>
-              <div className="panel-kicker">Capture overview</div>
-              <h2 className="panel-title">{detailTitle}</h2>
+                        <span className="mono">
+                          {formatTime(session.bestLapTime)}
+                        </span>
+                      </div>
+                      <div className="sessions-list-row sessions-list-sub">
+                        <span className="muted">
+                          {session.carName ??
+                            session.sourceName ??
+                            session.game}
+                        </span>
+                        <span className="muted mono">
+                          {formatShortTimestamp(session.lastSeenAt)}
+                        </span>
+                      </div>
+                      <div className="sessions-list-row sessions-list-foot">
+                        <span className="muted mono">
+                          {session.sampleCount} samples · {session.game}
+                        </span>
+                        {isActiveReplay ? (
+                          <span className="badge badge-replay">Replaying</span>
+                        ) : isReplayRequested ? (
+                          <span className="badge">Starting</span>
+                        ) : (
+                          <span
+                            className="sessions-list-replay"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleStartReplay(session.id);
+                            }}
+                            role="button"
+                            tabIndex={-1}
+                            aria-label={`Replay ${
+                              session.trackName ?? "capture"
+                            }`}
+                          >
+                            <Play size={12} /> Replay
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
             </div>
-            <div className="status-pill mono">{detailStatus}</div>
-          </div>
-          {detailBody}
-        </article>
-      </div>
+          </aside>
+
+          <article
+            className="panel sessions-detail-panel"
+            aria-label="Capture detail"
+          >
+            <div className="panel-header">
+              <div>
+                <div className="panel-kicker">Capture overview</div>
+                <h2 className="panel-title">{detailTitle}</h2>
+              </div>
+              <div className="status-pill mono">{detailStatus}</div>
+            </div>
+            {detailBody}
+          </article>
+        </div>
       </section>
       {globalReplayControls}
     </>

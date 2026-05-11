@@ -22,6 +22,7 @@ import {
   type LiveReferenceComparison,
   type LiveReferenceValueComparison,
 } from "../../utils/liveReferenceComparison";
+import { useSectorTones } from "../../hooks/useSectorTones";
 import { LapTelemetryChart } from "./LapTelemetryChart";
 import { SectorBar, StripCell, TraceLane } from "./DashboardPrimitives";
 
@@ -36,7 +37,6 @@ type MainTelemetryColumnProps = {
   onClearReferenceLap: () => void;
 };
 
-type SectorTone = "neutral" | "improving" | "losing";
 const GRID_TICK_COUNT = 4;
 
 type TraceChannel = {
@@ -179,6 +179,7 @@ function MainTelemetryColumnComponent({
     referenceChannelsState.status === "ready"
       ? referenceChannelsState.response
       : null;
+  const { sectorTones } = useSectorTones(sample);
   const liveReferenceComparison = useMemo(
     () =>
       sample === null || referenceResponse === null
@@ -286,18 +287,6 @@ function MainTelemetryColumnComponent({
     "Telemetry bus idle";
 
   const sectorIndex = sample?.lap.sectorIndex ?? null;
-  const sectorDelta = sample?.timing.sectorDelta;
-  const liveSectorTone: SectorTone =
-    sectorDelta && sectorDelta.startsWith("-")
-      ? "improving"
-      : sectorDelta && sectorDelta !== "0:00.000" && sectorDelta !== "+0:00.000"
-        ? "losing"
-        : "neutral";
-  const sectorTones: [SectorTone, SectorTone, SectorTone] = [
-    sectorIndex === 0 ? liveSectorTone : "neutral",
-    sectorIndex === 1 ? liveSectorTone : "neutral",
-    sectorIndex === 2 ? liveSectorTone : "neutral",
-  ];
 
   return (
     <section className="main-column" aria-label="Live telemetry">
